@@ -118,11 +118,11 @@ pub struct ServerAddArgs {
     pub stdio: Option<String>,
 
     /// Argument for the stdio command (repeatable).
-    #[arg(long = "arg", value_name = "ARG", num_args = 0..)]
+    #[arg(long = "arg", value_name = "ARG", num_args = 1, allow_hyphen_values = true)]
     pub args: Vec<String>,
 
     /// Environment variable in K=V form (repeatable).
-    #[arg(long = "env", value_name = "K=V", num_args = 0..)]
+    #[arg(long = "env", value_name = "K=V", num_args = 1)]
     pub env: Vec<String>,
 
     /// HTTP URL. Mutually exclusive with --stdio.
@@ -140,7 +140,7 @@ pub enum ToolAction {
         reference: String,
         name: String,
         /// `key=value` (repeatable). Values parse as JSON when possible.
-        #[arg(long = "arg", value_name = "K=V", num_args = 0..)]
+        #[arg(long = "arg", value_name = "K=V", num_args = 1, allow_hyphen_values = true)]
         args: Vec<String>,
         /// JSON object file with arguments.
         #[arg(long)]
@@ -177,7 +177,7 @@ pub enum PromptAction {
     Get {
         reference: String,
         name: String,
-        #[arg(long = "arg", value_name = "K=V", num_args = 0..)]
+        #[arg(long = "arg", value_name = "K=V", num_args = 1)]
         args: Vec<String>,
     },
 }

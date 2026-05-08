@@ -127,11 +127,11 @@ async fn test(reference: &str, ctx: &Ctx) -> Result<()> {
     let info_json = info.map(serde_json::to_value).transpose().context("encode peer info")?;
     let name = info_json
         .as_ref()
-        .and_then(|v| v.pointer("/server_info/name").and_then(|n| n.as_str()))
+        .and_then(|v| v.pointer("/serverInfo/name").and_then(|n| n.as_str()))
         .unwrap_or("unknown");
     let version = info_json
         .as_ref()
-        .and_then(|v| v.pointer("/server_info/version").and_then(|n| n.as_str()))
+        .and_then(|v| v.pointer("/serverInfo/version").and_then(|n| n.as_str()))
         .unwrap_or("?");
 
     match ctx.format {
