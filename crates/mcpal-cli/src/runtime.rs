@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use anyhow::Result;
 use mcpal_core::{Client, connect};
 use mcpal_output::Format;
@@ -5,10 +7,10 @@ use mcpal_output::Format;
 use crate::config::Config;
 use crate::resolver::{ResolvedServer, resolve};
 
-/// Per-invocation context shared across command handlers.
 pub struct Ctx {
     pub cfg: Config,
     pub format: Format,
+    pub config_path: PathBuf,
 }
 
 impl Ctx {

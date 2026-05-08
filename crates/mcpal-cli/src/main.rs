@@ -40,7 +40,7 @@ async fn dispatch(cli: Cli) -> Result<()> {
     let path = cli.config.unwrap_or_else(config::default_path);
     let cfg = Config::load(&path)?;
     let format = Format::resolve(cli.output.map(Into::into));
-    let ctx = Ctx { cfg, format };
+    let ctx = Ctx { cfg, format, config_path: path.clone() };
 
     match cli.command {
         Command::Init => commands::init::run(&path),

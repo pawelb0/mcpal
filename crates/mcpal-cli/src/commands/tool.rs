@@ -1,8 +1,144 @@
-use anyhow::Result;
+use std::fs;
+use std::io::Read;
+use std::path::Path;
+
+use anyhow::{Context, Result, anyhow, bail};
+use comfy_table::Table;
+use mcpal_core::rmcp::model::CallToolRequestParams;
+use mcpal_output::{Format, emit_json, emit_jsonl};
+use serde_json::{Map, Value};
 
 use crate::cli::ToolAction;
 use crate::runtime::Ctx;
 
-pub async fn run(_action: ToolAction, _ctx: &Ctx) -> Result<()> {
-    anyhow::bail!("todo(M1): tool command")
+pub async fn run(action: ToolAction, ctx: &Ctx) -> Result<()> {
+    match action {
+        ToolAction::List { reference } => list(&reference, ctx).await,
+        ToolAction::Call {
+            reference,
+            name,
+            args,
+            args_file,
+            stdin_json,
+        } => call(&reference, &name, &args, args_file.as_deref(), stdin_json, ctx).await,
+    }
+}
+
+async fn list(reference: &str, ctx: &Ctx) -> Result<()> {
+    let (_, client) = ctx.open(reference).await?;
+    let tools = client.list_all_tools().await?;
+
+    match ctx.format {
+        Format::Json => emit_json(&tools)?,
+        Format::Jsonl => {
+            for t in &tools {
+                emit_jsonl(t)?;
+            }
+        }
+        _ => {
+            let mut table = Table::new();
+            table.set_header(vec!["name", "description"]);
+            for t in &tools {
+                let desc = t.description.as_deref().unwrap_or("").to_string();
+                table.add_row(vec![t.name.as_ref(), desc.as_str()]);
+            }
+            println!("{table}");
+        }
+    }
+    client.cancel().await.ok();
+    Ok(())
+}
+
+async fn call(
+    reference: &str,
+    name: &str,
+    arg_pairs: &[String],
+    args_file: Option<&Path>,
+    stdin_json: bool,
+    ctx: &Ctx,
+) -> Result<()> {
+    let arguments = build_arguments(arg_pairs, args_file, stdin_json)?;
+    let (_, client) = ctx.open(reference).await?;
+
+    let mut params = CallToolRequestParams::new(name.to_string());
+    if !arguments.is_empty() {
+        params = params.with_arguments(arguments);
+    }
+    let result = client.call_tool(params).await.context("tools/call")?;
+
+    match ctx.format {
+        Format::Jsonl => emit_jsonl(&result)?,
+        _ => emit_json(&result)?,
+    }
+
+    client.cancel().await.ok();
+    Ok(())
+}
+
+fn build_arguments(
+    arg_pairs: &[String],
+    args_file: Option<&Path>,
+    stdin_json: bool,
+) -> Result<Map<String, Value>> {
+    let mut out = Map::new();
+
+    if stdin_json {
+        let mut buf = String::new();
+        std::io::stdin().read_to_string(&mut buf).context("read stdin")?;
+        merge_object(&mut out, &buf, "stdin")?;
+    }
+    if let Some(p) = args_file {
+        let text = fs::read_to_string(p).with_context(|| format!("read {}", p.display()))?;
+        merge_object(&mut out, &text, &p.display().to_string())?;
+    }
+    for kv in arg_pairs {
+        let (k, v) = kv
+            .split_once('=')
+            .ok_or_else(|| anyhow!("--arg expects K=V, got: {kv}"))?;
+        out.insert(k.to_string(), parse_value(v));
+    }
+    Ok(out)
+}
+
+fn merge_object(into: &mut Map<String, Value>, text: &str, source: &str) -> Result<()> {
+    let v: Value =
+        serde_json::from_str(text).with_context(|| format!("parse JSON from {source}"))?;
+    let Value::Object(obj) = v else {
+        bail!("{source} must contain a JSON object");
+    };
+    for (k, val) in obj {
+        into.insert(k, val);
+    }
+    Ok(())
+}
+
+fn parse_value(raw: &str) -> Value {
+    serde_json::from_str(raw).unwrap_or_else(|_| Value::String(raw.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn parse_value_typed() {
+        assert_eq!(parse_value("42"), json!(42));
+        assert_eq!(parse_value("\"hi\""), json!("hi"));
+        assert_eq!(parse_value("true"), json!(true));
+        assert_eq!(parse_value("plain"), json!("plain"));
+    }
+
+    #[test]
+    fn build_arguments_pairs() {
+        let m = build_arguments(
+            &["count=3".into(), "msg=hi".into(), "ok=true".into()],
+            None,
+            false,
+        )
+        .unwrap();
+        assert_eq!(m["count"], json!(3));
+        assert_eq!(m["msg"], json!("hi"));
+        assert_eq!(m["ok"], json!(true));
+    }
 }

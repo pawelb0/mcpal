@@ -781,6 +781,7 @@ dependencies = [
  "assert_cmd",
  "clap",
  "clap_complete",
+ "comfy-table",
  "directories",
  "mcpal-core",
  "mcpal-output",
