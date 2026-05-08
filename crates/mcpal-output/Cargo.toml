@@ -1,0 +1,19 @@
+[package]
+name = "mcpal-output"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Output renderers (human, json, jsonl) for mcpal."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+comfy-table.workspace = true
+owo-colors.workspace = true
+thiserror.workspace = true
