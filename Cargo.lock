@@ -810,6 +810,7 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
+ "which",
 ]
 
 [[package]]
