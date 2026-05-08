@@ -26,3 +26,4 @@ anyhow.workspace = true
 toml.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 which.workspace = true
+tempfile.workspace = true
