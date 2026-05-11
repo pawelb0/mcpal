@@ -2,64 +2,82 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, anyhow, bail};
 use mcpal_core::ServerSpec;
+use mcpal_discovery::{Ctx as DCtx, discover};
 use mcpal_output::{Format, emit_list, emit_one};
 use serde::Serialize;
 use serde_json::json;
 
-use crate::cli::{ServerAction, ServerAddArgs};
+use crate::cli::{ServerAction, ServerAddArgs, ServerImportArgs, ServerListArgs};
+use crate::commands::discover as discover_cmd;
 use crate::config::Config;
 use crate::resolver::resolve;
 use crate::runtime::{Ctx, probe};
 
 pub async fn run(action: ServerAction, ctx: &Ctx) -> Result<()> {
     match action {
-        ServerAction::List => list(ctx),
+        ServerAction::List(args) => list(args, ctx),
         ServerAction::Show { reference } => show(&reference, ctx),
         ServerAction::Add(args) => add(args, ctx),
         ServerAction::Remove { alias } => remove(&alias, ctx),
+        ServerAction::Import(args) => import(args, ctx),
         ServerAction::Test { reference } => test(&reference, ctx).await,
     }
 }
 
 #[derive(Serialize)]
-struct Row<'a> {
-    alias: &'a str,
-    kind: &'a str,
+struct Row {
+    source: String,
+    alias: String,
+    kind: String,
     detail: String,
 }
 
-fn describe(spec: &ServerSpec) -> (&'static str, String) {
-    match spec {
-        ServerSpec::Stdio { command, args, .. } => {
-            let mut s = command.clone();
-            if !args.is_empty() {
-                s.push(' ');
-                s.push_str(&args.join(" "));
-            }
-            ("stdio", s)
+fn list(args: ServerListArgs, ctx: &Ctx) -> Result<()> {
+    let mut rows: Vec<Row> = Vec::new();
+
+    let include_owned = !args.discovered;
+    let include_discovered = args.discovered || args.all;
+
+    if include_owned {
+        for (alias, spec) in &ctx.cfg.server {
+            rows.push(Row {
+                source: "mcpal".into(),
+                alias: alias.clone(),
+                kind: spec.kind().into(),
+                detail: discover_cmd::describe_spec(spec),
+            });
         }
-        ServerSpec::Http { url, .. } => ("http", url.clone()),
     }
-}
 
-fn list(ctx: &Ctx) -> Result<()> {
-    let rows: Vec<Row<'_>> = ctx
-        .cfg
-        .server
-        .iter()
-        .map(|(alias, spec)| {
-            let (kind, detail) = describe(spec);
-            Row {
-                alias,
-                kind,
-                detail,
-            }
-        })
-        .collect();
+    if include_discovered {
+        let dctx = DCtx::current()?;
+        let mut found = discover(&dctx);
+        if let Some(filter) = args.source.as_deref() {
+            found.retain(|s| s.source == filter);
+        }
+        for s in found {
+            rows.push(Row {
+                source: s.source.into(),
+                alias: s.name.clone(),
+                kind: s.spec.kind().into(),
+                detail: discover_cmd::describe_spec(&s.spec),
+            });
+        }
+    }
 
-    emit_list(ctx.format, &rows, &["alias", "kind", "detail"], |r| {
-        vec![r.alias.into(), r.kind.into(), r.detail.clone()]
-    })?;
+    emit_list(
+        ctx.format,
+        &rows,
+        &["source", "alias", "kind", "detail"],
+        |r| {
+            vec![
+                r.source.clone(),
+                r.alias.clone(),
+                r.kind.clone(),
+                r.detail.clone(),
+            ]
+        },
+    )?;
     Ok(())
 }
 
@@ -117,6 +135,25 @@ fn remove(alias: &str, ctx: &Ctx) -> Result<()> {
     }
     cfg.save(&ctx.config_path)?;
     println!("removed server '{alias}'");
+    Ok(())
+}
+
+fn import(args: ServerImportArgs, ctx: &Ctx) -> Result<()> {
+    let dctx = DCtx::current()?;
+    let servers = discover(&dctx);
+    let found = servers
+        .iter()
+        .find(|s| s.source == args.from && s.name == args.name)
+        .ok_or_else(|| anyhow!("not found: {}:{}", args.from, args.name))?;
+
+    let alias = args.alias.unwrap_or_else(|| found.name.clone());
+    let mut cfg = Config::load(&ctx.config_path)?;
+    if cfg.server.contains_key(&alias) {
+        bail!("server '{alias}' already exists in mcpal config");
+    }
+    cfg.server.insert(alias.clone(), found.spec.clone());
+    cfg.save(&ctx.config_path)?;
+    println!("imported {}:{} as '{alias}'", found.source, found.name);
     Ok(())
 }
 

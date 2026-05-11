@@ -55,6 +55,7 @@ async fn dispatch(cli: Cli) -> Result<()> {
         Command::Ping { reference } => commands::ping::run(&reference, &ctx).await,
         Command::Raw { .. } => commands::raw::run(),
         Command::Completion { shell } => commands::completion::run(shell),
+        Command::Discover { source } => commands::discover::run(source.as_deref(), &ctx),
     }
 }
 

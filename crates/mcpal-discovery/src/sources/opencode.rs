@@ -39,7 +39,7 @@ impl Source for Opencode {
             return Ok(Vec::new());
         };
 
-        let scope = if path.starts_with(&home_dot_config()) {
+        let scope = if path.starts_with(home_dot_config()) {
             Scope::Global
         } else {
             Scope::Project

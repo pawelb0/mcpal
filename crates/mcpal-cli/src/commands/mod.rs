@@ -1,5 +1,6 @@
 pub mod completion;
 pub mod config;
+pub mod discover;
 pub mod init;
 pub mod ping;
 pub mod prompt;

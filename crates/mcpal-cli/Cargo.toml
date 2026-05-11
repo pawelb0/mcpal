@@ -18,6 +18,7 @@ workspace = true
 [dependencies]
 mcpal-core = { path = "../mcpal-core" }
 mcpal-output = { path = "../mcpal-output" }
+mcpal-discovery = { path = "../mcpal-discovery" }
 
 tokio.workspace = true
 clap.workspace = true

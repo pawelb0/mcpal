@@ -873,6 +873,7 @@ dependencies = [
  "comfy-table",
  "directories",
  "mcpal-core",
+ "mcpal-discovery",
  "mcpal-output",
  "predicates",
  "serde",

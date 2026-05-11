@@ -83,6 +83,13 @@ pub enum Command {
         #[arg(value_enum)]
         shell: Shell,
     },
+
+    /// Scan other clients (Claude, Cursor, opencode, …) for configured MCP servers.
+    Discover {
+        /// Filter to a single source id (claude-code, cursor, …).
+        #[arg(long)]
+        source: Option<String>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -97,16 +104,43 @@ pub enum ConfigAction {
 
 #[derive(Subcommand, Debug)]
 pub enum ServerAction {
-    /// List configured + (later) discovered servers.
-    List,
+    /// List configured (and optionally discovered) servers.
+    List(ServerListArgs),
     /// Show details for one server.
     Show { reference: String },
     /// Add a new mcpal-owned server.
     Add(ServerAddArgs),
     /// Remove a mcpal-owned server.
     Remove { alias: String },
+    /// Snapshot a discovered server into mcpal config.
+    Import(ServerImportArgs),
     /// Initialize against a server and ping it.
     Test { reference: String },
+}
+
+#[derive(clap::Args, Debug)]
+pub struct ServerListArgs {
+    /// Only show servers discovered from other clients.
+    #[arg(long, conflicts_with = "all")]
+    pub discovered: bool,
+    /// Show both mcpal-owned and discovered servers.
+    #[arg(long)]
+    pub all: bool,
+    /// Filter discovered rows to a single source id.
+    #[arg(long)]
+    pub source: Option<String>,
+}
+
+#[derive(clap::Args, Debug)]
+pub struct ServerImportArgs {
+    /// Source id (claude-code, cursor, …).
+    #[arg(long = "from")]
+    pub from: String,
+    /// Server name as exposed by the source.
+    pub name: String,
+    /// Alias to register in mcpal config (defaults to the source name).
+    #[arg(long = "as")]
+    pub alias: Option<String>,
 }
 
 #[derive(clap::Args, Debug)]
