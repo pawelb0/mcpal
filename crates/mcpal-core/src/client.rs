@@ -38,10 +38,8 @@ async fn connect_http(
     headers: &std::collections::BTreeMap<String, String>,
     auth: Option<&AuthSpec>,
 ) -> Result<Client> {
-    let auth_header = resolve_auth(auth)?;
-
     let mut config = StreamableHttpClientTransportConfig::with_uri(url.to_string());
-    if let Some(h) = auth_header {
+    if let Some(h) = resolve_auth(auth)? {
         config = config.auth_header(h);
     }
     if !headers.is_empty() {
@@ -62,18 +60,18 @@ async fn connect_http(
         .map_err(|e| Error::Service(e.to_string()))
 }
 
+fn bearer(token: &str) -> String {
+    format!("Bearer {token}")
+}
+
 fn resolve_auth(auth: Option<&AuthSpec>) -> Result<Option<String>> {
-    let Some(auth) = auth else {
-        return Ok(std::env::var("MCPAL_BEARER")
-            .ok()
-            .map(|t| format!("Bearer {t}")));
-    };
     match auth {
-        AuthSpec::Bearer { token } => Ok(Some(format!("Bearer {token}"))),
-        AuthSpec::BearerEnv { env } => match std::env::var(env) {
-            Ok(token) => Ok(Some(format!("Bearer {token}"))),
+        None => Ok(None),
+        Some(AuthSpec::Bearer { token }) => Ok(Some(bearer(token))),
+        Some(AuthSpec::BearerEnv { env }) => match std::env::var(env) {
+            Ok(token) => Ok(Some(bearer(&token))),
             Err(_) => Err(Error::Auth(format!("env var {env} not set"))),
         },
-        AuthSpec::Oauth => Err(Error::Unsupported("OAuth (M4)")),
+        Some(AuthSpec::Oauth) => Err(Error::Unsupported("OAuth (M4)")),
     }
 }

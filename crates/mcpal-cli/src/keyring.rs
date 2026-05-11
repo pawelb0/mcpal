@@ -20,8 +20,8 @@ pub fn get_bearer(reference: &str) -> Option<String> {
 pub fn delete_bearer(reference: &str) -> Result<()> {
     let e = entry(reference)?;
     match e.delete_credential() {
-        Ok(()) => Ok(()),
-        Err(keyring::Error::NoEntry) => Ok(()),
+        // Idempotent: logout when nothing is stored is a no-op.
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(e) => Err(e).with_context(|| format!("delete bearer for {reference}")),
     }
 }

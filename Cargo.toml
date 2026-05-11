@@ -15,7 +15,7 @@ rmcp = { version = "1.6", default-features = false, features = [
     "client",
     "transport-child-process",
     "transport-streamable-http-client-reqwest",
-    "reqwest-native-tls",
+    "reqwest",
     "macros",
 ] }
 

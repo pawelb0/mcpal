@@ -2,7 +2,7 @@ use std::io::{IsTerminal, Read, Write};
 
 use anyhow::{Context, Result, bail};
 use mcpal_output::{Format, emit_one};
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::cli::AuthAction;
 use crate::keyring;
@@ -26,43 +26,43 @@ fn login(reference: &str, bearer: Option<&str>, ctx: &Ctx) -> Result<()> {
         bail!("empty token");
     }
     keyring::put_bearer(reference, &token)?;
-    match ctx.format {
-        Format::Json | Format::Jsonl => emit_one(
-            ctx.format,
-            &json!({"ok": true, "ref": reference, "action": "login"}),
-        )?,
-        _ => println!("stored bearer for '{reference}'"),
-    }
-    Ok(())
+    report(
+        ctx,
+        json!({"ok": true, "ref": reference, "action": "login"}),
+        || println!("stored bearer for '{reference}'"),
+    )
 }
 
 fn logout(reference: &str, ctx: &Ctx) -> Result<()> {
     keyring::delete_bearer(reference)?;
-    match ctx.format {
-        Format::Json | Format::Jsonl => emit_one(
-            ctx.format,
-            &json!({"ok": true, "ref": reference, "action": "logout"}),
-        )?,
-        _ => println!("forgot bearer for '{reference}'"),
-    }
-    Ok(())
+    report(
+        ctx,
+        json!({"ok": true, "ref": reference, "action": "logout"}),
+        || println!("forgot bearer for '{reference}'"),
+    )
 }
 
 fn status(reference: Option<&str>, ctx: &Ctx) -> Result<()> {
     let Some(reference) = reference else {
-        bail!("listing all stored tokens is not yet supported; pass a reference");
+        bail!("pass a reference; listing all stored tokens isn't supported yet");
     };
     let present = keyring::get_bearer(reference).is_some();
-    match ctx.format {
-        Format::Json | Format::Jsonl => {
-            emit_one(ctx.format, &json!({"ref": reference, "stored": present}))?;
-        }
-        _ => println!(
+    report(ctx, json!({"ref": reference, "stored": present}), || {
+        println!(
             "{reference}: {}",
             if present { "stored" } else { "no token" }
-        ),
+        );
+    })
+}
+
+fn report(ctx: &Ctx, payload: Value, human: impl FnOnce()) -> Result<()> {
+    match ctx.format {
+        Format::Json | Format::Jsonl => emit_one(ctx.format, &payload).map_err(Into::into),
+        _ => {
+            human();
+            Ok(())
+        }
     }
-    Ok(())
 }
 
 fn read_stdin_token() -> Result<String> {

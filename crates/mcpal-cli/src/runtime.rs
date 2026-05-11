@@ -28,7 +28,6 @@ impl Ctx {
         }
     }
 
-    /// Run discovery on first access; subsequent calls reuse the result.
     pub fn discovered(&self) -> Result<&[DiscoveredServer]> {
         if self.discovered.get().is_none() {
             let dctx = DiscoveryCtx::current()?;
@@ -39,14 +38,15 @@ impl Ctx {
 
     pub async fn open(&self, reference: &str) -> Result<(ResolvedServer, Client)> {
         let mut resolved = resolve(reference, self)?;
-        inject_keyring_bearer(&mut resolved.spec, reference);
+        attach_bearer(&mut resolved.spec, reference);
         let client = connect(&resolved.spec).await?;
         Ok((resolved, client))
     }
 }
 
-/// Patch an HTTP spec with a keyring-stored bearer when no explicit auth is set.
-fn inject_keyring_bearer(spec: &mut ServerSpec, reference: &str) {
+/// Attach a bearer token to an HTTP spec that has no explicit auth set.
+/// Precedence: keyring entry for the reference → `MCPAL_BEARER` env var.
+fn attach_bearer(spec: &mut ServerSpec, reference: &str) {
     let ServerSpec::Http { auth, .. } = spec else {
         return;
     };
@@ -54,6 +54,10 @@ fn inject_keyring_bearer(spec: &mut ServerSpec, reference: &str) {
         return;
     }
     if let Some(token) = keyring::get_bearer(reference) {
+        *auth = Some(AuthSpec::Bearer { token });
+        return;
+    }
+    if let Ok(token) = std::env::var("MCPAL_BEARER") {
         *auth = Some(AuthSpec::Bearer { token });
     }
 }
@@ -64,8 +68,7 @@ pub struct Probe {
     pub info: Option<Value>,
 }
 
-/// Server name + version from the `initialize` response. MCP uses camelCase
-/// for the serverInfo object — JSON pointers must match.
+/// MCP `serverInfo` uses camelCase — JSON pointers must match.
 pub fn probe(client: &Client) -> Probe {
     let info = client
         .peer_info()
