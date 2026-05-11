@@ -3,11 +3,14 @@ use std::io::{BufRead, IsTerminal};
 use rmcp::ClientHandler;
 use rmcp::RoleClient;
 use rmcp::model::{
-    CreateElicitationRequestParams, CreateElicitationResult, ElicitationAction, ErrorData,
-    ListRootsResult, LoggingMessageNotificationParam, Root,
+    CreateElicitationRequestParams, CreateElicitationResult, CreateMessageRequestParams,
+    CreateMessageResult, ElicitationAction, ErrorData, ListRootsResult,
+    LoggingMessageNotificationParam, Root,
 };
 use rmcp::service::{NotificationContext, RequestContext};
 use serde_json::json;
+use tokio::io::AsyncWriteExt;
+use tokio::process::Command;
 
 /// Client-side hooks for server-initiated traffic.
 ///
@@ -15,14 +18,14 @@ use serde_json::json;
 ///   - `list_roots` returns user-configured roots
 ///   - `create_elicitation` prompts the user on a TTY, or declines when
 ///     interactivity is off / there is no terminal
+///   - `create_message` (sampling) delegates to an external program when
+///     `sampling_handler` is set; otherwise it returns method-not-found
 ///   - `on_logging_message` routes server logs to stderr
-///
-/// `create_message` (sampling) keeps rmcp's `method_not_found` default until
-/// the `--sampling-handler <cmd>` plugin lands.
 #[derive(Clone, Default)]
 pub struct Handler {
     roots: Vec<String>,
     interactive: bool,
+    sampling_handler: Option<Vec<String>>,
 }
 
 impl Handler {
@@ -33,6 +36,15 @@ impl Handler {
 
     pub fn interactive(mut self, enabled: bool) -> Self {
         self.interactive = enabled;
+        self
+    }
+
+    /// Set the external program that handles `sampling/createMessage`. The
+    /// first element is the executable, the rest are positional args. mcpal
+    /// pipes the request params as JSON on stdin and reads
+    /// `CreateMessageResult` JSON from stdout.
+    pub fn sampling_handler(mut self, argv: Option<Vec<String>>) -> Self {
+        self.sampling_handler = argv.filter(|v| !v.is_empty());
         self
     }
 }
@@ -80,13 +92,57 @@ impl ClientHandler for Handler {
         }
     }
 
+    async fn create_message(
+        &self,
+        params: CreateMessageRequestParams,
+        _ctx: RequestContext<RoleClient>,
+    ) -> Result<CreateMessageResult, ErrorData> {
+        let Some(argv) = self.sampling_handler.as_ref() else {
+            return Err(ErrorData::method_not_found::<
+                rmcp::model::CreateMessageRequestMethod,
+            >());
+        };
+        run_sampling_handler(argv, &params)
+            .await
+            .map_err(|e| ErrorData::internal_error(format!("sampling handler: {e}"), None))
+    }
+
     async fn on_logging_message(
         &self,
         params: LoggingMessageNotificationParam,
         _ctx: NotificationContext<RoleClient>,
     ) {
         let logger = params.logger.as_deref().unwrap_or("server");
-        let data = serde_json::to_string(&params.data).unwrap_or_else(|_| String::new());
+        let data = serde_json::to_string(&params.data).unwrap_or_default();
         eprintln!("[{logger} {:?}] {data}", params.level);
     }
+}
+
+async fn run_sampling_handler(
+    argv: &[String],
+    params: &CreateMessageRequestParams,
+) -> Result<CreateMessageResult, String> {
+    let (cmd, rest) = argv.split_first().ok_or("empty argv")?;
+    let mut child = Command::new(cmd)
+        .args(rest)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::inherit())
+        .spawn()
+        .map_err(|e| format!("spawn {cmd}: {e}"))?;
+
+    let stdin_payload = serde_json::to_vec(params).map_err(|e| e.to_string())?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(&stdin_payload)
+            .await
+            .map_err(|e| e.to_string())?;
+        stdin.shutdown().await.map_err(|e| e.to_string())?;
+    }
+
+    let output = child.wait_with_output().await.map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        return Err(format!("handler exited {:?}", output.status.code()));
+    }
+    serde_json::from_slice(&output.stdout).map_err(|e| e.to_string())
 }

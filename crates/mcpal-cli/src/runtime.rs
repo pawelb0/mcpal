@@ -18,6 +18,7 @@ pub struct Ctx {
     pub config_path: PathBuf,
     pub roots: Vec<String>,
     pub interactive: bool,
+    pub sampling_handler: Option<Vec<String>>,
     discovered: OnceCell<Vec<DiscoveredServer>>,
 }
 
@@ -28,6 +29,7 @@ impl Ctx {
         config_path: PathBuf,
         roots: Vec<String>,
         interactive: bool,
+        sampling_handler: Option<Vec<String>>,
     ) -> Self {
         Self {
             cfg,
@@ -35,6 +37,7 @@ impl Ctx {
             config_path,
             roots,
             interactive,
+            sampling_handler,
             discovered: OnceCell::new(),
         }
     }
@@ -52,7 +55,8 @@ impl Ctx {
         attach_bearer(&mut resolved.spec, reference);
         let handler = Handler::default()
             .with_roots(self.roots.clone())
-            .interactive(self.interactive);
+            .interactive(self.interactive)
+            .sampling_handler(self.sampling_handler.clone());
         let client = connect(&resolved.spec, handler).await?;
         Ok((resolved, client))
     }

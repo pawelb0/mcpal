@@ -28,6 +28,18 @@ pub struct Cli {
     #[arg(long = "root", value_name = "PATH", global = true, num_args = 1)]
     pub roots: Vec<String>,
 
+    /// External program to handle `sampling/createMessage` requests.
+    /// mcpal pipes JSON params on stdin and reads CreateMessageResult JSON
+    /// on stdout. Use shell-style quoting via your shell.
+    #[arg(
+        long = "sampling-handler",
+        value_name = "CMD",
+        global = true,
+        env = "MCPAL_SAMPLING_HANDLER",
+        allow_hyphen_values = true
+    )]
+    pub sampling_handler: Option<String>,
+
     #[command(subcommand)]
     pub command: Command,
 }
