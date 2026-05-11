@@ -16,7 +16,10 @@ async fn list_tools_against_everything_server() {
 
     let spec = ServerSpec::Stdio {
         command: "npx".into(),
-        args: vec!["-y".into(), "@modelcontextprotocol/server-everything".into()],
+        args: vec![
+            "-y".into(),
+            "@modelcontextprotocol/server-everything".into(),
+        ],
         env: BTreeMap::new(),
     };
 

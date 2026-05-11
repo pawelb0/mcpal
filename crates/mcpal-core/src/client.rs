@@ -13,12 +13,10 @@ pub async fn connect(spec: &ServerSpec) -> Result<Client> {
             for (k, v) in env {
                 cmd.env(k, v);
             }
-            let transport = TokioChildProcess::new(cmd)
-                .map_err(|e| Error::Transport(anyhow::Error::from(e)))?;
-            ()
-                .serve(transport)
+            let transport = TokioChildProcess::new(cmd)?;
+            ().serve(transport)
                 .await
-                .map_err(|e| Error::Protocol(anyhow::anyhow!(e)))
+                .map_err(|e| Error::Service(e.to_string()))
         }
         ServerSpec::Http { .. } => Err(Error::Unsupported("HTTP transport")),
     }

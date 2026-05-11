@@ -46,7 +46,10 @@ mod tests {
     fn stdio_roundtrip() {
         let spec = ServerSpec::Stdio {
             command: "npx".into(),
-            args: vec!["-y".into(), "@modelcontextprotocol/server-everything".into()],
+            args: vec![
+                "-y".into(),
+                "@modelcontextprotocol/server-everything".into(),
+            ],
             env: BTreeMap::from([("DEBUG".to_string(), "1".to_string())]),
         };
         let toml = toml::to_string(&spec).unwrap();
