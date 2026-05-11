@@ -2,6 +2,7 @@ mod cli;
 mod commands;
 mod config;
 mod keyring;
+mod oauth;
 mod resolver;
 mod runtime;
 
@@ -53,7 +54,7 @@ async fn dispatch(cli: Cli) -> Result<()> {
         Command::Raw { .. } => commands::raw::run(),
         Command::Completion { shell } => commands::completion::run(shell),
         Command::Discover { source } => commands::discover::run(source.as_deref(), &ctx),
-        Command::Auth { action } => commands::auth::run(action, &ctx),
+        Command::Auth { action } => commands::auth::run(action, &ctx).await,
     }
 }
 

@@ -100,17 +100,33 @@ pub enum Command {
 
 #[derive(Subcommand, Debug)]
 pub enum AuthAction {
-    /// Store a bearer token for a server reference.
+    /// Store a bearer token (or run an OAuth login) for a server reference.
     Login {
         reference: String,
-        /// Token value. Reads from stdin if `-`. Prompts interactively if absent.
-        #[arg(long)]
+        /// Bearer token. `-` reads stdin; omit to prompt interactively.
+        #[arg(long, conflicts_with = "oauth")]
         bearer: Option<String>,
+        /// Run the OAuth 2.1 authorization-code + PKCE flow against the server URL.
+        #[arg(long)]
+        oauth: bool,
+        /// Server URL for OAuth discovery. Falls back to the resolved alias's URL.
+        #[arg(long)]
+        url: Option<String>,
+        /// Don't open a browser automatically; just print the URL.
+        #[arg(long)]
+        no_browser: bool,
     },
-    /// Forget the stored token for a reference.
+    /// Forget the stored credentials for a reference (bearer or OAuth).
     Logout { reference: String },
-    /// Show whether a stored token exists.
+    /// Show whether stored credentials exist.
     Status { reference: Option<String> },
+    /// Use the stored refresh token to mint a new access token.
+    Refresh {
+        reference: String,
+        /// Server URL for OAuth refresh. Falls back to the resolved alias's URL.
+        #[arg(long)]
+        url: Option<String>,
+    },
 }
 
 #[derive(Subcommand, Debug)]

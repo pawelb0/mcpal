@@ -9,6 +9,7 @@ use serde_json::Value;
 
 use crate::config::Config;
 use crate::keyring;
+use crate::oauth;
 use crate::resolver::{ResolvedServer, resolve};
 
 pub struct Ctx {
@@ -44,13 +45,24 @@ impl Ctx {
     }
 }
 
-/// Attach a bearer token to an HTTP spec that has no explicit auth set.
-/// Precedence: keyring entry for the reference → `MCPAL_BEARER` env var.
+/// Resolve credentials for an HTTP spec. Skips stdio, honours an inline
+/// `AuthSpec::Bearer` / `BearerEnv`, and otherwise picks the first stored
+/// credential it finds. Precedence: oauth → bearer → `MCPAL_BEARER` env.
 fn attach_bearer(spec: &mut ServerSpec, reference: &str) {
     let ServerSpec::Http { auth, .. } = spec else {
         return;
     };
+    if let Some(AuthSpec::Oauth) = auth {
+        if let Some(token) = oauth::current_access_token(reference) {
+            *auth = Some(AuthSpec::Bearer { token });
+        }
+        return;
+    }
     if auth.is_some() {
+        return;
+    }
+    if let Some(token) = oauth::current_access_token(reference) {
+        *auth = Some(AuthSpec::Bearer { token });
         return;
     }
     if let Some(token) = keyring::get_bearer(reference) {

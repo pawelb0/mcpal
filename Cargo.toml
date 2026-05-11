@@ -16,6 +16,7 @@ rmcp = { version = "1.6", default-features = false, features = [
     "transport-child-process",
     "transport-streamable-http-client-reqwest",
     "reqwest",
+    "auth",
     "macros",
 ] }
 
@@ -49,6 +50,8 @@ directories = "5"
 which = "7"
 keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native-sync-persistent"] }
 http = "1"
+axum = "0.8"
+webbrowser = "1"
 
 assert_cmd = "2"
 predicates = "3"
