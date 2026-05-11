@@ -7,6 +7,9 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Output renderers (human, json, jsonl) for mcpal."
+readme = "../../README.md"
+keywords = ["mcp", "cli", "output"]
+categories = ["command-line-interface"]
 
 [lints]
 workspace = true

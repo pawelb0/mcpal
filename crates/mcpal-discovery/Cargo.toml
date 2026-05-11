@@ -7,12 +7,15 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Discover MCP servers configured by other clients (Claude, Cursor, opencode, …)."
+readme = "../../README.md"
+keywords = ["mcp", "discovery", "ai", "cli"]
+categories = ["development-tools", "config"]
 
 [lints]
 workspace = true
 
 [dependencies]
-mcpal-core = { path = "../mcpal-core" }
+mcpal-core = { path = "../mcpal-core", version = "0.1.0" }
 
 anyhow.workspace = true
 serde.workspace = true

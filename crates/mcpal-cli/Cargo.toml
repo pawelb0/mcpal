@@ -7,6 +7,9 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "mcpal — CLI for the Model Context Protocol."
+readme = "../../README.md"
+keywords = ["mcp", "cli", "ai", "oauth", "discovery"]
+categories = ["command-line-utilities", "development-tools"]
 
 [[bin]]
 name = "mcpal"
@@ -16,9 +19,9 @@ path = "src/main.rs"
 workspace = true
 
 [dependencies]
-mcpal-core = { path = "../mcpal-core" }
-mcpal-output = { path = "../mcpal-output" }
-mcpal-discovery = { path = "../mcpal-discovery" }
+mcpal-core = { path = "../mcpal-core", version = "0.1.0" }
+mcpal-output = { path = "../mcpal-output", version = "0.1.0" }
+mcpal-discovery = { path = "../mcpal-discovery", version = "0.1.0" }
 
 tokio.workspace = true
 clap.workspace = true
