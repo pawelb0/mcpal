@@ -14,10 +14,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: macos-latest, target: aarch64-apple-darwin }
-          - { os: macos-latest, target: x86_64-apple-darwin }
-          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu }
-          - { os: windows-latest, target: x86_64-pc-windows-msvc }
+          - { os: macos-latest, target: aarch64-apple-darwin, ext: tar.gz }
+          - { os: macos-latest, target: x86_64-apple-darwin, ext: tar.gz }
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu, ext: tar.gz }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, ext: zip }
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -25,7 +25,10 @@ jobs:
           target: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release --target ${{ matrix.target }} -p mcpal-cli
-      - name: package
+
+      - name: package (unix)
+        if: matrix.ext == 'tar.gz'
+        shell: bash
         run: |
           set -eu
           mkdir -p dist
@@ -34,6 +37,17 @@ jobs:
             -C "target/${{ matrix.target }}/release" mcpal \
             -C "$GITHUB_WORKSPACE" README.md LICENSE-MIT LICENSE-APACHE
           (cd dist && shasum -a 256 "$ARCHIVE" > "$ARCHIVE.sha256")
+
+      - name: package (windows)
+        if: matrix.ext == 'zip'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $archive = "mcpal-${{ github.ref_name }}-${{ matrix.target }}.zip"
+          $bin = "target/${{ matrix.target }}/release/mcpal.exe"
+          Compress-Archive -Path $bin, README.md, LICENSE-MIT, LICENSE-APACHE -DestinationPath "dist/$archive"
+          (Get-FileHash "dist/$archive" -Algorithm SHA256).Hash | Out-File "dist/$archive.sha256"
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}
