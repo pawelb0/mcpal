@@ -39,14 +39,10 @@ impl DiscoveryCtx {
     pub fn current() -> Result<Self> {
         let base =
             directories::BaseDirs::new().ok_or_else(|| anyhow::anyhow!("no home directory"))?;
-        let project = directories::ProjectDirs::from("", "", "_mcpal_dummy_");
-        // BaseDirs lacks `data_dir`; recover platform data via UserDirs/BaseDirs.
-        let data_dir = base.data_dir().to_path_buf();
-        let _ = project; // keep linker happy on unused-import diagnostics
         Ok(Self {
             home: base.home_dir().to_path_buf(),
             config_dir: base.config_dir().to_path_buf(),
-            data_dir,
+            data_dir: base.data_dir().to_path_buf(),
             cwd: std::env::current_dir()?,
         })
     }
