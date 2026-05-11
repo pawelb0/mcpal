@@ -90,6 +90,27 @@ pub enum Command {
         #[arg(long)]
         source: Option<String>,
     },
+
+    /// Store and inspect bearer tokens in the OS keyring.
+    Auth {
+        #[command(subcommand)]
+        action: AuthAction,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum AuthAction {
+    /// Store a bearer token for a server reference.
+    Login {
+        reference: String,
+        /// Token value. Reads from stdin if `-`. Prompts interactively if absent.
+        #[arg(long)]
+        bearer: Option<String>,
+    },
+    /// Forget the stored token for a reference.
+    Logout { reference: String },
+    /// Show whether a stored token exists.
+    Status { reference: Option<String> },
 }
 
 #[derive(Subcommand, Debug)]

@@ -2,12 +2,13 @@ use std::cell::OnceCell;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use mcpal_core::{Client, connect};
+use mcpal_core::{AuthSpec, Client, ServerSpec, connect};
 use mcpal_discovery::{DiscoveredServer, DiscoveryCtx, discover};
 use mcpal_output::Format;
 use serde_json::Value;
 
 use crate::config::Config;
+use crate::keyring;
 use crate::resolver::{ResolvedServer, resolve};
 
 pub struct Ctx {
@@ -37,9 +38,23 @@ impl Ctx {
     }
 
     pub async fn open(&self, reference: &str) -> Result<(ResolvedServer, Client)> {
-        let resolved = resolve(reference, self)?;
+        let mut resolved = resolve(reference, self)?;
+        inject_keyring_bearer(&mut resolved.spec, reference);
         let client = connect(&resolved.spec).await?;
         Ok((resolved, client))
+    }
+}
+
+/// Patch an HTTP spec with a keyring-stored bearer when no explicit auth is set.
+fn inject_keyring_bearer(spec: &mut ServerSpec, reference: &str) {
+    let ServerSpec::Http { auth, .. } = spec else {
+        return;
+    };
+    if auth.is_some() {
+        return;
+    }
+    if let Some(token) = keyring::get_bearer(reference) {
+        *auth = Some(AuthSpec::Bearer { token });
     }
 }
 
