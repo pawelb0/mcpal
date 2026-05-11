@@ -1,7 +1,9 @@
+use std::cell::OnceCell;
 use std::path::PathBuf;
 
 use anyhow::Result;
 use mcpal_core::{Client, connect};
+use mcpal_discovery::{DiscoveredServer, DiscoveryCtx, discover};
 use mcpal_output::Format;
 use serde_json::Value;
 
@@ -12,11 +14,30 @@ pub struct Ctx {
     pub cfg: Config,
     pub format: Format,
     pub config_path: PathBuf,
+    discovered: OnceCell<Vec<DiscoveredServer>>,
 }
 
 impl Ctx {
+    pub fn new(cfg: Config, format: Format, config_path: PathBuf) -> Self {
+        Self {
+            cfg,
+            format,
+            config_path,
+            discovered: OnceCell::new(),
+        }
+    }
+
+    /// Run discovery on first access; subsequent calls reuse the result.
+    pub fn discovered(&self) -> Result<&[DiscoveredServer]> {
+        if self.discovered.get().is_none() {
+            let dctx = DiscoveryCtx::current()?;
+            let _ = self.discovered.set(discover(&dctx));
+        }
+        Ok(self.discovered.get().expect("just initialized").as_slice())
+    }
+
     pub async fn open(&self, reference: &str) -> Result<(ResolvedServer, Client)> {
-        let resolved = resolve(reference, &self.cfg)?;
+        let resolved = resolve(reference, self)?;
         let client = connect(&resolved.spec).await?;
         Ok((resolved, client))
     }
@@ -28,8 +49,8 @@ pub struct Probe {
     pub info: Option<Value>,
 }
 
-/// Summarize the server's `initialize` response. Server-info fields are
-/// `serverInfo/{name,version}` per the MCP spec (camelCase).
+/// Server name + version from the `initialize` response. MCP uses camelCase
+/// for the serverInfo object — JSON pointers must match.
 pub fn probe(client: &Client) -> Probe {
     let info = client
         .peer_info()

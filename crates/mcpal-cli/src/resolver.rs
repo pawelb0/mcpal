@@ -4,9 +4,8 @@ use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 use mcpal_core::{AuthSpec, ServerSpec};
-use mcpal_discovery::{Ctx as DCtx, discover};
 
-use crate::config::Config;
+use crate::runtime::Ctx;
 
 #[derive(Debug)]
 pub struct ResolvedServer {
@@ -15,13 +14,13 @@ pub struct ResolvedServer {
 }
 
 /// Resolution order:
-///   1. mcpal-owned alias (`mcpal server add` entry)
+///   1. mcpal-owned alias
 ///   2. http(s) URL
-///   3. path to JSON spec file
-///   4. `<source>:<name>` (e.g. `cursor:linear`)
-///   5. bare `<name>` from discovery if unambiguous
-pub fn resolve(reference: &str, cfg: &Config) -> Result<ResolvedServer> {
-    if let Some(spec) = cfg.server.get(reference) {
+///   3. path to a JSON spec file
+///   4. `<source>:<name>` from discovery
+///   5. bare `<name>` from discovery (unambiguous)
+pub fn resolve(reference: &str, ctx: &Ctx) -> Result<ResolvedServer> {
+    if let Some(spec) = ctx.cfg.server.get(reference) {
         return Ok(ResolvedServer {
             display: reference.into(),
             spec: spec.clone(),
@@ -50,8 +49,7 @@ pub fn resolve(reference: &str, cfg: &Config) -> Result<ResolvedServer> {
         });
     }
 
-    let dctx = DCtx::current()?;
-    let discovered = discover(&dctx);
+    let discovered = ctx.discovered()?;
 
     if let Some((src, name)) = reference.split_once(':')
         && let Some(d) = discovered

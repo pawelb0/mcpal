@@ -9,18 +9,17 @@ pub mod sources;
 
 pub trait Source: Send + Sync {
     fn id(&self) -> &'static str;
-    fn display_name(&self) -> &'static str;
-    /// Files to read for this client; non-existent paths are silently skipped.
-    fn paths(&self, ctx: &Ctx) -> Vec<PathBuf>;
-    fn parse(&self, path: &Path, bytes: &[u8]) -> Result<Vec<DiscoveredServer>>;
+    /// (path, scope) pairs. Non-existent paths are skipped silently by `discover`.
+    fn paths(&self, ctx: &DiscoveryCtx) -> Vec<(PathBuf, Scope)>;
+    fn parse(&self, path: &Path, scope: Scope, bytes: &[u8]) -> Result<Vec<DiscoveredServer>>;
 }
 
-pub struct Ctx {
+pub struct DiscoveryCtx {
     pub home: PathBuf,
     pub cwd: PathBuf,
 }
 
-impl Ctx {
+impl DiscoveryCtx {
     pub fn current() -> Result<Self> {
         let home = directories::BaseDirs::new()
             .ok_or_else(|| anyhow::anyhow!("no home directory"))?
@@ -49,16 +48,19 @@ pub enum Scope {
     Project,
 }
 
-pub fn all_sources() -> Vec<Box<dyn Source>> {
-    sources::registry()
+impl std::fmt::Display for Scope {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Global => "global",
+            Self::Project => "project",
+        })
+    }
 }
 
-/// Run every registered source against the current environment, collecting
-/// successful parses and logging failures via `tracing::warn`.
-pub fn discover(ctx: &Ctx) -> Vec<DiscoveredServer> {
+pub fn discover(ctx: &DiscoveryCtx) -> Vec<DiscoveredServer> {
     let mut out = Vec::new();
-    for src in all_sources() {
-        for path in src.paths(ctx) {
+    for src in sources::registry() {
+        for (path, scope) in src.paths(ctx) {
             let bytes = match std::fs::read(&path) {
                 Ok(b) => b,
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
@@ -67,7 +69,7 @@ pub fn discover(ctx: &Ctx) -> Vec<DiscoveredServer> {
                     continue;
                 }
             };
-            match src.parse(&path, &bytes) {
+            match src.parse(&path, scope, &bytes) {
                 Ok(mut items) => out.append(&mut items),
                 Err(e) => tracing::warn!("{}: {e:#}", path.display()),
             }

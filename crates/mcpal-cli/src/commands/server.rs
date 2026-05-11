@@ -2,13 +2,12 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, anyhow, bail};
 use mcpal_core::ServerSpec;
-use mcpal_discovery::{Ctx as DCtx, discover};
 use mcpal_output::{Format, emit_list, emit_one};
 use serde::Serialize;
 use serde_json::json;
 
 use crate::cli::{ServerAction, ServerAddArgs, ServerImportArgs, ServerListArgs};
-use crate::commands::discover as discover_cmd;
+use crate::commands::discover::describe_spec;
 use crate::config::Config;
 use crate::resolver::resolve;
 use crate::runtime::{Ctx, probe};
@@ -34,7 +33,6 @@ struct Row {
 
 fn list(args: ServerListArgs, ctx: &Ctx) -> Result<()> {
     let mut rows: Vec<Row> = Vec::new();
-
     let include_owned = !args.discovered;
     let include_discovered = args.discovered || args.all;
 
@@ -44,23 +42,23 @@ fn list(args: ServerListArgs, ctx: &Ctx) -> Result<()> {
                 source: "mcpal".into(),
                 alias: alias.clone(),
                 kind: spec.kind().into(),
-                detail: discover_cmd::describe_spec(spec),
+                detail: describe_spec(spec),
             });
         }
     }
 
     if include_discovered {
-        let dctx = DCtx::current()?;
-        let mut found = discover(&dctx);
-        if let Some(filter) = args.source.as_deref() {
-            found.retain(|s| s.source == filter);
-        }
-        for s in found {
+        for s in ctx.discovered()? {
+            if let Some(filter) = args.source.as_deref()
+                && s.source != filter
+            {
+                continue;
+            }
             rows.push(Row {
                 source: s.source.into(),
                 alias: s.name.clone(),
                 kind: s.spec.kind().into(),
-                detail: discover_cmd::describe_spec(&s.spec),
+                detail: describe_spec(&s.spec),
             });
         }
     }
@@ -82,7 +80,7 @@ fn list(args: ServerListArgs, ctx: &Ctx) -> Result<()> {
 }
 
 fn show(reference: &str, ctx: &Ctx) -> Result<()> {
-    let r = resolve(reference, &ctx.cfg)?;
+    let r = resolve(reference, ctx)?;
     match ctx.format {
         Format::Json | Format::Jsonl => emit_one(ctx.format, &r.spec)?,
         Format::Human | Format::Yaml => {
@@ -139,9 +137,8 @@ fn remove(alias: &str, ctx: &Ctx) -> Result<()> {
 }
 
 fn import(args: ServerImportArgs, ctx: &Ctx) -> Result<()> {
-    let dctx = DCtx::current()?;
-    let servers = discover(&dctx);
-    let found = servers
+    let found = ctx
+        .discovered()?
         .iter()
         .find(|s| s.source == args.from && s.name == args.name)
         .ok_or_else(|| anyhow!("not found: {}:{}", args.from, args.name))?;

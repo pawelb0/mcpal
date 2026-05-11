@@ -1,12 +1,12 @@
-//! Parser unit tests using inline JSON fixtures.
-
 use std::path::PathBuf;
 
 use mcpal_core::ServerSpec;
-use mcpal_discovery::{Scope, Source, sources};
+use mcpal_discovery::{DiscoveredServer, Scope, sources};
 
-fn run(src: &dyn Source, path: &str, body: &str) -> Vec<mcpal_discovery::DiscoveredServer> {
-    src.parse(&PathBuf::from(path), body.as_bytes()).unwrap()
+fn parse(id: &str, path: &str, scope: Scope, body: &str) -> Vec<DiscoveredServer> {
+    let src = sources::by_id(id).unwrap_or_else(|| panic!("no source {id}"));
+    src.parse(&PathBuf::from(path), scope, body.as_bytes())
+        .unwrap()
 }
 
 #[test]
@@ -19,7 +19,12 @@ fn claude_code_user_and_project_scopes() {
             "/x": { "mcpServers": { "p1": { "url": "https://p1.example/sse" } } }
         }
     }"#;
-    let out = run(&sources::ClaudeCode, "/Users/pawelb/.claude.json", body);
+    let out = parse(
+        "claude-code",
+        "/Users/pawelb/.claude.json",
+        Scope::Global,
+        body,
+    );
     assert_eq!(out.len(), 2);
 
     let github = out.iter().find(|d| d.name == "github").unwrap();
@@ -34,9 +39,10 @@ fn claude_code_user_and_project_scopes() {
 #[test]
 fn claude_desktop_basic() {
     let body = r#"{ "mcpServers": { "fs": { "command": "filesystem-mcp", "args": ["/tmp"] } } }"#;
-    let out = run(
-        &sources::ClaudeDesktop,
+    let out = parse(
+        "claude-desktop",
         "/Users/pawelb/Library/.../claude_desktop_config.json",
+        Scope::Global,
         body,
     );
     assert_eq!(out.len(), 1);
@@ -47,10 +53,11 @@ fn claude_desktop_basic() {
 #[test]
 fn cursor_with_http_entry() {
     let body = r#"{ "mcpServers": { "linear": { "url": "https://mcp.linear.app/sse" } } }"#;
-    let out = run(&sources::Cursor, "/tmp/.cursor/mcp.json", body);
+    let out = parse("cursor", "/tmp/.cursor/mcp.json", Scope::Project, body);
     assert_eq!(out.len(), 1);
     let s = &out[0];
     assert_eq!(s.name, "linear");
+    assert_eq!(s.scope, Scope::Project);
     match &s.spec {
         ServerSpec::Http { url, .. } => assert_eq!(url, "https://mcp.linear.app/sse"),
         _ => panic!("expected http"),
@@ -59,7 +66,7 @@ fn cursor_with_http_entry() {
 
 #[test]
 fn lm_studio_empty_or_missing_key_is_ok() {
-    let out = run(&sources::LmStudio, "/tmp/.lmstudio/mcp.json", "{}");
+    let out = parse("lm-studio", "/tmp/.lmstudio/mcp.json", Scope::Global, "{}");
     assert!(out.is_empty());
 }
 
@@ -72,9 +79,10 @@ fn zed_jsonc_with_comments() {
         },
         "theme": "One Dark"
     }"#;
-    let out = run(
-        &sources::Zed,
+    let out = parse(
+        "zed",
         "/Users/pawelb/.config/zed/settings.json",
+        Scope::Global,
         body,
     );
     assert_eq!(out.len(), 1);
@@ -90,9 +98,10 @@ fn opencode_local_and_remote() {
             "lin": { "type": "remote", "url": "https://mcp.linear.app/sse" }
         }
     }"#;
-    let out = run(
-        &sources::Opencode,
+    let out = parse(
+        "opencode",
         "/Users/pawelb/.config/opencode/opencode.json",
+        Scope::Global,
         body,
     );
     assert_eq!(out.len(), 2);
@@ -113,7 +122,7 @@ fn malformed_entry_is_skipped_not_fatal() {
         "ok": { "command": "echo" },
         "junk": { "foo": "bar" }
     } }"#;
-    let out = run(&sources::ClaudeDesktop, "/tmp/x.json", body);
+    let out = parse("claude-desktop", "/tmp/x.json", Scope::Global, body);
     assert_eq!(out.len(), 1);
     assert_eq!(out[0].name, "ok");
 }
