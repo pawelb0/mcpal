@@ -64,6 +64,50 @@ fn lm_studio_empty_or_missing_key_is_ok() {
 }
 
 #[test]
+fn zed_jsonc_with_comments() {
+    let body = r#"{
+        // Zed user settings
+        "context_servers": {
+            "demo": { "command": "demo-mcp", "args": ["--flag"] }
+        },
+        "theme": "One Dark"
+    }"#;
+    let out = run(
+        &sources::Zed,
+        "/Users/pawelb/.config/zed/settings.json",
+        body,
+    );
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0].source, "zed");
+}
+
+#[test]
+fn opencode_local_and_remote() {
+    let body = r#"{
+        "$schema": "https://opencode.ai/config.json",
+        "mcp": {
+            "fs":  { "type": "local",  "command": ["fs-mcp", "/tmp"], "environment": { "X": "1" } },
+            "lin": { "type": "remote", "url": "https://mcp.linear.app/sse" }
+        }
+    }"#;
+    let out = run(
+        &sources::Opencode,
+        "/Users/pawelb/.config/opencode/opencode.json",
+        body,
+    );
+    assert_eq!(out.len(), 2);
+    let fs = out.iter().find(|d| d.name == "fs").unwrap();
+    match &fs.spec {
+        ServerSpec::Stdio { command, args, env } => {
+            assert_eq!(command, "fs-mcp");
+            assert_eq!(args, &["/tmp"]);
+            assert_eq!(env.get("X").map(String::as_str), Some("1"));
+        }
+        _ => panic!("expected stdio"),
+    }
+}
+
+#[test]
 fn malformed_entry_is_skipped_not_fatal() {
     let body = r#"{ "mcpServers": {
         "ok": { "command": "echo" },

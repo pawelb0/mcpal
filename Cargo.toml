@@ -52,6 +52,7 @@ trycmd = "0.15"
 tempfile = "3"
 insta = { version = "1", features = ["json"] }
 serde_yaml = "0.9"
+json5 = "0.4"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
