@@ -3,9 +3,8 @@ use std::io::Read;
 use std::path::Path;
 
 use anyhow::{Context, Result, anyhow, bail};
-use comfy_table::Table;
 use mcpal_core::rmcp::model::CallToolRequestParams;
-use mcpal_output::{Format, emit_json, emit_jsonl};
+use mcpal_output::{emit_list, emit_one};
 use serde_json::{Map, Value};
 
 use crate::cli::ToolAction;
@@ -20,32 +19,29 @@ pub async fn run(action: ToolAction, ctx: &Ctx) -> Result<()> {
             args,
             args_file,
             stdin_json,
-        } => call(&reference, &name, &args, args_file.as_deref(), stdin_json, ctx).await,
+        } => {
+            call(
+                &reference,
+                &name,
+                &args,
+                args_file.as_deref(),
+                stdin_json,
+                ctx,
+            )
+            .await
+        }
     }
 }
 
 async fn list(reference: &str, ctx: &Ctx) -> Result<()> {
     let (_, client) = ctx.open(reference).await?;
     let tools = client.list_all_tools().await?;
-
-    match ctx.format {
-        Format::Json => emit_json(&tools)?,
-        Format::Jsonl => {
-            for t in &tools {
-                emit_jsonl(t)?;
-            }
-        }
-        _ => {
-            let mut table = Table::new();
-            table.set_header(vec!["name", "description"]);
-            for t in &tools {
-                let desc = t.description.as_deref().unwrap_or("").to_string();
-                table.add_row(vec![t.name.as_ref(), desc.as_str()]);
-            }
-            println!("{table}");
-        }
-    }
-    client.cancel().await.ok();
+    emit_list(ctx.format, &tools, &["name", "description"], |t| {
+        vec![
+            t.name.to_string(),
+            t.description.as_deref().unwrap_or("").into(),
+        ]
+    })?;
     Ok(())
 }
 
@@ -65,13 +61,7 @@ async fn call(
         params = params.with_arguments(arguments);
     }
     let result = client.call_tool(params).await.context("tools/call")?;
-
-    match ctx.format {
-        Format::Jsonl => emit_jsonl(&result)?,
-        _ => emit_json(&result)?,
-    }
-
-    client.cancel().await.ok();
+    emit_one(ctx.format, &result)?;
     Ok(())
 }
 
@@ -84,7 +74,9 @@ fn build_arguments(
 
     if stdin_json {
         let mut buf = String::new();
-        std::io::stdin().read_to_string(&mut buf).context("read stdin")?;
+        std::io::stdin()
+            .read_to_string(&mut buf)
+            .context("read stdin")?;
         merge_object(&mut out, &buf, "stdin")?;
     }
     if let Some(p) = args_file {
@@ -95,7 +87,7 @@ fn build_arguments(
         let (k, v) = kv
             .split_once('=')
             .ok_or_else(|| anyhow!("--arg expects K=V, got: {kv}"))?;
-        out.insert(k.to_string(), parse_value(v));
+        out.insert(k.into(), parse_value(v));
     }
     Ok(out)
 }
@@ -113,7 +105,7 @@ fn merge_object(into: &mut Map<String, Value>, text: &str, source: &str) -> Resu
 }
 
 fn parse_value(raw: &str) -> Value {
-    serde_json::from_str(raw).unwrap_or_else(|_| Value::String(raw.to_string()))
+    serde_json::from_str(raw).unwrap_or_else(|_| Value::String(raw.into()))
 }
 
 #[cfg(test)]

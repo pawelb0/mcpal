@@ -1,7 +1,6 @@
 use anyhow::Result;
-use comfy_table::Table;
 use mcpal_core::rmcp::model::ReadResourceRequestParams;
-use mcpal_output::{Format, emit_json, emit_jsonl};
+use mcpal_output::{emit_list, emit_one};
 
 use crate::cli::{ResourceAction, ResourceTemplateAction};
 use crate::runtime::Ctx;
@@ -19,28 +18,13 @@ pub async fn run(action: ResourceAction, ctx: &Ctx) -> Result<()> {
 async fn list(reference: &str, ctx: &Ctx) -> Result<()> {
     let (_, client) = ctx.open(reference).await?;
     let resources = client.list_all_resources().await?;
-
-    match ctx.format {
-        Format::Json => emit_json(&resources)?,
-        Format::Jsonl => {
-            for r in &resources {
-                emit_jsonl(r)?;
-            }
-        }
-        _ => {
-            let mut table = Table::new();
-            table.set_header(vec!["uri", "name", "mime"]);
-            for r in &resources {
-                table.add_row(vec![
-                    r.uri.as_str(),
-                    r.name.as_str(),
-                    r.mime_type.as_deref().unwrap_or(""),
-                ]);
-            }
-            println!("{table}");
-        }
-    }
-    client.cancel().await.ok();
+    emit_list(ctx.format, &resources, &["uri", "name", "mime"], |r| {
+        vec![
+            r.uri.clone(),
+            r.name.clone(),
+            r.mime_type.clone().unwrap_or_default(),
+        ]
+    })?;
     Ok(())
 }
 
@@ -49,39 +33,24 @@ async fn read(reference: &str, uri: &str, ctx: &Ctx) -> Result<()> {
     let result = client
         .read_resource(ReadResourceRequestParams::new(uri))
         .await?;
-
-    match ctx.format {
-        Format::Jsonl => emit_jsonl(&result)?,
-        _ => emit_json(&result)?,
-    }
-    client.cancel().await.ok();
+    emit_one(ctx.format, &result)?;
     Ok(())
 }
 
 async fn templates(reference: &str, ctx: &Ctx) -> Result<()> {
     let (_, client) = ctx.open(reference).await?;
     let templates = client.list_all_resource_templates().await?;
-
-    match ctx.format {
-        Format::Json => emit_json(&templates)?,
-        Format::Jsonl => {
-            for t in &templates {
-                emit_jsonl(t)?;
-            }
-        }
-        _ => {
-            let mut table = Table::new();
-            table.set_header(vec!["uri_template", "name", "mime"]);
-            for t in &templates {
-                table.add_row(vec![
-                    t.uri_template.as_str(),
-                    t.name.as_str(),
-                    t.mime_type.as_deref().unwrap_or(""),
-                ]);
-            }
-            println!("{table}");
-        }
-    }
-    client.cancel().await.ok();
+    emit_list(
+        ctx.format,
+        &templates,
+        &["uri_template", "name", "mime"],
+        |t| {
+            vec![
+                t.uri_template.clone(),
+                t.name.clone(),
+                t.mime_type.clone().unwrap_or_default(),
+            ]
+        },
+    )?;
     Ok(())
 }

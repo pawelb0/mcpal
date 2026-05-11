@@ -24,7 +24,10 @@ pub fn run(action: ConfigAction, path: &Path) -> Result<()> {
             if !path.exists() {
                 Config::default().save(path)?;
             }
-            let status = Command::new(editor).arg(path).status().context("spawn editor")?;
+            let status = Command::new(editor)
+                .arg(path)
+                .status()
+                .context("spawn editor")?;
             if !status.success() {
                 bail!("editor exited non-zero");
             }

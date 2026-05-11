@@ -1,15 +1,15 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, anyhow, bail};
-use comfy_table::Table;
 use mcpal_core::ServerSpec;
-use mcpal_output::{Format, emit_json, emit_jsonl};
+use mcpal_output::{Format, emit_list, emit_one};
+use serde::Serialize;
 use serde_json::json;
 
 use crate::cli::{ServerAction, ServerAddArgs};
 use crate::config::Config;
 use crate::resolver::resolve;
-use crate::runtime::Ctx;
+use crate::runtime::{Ctx, probe};
 
 pub async fn run(action: ServerAction, ctx: &Ctx) -> Result<()> {
     match action {
@@ -21,37 +21,11 @@ pub async fn run(action: ServerAction, ctx: &Ctx) -> Result<()> {
     }
 }
 
-fn list(ctx: &Ctx) -> Result<()> {
-    let rows: Vec<_> = ctx
-        .cfg
-        .server
-        .iter()
-        .map(|(alias, spec)| (alias.clone(), describe(spec)))
-        .collect();
-
-    match ctx.format {
-        Format::Json => {
-            let payload: Vec<_> = rows
-                .iter()
-                .map(|(a, (k, d))| json!({"alias": a, "kind": k, "detail": d}))
-                .collect();
-            emit_json(&payload)?;
-        }
-        Format::Jsonl => {
-            for (a, (k, d)) in &rows {
-                emit_jsonl(&json!({"alias": a, "kind": k, "detail": d}))?;
-            }
-        }
-        Format::Yaml | Format::Human => {
-            let mut table = Table::new();
-            table.set_header(vec!["alias", "kind", "detail"]);
-            for (a, (k, d)) in &rows {
-                table.add_row(vec![a.as_str(), k, d.as_str()]);
-            }
-            println!("{table}");
-        }
-    }
-    Ok(())
+#[derive(Serialize)]
+struct Row<'a> {
+    alias: &'a str,
+    kind: &'a str,
+    detail: String,
 }
 
 fn describe(spec: &ServerSpec) -> (&'static str, String) {
@@ -68,11 +42,32 @@ fn describe(spec: &ServerSpec) -> (&'static str, String) {
     }
 }
 
+fn list(ctx: &Ctx) -> Result<()> {
+    let rows: Vec<Row<'_>> = ctx
+        .cfg
+        .server
+        .iter()
+        .map(|(alias, spec)| {
+            let (kind, detail) = describe(spec);
+            Row {
+                alias,
+                kind,
+                detail,
+            }
+        })
+        .collect();
+
+    emit_list(ctx.format, &rows, &["alias", "kind", "detail"], |r| {
+        vec![r.alias.into(), r.kind.into(), r.detail.clone()]
+    })?;
+    Ok(())
+}
+
 fn show(reference: &str, ctx: &Ctx) -> Result<()> {
     let r = resolve(reference, &ctx.cfg)?;
     match ctx.format {
-        Format::Json | Format::Jsonl => emit_json(&r.spec)?,
-        _ => {
+        Format::Json | Format::Jsonl => emit_one(ctx.format, &r.spec)?,
+        Format::Human | Format::Yaml => {
             let toml_str = toml::to_string_pretty(&r.spec).context("serialize")?;
             println!("[{}]\n{toml_str}", r.display);
         }
@@ -88,9 +83,13 @@ fn add(args: ServerAddArgs, ctx: &Ctx) -> Result<()> {
                 let (k, v) = kv
                     .split_once('=')
                     .ok_or_else(|| anyhow!("--env requires K=V: {kv}"))?;
-                env.insert(k.to_string(), v.to_string());
+                env.insert(k.into(), v.into());
             }
-            ServerSpec::Stdio { command: cmd, args: args.args, env }
+            ServerSpec::Stdio {
+                command: cmd,
+                args: args.args,
+                env,
+            }
         }
         (None, Some(url)) => ServerSpec::Http {
             url,
@@ -123,34 +122,19 @@ fn remove(alias: &str, ctx: &Ctx) -> Result<()> {
 
 async fn test(reference: &str, ctx: &Ctx) -> Result<()> {
     let (r, client) = ctx.open(reference).await?;
-    let info = client.peer_info();
-    let info_json = info.map(serde_json::to_value).transpose().context("encode peer info")?;
-    let name = info_json
-        .as_ref()
-        .and_then(|v| v.pointer("/serverInfo/name").and_then(|n| n.as_str()))
-        .unwrap_or("unknown");
-    let version = info_json
-        .as_ref()
-        .and_then(|v| v.pointer("/serverInfo/version").and_then(|n| n.as_str()))
-        .unwrap_or("?");
+    let p = probe(&client);
 
     match ctx.format {
-        Format::Json | Format::Jsonl => {
-            let payload = json!({
+        Format::Json | Format::Jsonl => emit_one(
+            ctx.format,
+            &json!({
                 "ref": r.display,
                 "ok": true,
-                "server": { "name": name, "version": version },
-                "peer_info": info_json,
-            });
-            if matches!(ctx.format, Format::Jsonl) {
-                emit_jsonl(&payload)?;
-            } else {
-                emit_json(&payload)?;
-            }
-        }
-        _ => println!("ok: {} ({} {})", r.display, name, version),
+                "server": { "name": p.name, "version": p.version },
+                "peerInfo": p.info,
+            }),
+        )?,
+        _ => println!("ok: {} ({} {})", r.display, p.name, p.version),
     }
-
-    client.cancel().await.ok();
     Ok(())
 }
