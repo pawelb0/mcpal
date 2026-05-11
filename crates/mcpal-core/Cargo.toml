@@ -21,6 +21,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 anyhow.workspace = true
+http.workspace = true
 
 [dev-dependencies]
 toml.workspace = true

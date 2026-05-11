@@ -14,6 +14,8 @@ repository = "https://github.com/pawelb/mcpal"
 rmcp = { version = "1.6", default-features = false, features = [
     "client",
     "transport-child-process",
+    "transport-streamable-http-client-reqwest",
+    "reqwest-native-tls",
     "macros",
 ] }
 
@@ -45,6 +47,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 directories = "5"
 which = "7"
+keyring = "3"
+http = "1"
 
 assert_cmd = "2"
 predicates = "3"

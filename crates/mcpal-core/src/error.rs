@@ -5,6 +5,9 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
+    #[error("auth: {0}")]
+    Auth(String),
+
     #[error("rmcp service: {0}")]
     Service(String),
 
@@ -22,6 +25,7 @@ impl Error {
     pub fn exit_code(&self) -> i32 {
         match self {
             Self::Io(_) | Self::Unsupported(_) => 3,
+            Self::Auth(_) => 4,
             Self::Service(_) => 5,
             Self::NotFound(_) => 7,
         }
