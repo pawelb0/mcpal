@@ -4,7 +4,7 @@ use anyhow::Result;
 use serde_json::Value;
 
 use crate::parse::servers_map;
-use crate::{DiscoveredServer, DiscoveryCtx, Scope, Source};
+use crate::{DiscoveredServer, DiscoveryCtx, Location, Scope, Source};
 
 mod claude_code;
 mod opencode;
@@ -17,7 +17,7 @@ pub use opencode::Opencode;
 pub struct SimpleSource {
     pub id: &'static str,
     pub key: &'static str,
-    pub global: &'static [&'static str],
+    pub global: &'static [(Location, &'static str)],
     pub project: &'static [&'static str],
     pub jsonc: bool,
 }
@@ -26,43 +26,46 @@ const SIMPLE_SOURCES: &[SimpleSource] = &[
     SimpleSource {
         id: "claude-desktop",
         key: "mcpServers",
-        global: &["Library/Application Support/Claude/claude_desktop_config.json"],
+        global: &[(Location::Config, "Claude/claude_desktop_config.json")],
         project: &[],
         jsonc: false,
     },
     SimpleSource {
         id: "cursor",
         key: "mcpServers",
-        global: &[".cursor/mcp.json"],
+        global: &[(Location::Home, ".cursor/mcp.json")],
         project: &[".cursor/mcp.json"],
         jsonc: false,
     },
     SimpleSource {
         id: "lm-studio",
         key: "mcpServers",
-        global: &[".lmstudio/mcp.json"],
+        global: &[(Location::Home, ".lmstudio/mcp.json")],
         project: &[],
         jsonc: false,
     },
     SimpleSource {
         id: "windsurf",
         key: "mcpServers",
-        global: &[".codeium/windsurf/mcp_config.json"],
+        global: &[(Location::Home, ".codeium/windsurf/mcp_config.json")],
         project: &[],
         jsonc: false,
     },
     SimpleSource {
         id: "cline",
         key: "mcpServers",
-        global: &["Library/Application Support/Code/User/globalStorage/\
-             saoudrizwan.claude-dev/settings/cline_mcp_settings.json"],
+        // VS Code globalStorage lives under Application Support / .config / AppData per platform.
+        global: &[(
+            Location::Config,
+            "Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
+        )],
         project: &[],
         jsonc: false,
     },
     SimpleSource {
         id: "zed",
         key: "context_servers",
-        global: &[".config/zed/settings.json"],
+        global: &[(Location::Home, ".config/zed/settings.json")],
         project: &[],
         jsonc: true,
     },
@@ -77,7 +80,7 @@ impl Source for &'static SimpleSource {
         out.extend(
             self.global
                 .iter()
-                .map(|p| (ctx.home.join(p), Scope::Global)),
+                .map(|(loc, rel)| (ctx.root_for(*loc).join(rel), Scope::Global)),
         );
         out.extend(
             self.project
@@ -107,7 +110,6 @@ pub fn registry() -> Vec<Box<dyn Source>> {
     v
 }
 
-/// Look up a registered source by id; used by tests and the discover command.
 pub fn by_id(id: &str) -> Option<Box<dyn Source>> {
     registry().into_iter().find(|s| s.id() == id)
 }

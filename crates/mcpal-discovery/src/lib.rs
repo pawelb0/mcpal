@@ -14,21 +14,49 @@ pub trait Source: Send + Sync {
     fn parse(&self, path: &Path, scope: Scope, bytes: &[u8]) -> Result<Vec<DiscoveredServer>>;
 }
 
+/// Where a relative config path is rooted. Resolved per-platform by
+/// [`DiscoveryCtx::root_for`].
+#[derive(Clone, Copy)]
+pub enum Location {
+    /// `$HOME`
+    Home,
+    /// `~/Library/Application Support` (macOS), `~/.config` (Linux),
+    /// `%APPDATA%` (Windows).
+    Config,
+    /// `~/Library/Application Support` (macOS), `~/.local/share` (Linux),
+    /// `%APPDATA%` (Windows).
+    Data,
+}
+
 pub struct DiscoveryCtx {
     pub home: PathBuf,
+    pub config_dir: PathBuf,
+    pub data_dir: PathBuf,
     pub cwd: PathBuf,
 }
 
 impl DiscoveryCtx {
     pub fn current() -> Result<Self> {
-        let home = directories::BaseDirs::new()
-            .ok_or_else(|| anyhow::anyhow!("no home directory"))?
-            .home_dir()
-            .to_path_buf();
+        let base =
+            directories::BaseDirs::new().ok_or_else(|| anyhow::anyhow!("no home directory"))?;
+        let project = directories::ProjectDirs::from("", "", "_mcpal_dummy_");
+        // BaseDirs lacks `data_dir`; recover platform data via UserDirs/BaseDirs.
+        let data_dir = base.data_dir().to_path_buf();
+        let _ = project; // keep linker happy on unused-import diagnostics
         Ok(Self {
-            home,
+            home: base.home_dir().to_path_buf(),
+            config_dir: base.config_dir().to_path_buf(),
+            data_dir,
             cwd: std::env::current_dir()?,
         })
+    }
+
+    pub fn root_for(&self, loc: Location) -> &Path {
+        match loc {
+            Location::Home => &self.home,
+            Location::Config => &self.config_dir,
+            Location::Data => &self.data_dir,
+        }
     }
 }
 
