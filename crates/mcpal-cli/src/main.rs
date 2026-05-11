@@ -2,12 +2,14 @@ mod cli;
 mod commands;
 mod config;
 mod keyring;
+mod kv;
 mod oauth;
 mod resolver;
 mod runtime;
 
 use anyhow::Result;
 use clap::Parser;
+use mcpal_core::HandlerOptions;
 use mcpal_output::Format;
 use tracing_subscriber::EnvFilter;
 
@@ -41,18 +43,15 @@ async fn dispatch(cli: Cli) -> Result<()> {
     let path = cli.config.unwrap_or_else(config::default_path);
     let cfg = Config::load(&path)?;
     let format = Format::resolve(cli.output.map(Into::into));
-    let sampling_handler = cli
-        .sampling_handler
-        .as_deref()
-        .map(|s| s.split_whitespace().map(String::from).collect::<Vec<_>>());
-    let ctx = Ctx::new(
-        cfg,
-        format,
-        path,
-        cli.roots,
-        !cli.no_interactive,
-        sampling_handler,
-    );
+    let handler_opts = HandlerOptions {
+        roots: cli.roots,
+        interactive: !cli.no_interactive,
+        sampling_handler: cli
+            .sampling_handler
+            .as_deref()
+            .map(|s| s.split_whitespace().map(String::from).collect()),
+    };
+    let ctx = Ctx::new(cfg, format, path, handler_opts);
 
     match cli.command {
         Command::Init => commands::init::run(&ctx.config_path),

@@ -5,8 +5,8 @@ use mcpal_core::Client;
 use mcpal_core::rmcp::model::{
     CallToolRequestParams, GetPromptRequestParams, ReadResourceRequestParams,
 };
-use serde_json::{Map, Value};
 
+use crate::kv;
 use crate::runtime::{Ctx, probe};
 
 const HELP: &str = "\
@@ -88,7 +88,7 @@ async fn dispatch(tokens: &[&str], client: &Client) -> Result<Control> {
             let name = tokens
                 .get(1)
                 .ok_or_else(|| anyhow!("tool <name> [k=v ...]"))?;
-            let args = kv_pairs(&tokens[2..])?;
+            let args = kv::parse_pairs(tokens[2..].iter().copied(), "arg")?;
             let mut params = CallToolRequestParams::new(name.to_string());
             if !args.is_empty() {
                 params = params.with_arguments(args);
@@ -116,16 +116,9 @@ async fn dispatch(tokens: &[&str], client: &Client) -> Result<Control> {
                 .get(1)
                 .ok_or_else(|| anyhow!("prompt <name> [k=v ...]"))?;
             let mut params = GetPromptRequestParams::new(name.to_string());
-            let raw_args = &tokens[2..];
-            if !raw_args.is_empty() {
-                let mut map: Map<String, Value> = Map::new();
-                for kv in raw_args {
-                    let (k, v) = kv
-                        .split_once('=')
-                        .ok_or_else(|| anyhow!("expected k=v, got: {kv}"))?;
-                    map.insert(k.into(), Value::String(v.into()));
-                }
-                params = params.with_arguments(map);
+            if tokens.len() > 2 {
+                params =
+                    params.with_arguments(kv::parse_pairs(tokens[2..].iter().copied(), "arg")?);
             }
             let result = client.get_prompt(params).await?;
             print_json(&result)
@@ -139,18 +132,6 @@ fn print_json<T: serde::Serialize>(v: &T) -> Result<Control> {
     Ok(Control::Continue)
 }
 
-fn kv_pairs(tokens: &[&str]) -> Result<Map<String, Value>> {
-    let mut out = Map::new();
-    for kv in tokens {
-        let (k, v) = kv
-            .split_once('=')
-            .ok_or_else(|| anyhow!("expected k=v, got: {kv}"))?;
-        let value: Value = serde_json::from_str(v).unwrap_or_else(|_| Value::String(v.into()));
-        out.insert(k.into(), value);
-    }
-    Ok(out)
-}
-
 struct StdinLines {
     rx: tokio::sync::mpsc::Receiver<std::io::Result<String>>,
 }
@@ -161,6 +142,8 @@ impl StdinLines {
     }
 }
 
+// The reader thread holds stdin.lock() until EOF. On early loop exit it
+// leaks until the process dies; that's fine for a one-shot CLI.
 fn stdin_lines() -> StdinLines {
     let (tx, rx) = tokio::sync::mpsc::channel::<std::io::Result<String>>(16);
     std::thread::spawn(move || {
@@ -171,7 +154,7 @@ fn stdin_lines() -> StdinLines {
             match std::io::BufRead::read_line(&mut stdin.lock(), &mut buf) {
                 Ok(0) => break,
                 Ok(_) => {
-                    if tx.blocking_send(Ok(buf.clone())).is_err() {
+                    if tx.blocking_send(Ok(std::mem::take(&mut buf))).is_err() {
                         break;
                     }
                 }

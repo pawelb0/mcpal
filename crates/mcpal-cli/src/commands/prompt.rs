@@ -1,9 +1,9 @@
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use mcpal_core::rmcp::model::GetPromptRequestParams;
 use mcpal_output::{emit_list, emit_one};
-use serde_json::{Map, Value};
 
 use crate::cli::PromptAction;
+use crate::kv;
 use crate::runtime::Ctx;
 
 pub async fn run(action: PromptAction, ctx: &Ctx) -> Result<()> {
@@ -29,14 +29,7 @@ async fn list(reference: &str, ctx: &Ctx) -> Result<()> {
 async fn get(reference: &str, name: &str, arg_pairs: &[String], ctx: &Ctx) -> Result<()> {
     let mut params = GetPromptRequestParams::new(name.to_string());
     if !arg_pairs.is_empty() {
-        let mut map: Map<String, Value> = Map::new();
-        for kv in arg_pairs {
-            let (k, v) = kv
-                .split_once('=')
-                .ok_or_else(|| anyhow!("--arg expects K=V, got: {kv}"))?;
-            map.insert(k.into(), Value::String(v.into()));
-        }
-        params = params.with_arguments(map);
+        params = params.with_arguments(kv::parse_pairs(arg_pairs, "arg")?);
     }
 
     let (_, client) = ctx.open(reference).await?;

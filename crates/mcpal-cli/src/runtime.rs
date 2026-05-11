@@ -2,7 +2,7 @@ use std::cell::OnceCell;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use mcpal_core::{AuthSpec, Client, Handler, ServerSpec, connect};
+use mcpal_core::{AuthSpec, Client, Handler, HandlerOptions, ServerSpec, connect};
 use mcpal_discovery::{DiscoveredServer, DiscoveryCtx, discover};
 use mcpal_output::Format;
 use serde_json::Value;
@@ -16,9 +16,7 @@ pub struct Ctx {
     pub cfg: Config,
     pub format: Format,
     pub config_path: PathBuf,
-    pub roots: Vec<String>,
-    pub interactive: bool,
-    pub sampling_handler: Option<Vec<String>>,
+    pub handler_opts: HandlerOptions,
     discovered: OnceCell<Vec<DiscoveredServer>>,
 }
 
@@ -27,17 +25,13 @@ impl Ctx {
         cfg: Config,
         format: Format,
         config_path: PathBuf,
-        roots: Vec<String>,
-        interactive: bool,
-        sampling_handler: Option<Vec<String>>,
+        handler_opts: HandlerOptions,
     ) -> Self {
         Self {
             cfg,
             format,
             config_path,
-            roots,
-            interactive,
-            sampling_handler,
+            handler_opts,
             discovered: OnceCell::new(),
         }
     }
@@ -53,10 +47,7 @@ impl Ctx {
     pub async fn open(&self, reference: &str) -> Result<(ResolvedServer, Client)> {
         let mut resolved = resolve(reference, self)?;
         attach_bearer(&mut resolved.spec, reference);
-        let handler = Handler::default()
-            .with_roots(self.roots.clone())
-            .interactive(self.interactive)
-            .sampling_handler(self.sampling_handler.clone());
+        let handler = Handler::new(self.handler_opts.clone());
         let client = connect(&resolved.spec, handler).await?;
         Ok((resolved, client))
     }

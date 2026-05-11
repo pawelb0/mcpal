@@ -4,7 +4,7 @@ use rmcp::ClientHandler;
 use rmcp::RoleClient;
 use rmcp::model::{
     CreateElicitationRequestParams, CreateElicitationResult, CreateMessageRequestParams,
-    CreateMessageResult, ElicitationAction, ErrorData, ListRootsResult,
+    CreateMessageResult, ElicitationAction, ErrorData, ListRootsResult, LoggingLevel,
     LoggingMessageNotificationParam, Root,
 };
 use rmcp::service::{NotificationContext, RequestContext};
@@ -19,8 +19,8 @@ use tokio::process::Command;
 ///   - `create_elicitation` prompts the user on a TTY, or declines when
 ///     interactivity is off / there is no terminal
 ///   - `create_message` (sampling) delegates to an external program when
-///     `sampling_handler` is set; otherwise it returns method-not-found
-///   - `on_logging_message` routes server logs to stderr
+///     `sampling_handler` is set; otherwise returns method-not-found
+///   - `on_logging_message` routes server logs through `tracing`
 #[derive(Clone, Default)]
 pub struct Handler {
     roots: Vec<String>,
@@ -28,24 +28,22 @@ pub struct Handler {
     sampling_handler: Option<Vec<String>>,
 }
 
+/// Bundle of client-side defaults consumed by `Handler` and `Ctx`. Grouping
+/// these avoids a sprawling positional constructor.
+#[derive(Clone, Default)]
+pub struct HandlerOptions {
+    pub roots: Vec<String>,
+    pub interactive: bool,
+    pub sampling_handler: Option<Vec<String>>,
+}
+
 impl Handler {
-    pub fn with_roots(mut self, roots: Vec<String>) -> Self {
-        self.roots = roots;
-        self
-    }
-
-    pub fn interactive(mut self, enabled: bool) -> Self {
-        self.interactive = enabled;
-        self
-    }
-
-    /// Set the external program that handles `sampling/createMessage`. The
-    /// first element is the executable, the rest are positional args. mcpal
-    /// pipes the request params as JSON on stdin and reads
-    /// `CreateMessageResult` JSON from stdout.
-    pub fn sampling_handler(mut self, argv: Option<Vec<String>>) -> Self {
-        self.sampling_handler = argv.filter(|v| !v.is_empty());
-        self
+    pub fn new(opts: HandlerOptions) -> Self {
+        Self {
+            roots: opts.roots,
+            interactive: opts.interactive,
+            sampling_handler: opts.sampling_handler.filter(|v| !v.is_empty()),
+        }
     }
 }
 
@@ -114,7 +112,19 @@ impl ClientHandler for Handler {
     ) {
         let logger = params.logger.as_deref().unwrap_or("server");
         let data = serde_json::to_string(&params.data).unwrap_or_default();
-        eprintln!("[{logger} {:?}] {data}", params.level);
+        match params.level {
+            LoggingLevel::Debug => tracing::debug!(target: "mcpal::server", logger, %data),
+            LoggingLevel::Info | LoggingLevel::Notice => {
+                tracing::info!(target: "mcpal::server", logger, %data);
+            }
+            LoggingLevel::Warning => tracing::warn!(target: "mcpal::server", logger, %data),
+            LoggingLevel::Error
+            | LoggingLevel::Critical
+            | LoggingLevel::Alert
+            | LoggingLevel::Emergency => {
+                tracing::error!(target: "mcpal::server", logger, %data);
+            }
+        }
     }
 }
 

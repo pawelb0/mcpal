@@ -2,12 +2,13 @@ use std::fs;
 use std::io::Read;
 use std::path::Path;
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, bail};
 use mcpal_core::rmcp::model::CallToolRequestParams;
 use mcpal_output::{emit_list, emit_one};
 use serde_json::{Map, Value};
 
 use crate::cli::ToolAction;
+use crate::kv;
 use crate::runtime::Ctx;
 
 pub async fn run(action: ToolAction, ctx: &Ctx) -> Result<()> {
@@ -83,12 +84,7 @@ fn build_arguments(
         let text = fs::read_to_string(p).with_context(|| format!("read {}", p.display()))?;
         merge_object(&mut out, &text, &p.display().to_string())?;
     }
-    for kv in arg_pairs {
-        let (k, v) = kv
-            .split_once('=')
-            .ok_or_else(|| anyhow!("--arg expects K=V, got: {kv}"))?;
-        out.insert(k.into(), parse_value(v));
-    }
+    out.extend(kv::parse_pairs(arg_pairs, "arg")?);
     Ok(out)
 }
 
@@ -102,35 +98,4 @@ fn merge_object(into: &mut Map<String, Value>, text: &str, source: &str) -> Resu
         into.insert(k, val);
     }
     Ok(())
-}
-
-fn parse_value(raw: &str) -> Value {
-    serde_json::from_str(raw).unwrap_or_else(|_| Value::String(raw.into()))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn parse_value_typed() {
-        assert_eq!(parse_value("42"), json!(42));
-        assert_eq!(parse_value("\"hi\""), json!("hi"));
-        assert_eq!(parse_value("true"), json!(true));
-        assert_eq!(parse_value("plain"), json!("plain"));
-    }
-
-    #[test]
-    fn build_arguments_pairs() {
-        let m = build_arguments(
-            &["count=3".into(), "msg=hi".into(), "ok=true".into()],
-            None,
-            false,
-        )
-        .unwrap();
-        assert_eq!(m["count"], json!(3));
-        assert_eq!(m["msg"], json!("hi"));
-        assert_eq!(m["ok"], json!(true));
-    }
 }
