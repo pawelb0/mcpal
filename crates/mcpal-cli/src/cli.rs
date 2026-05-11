@@ -107,6 +107,12 @@ pub enum Command {
         source: Option<String>,
     },
 
+    /// Interactive shell over one open server session.
+    Repl {
+        /// Server reference (alias, URL, `<source>:<name>`, or path to JSON spec).
+        reference: String,
+    },
+
     /// Store and inspect bearer tokens in the OS keyring.
     Auth {
         #[command(subcommand)]

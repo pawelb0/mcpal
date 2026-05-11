@@ -6,6 +6,7 @@ pub mod init;
 pub mod ping;
 pub mod prompt;
 pub mod raw;
+pub mod repl;
 pub mod resource;
 pub mod server;
 pub mod tool;
