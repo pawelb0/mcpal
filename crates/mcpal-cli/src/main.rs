@@ -22,15 +22,14 @@ fn main() {
         Err(err) => {
             eprintln!("error: {err:#}");
             err.downcast_ref::<mcpal_core::Error>()
-                .map(mcpal_core::Error::exit_code)
-                .unwrap_or(1)
+                .map_or(1, mcpal_core::Error::exit_code)
         }
     };
     std::process::exit(code);
 }
 
 fn run(cli: Cli) -> Result<()> {
-    let runtime = tokio::runtime::Builder::new_multi_thread()
+    let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
     runtime.block_on(dispatch(cli))
@@ -40,28 +39,33 @@ async fn dispatch(cli: Cli) -> Result<()> {
     let path = cli.config.unwrap_or_else(config::default_path);
     let cfg = Config::load(&path)?;
     let format = Format::resolve(cli.output.map(Into::into));
-    let ctx = Ctx { cfg, format, config_path: path.clone() };
+    let ctx = Ctx {
+        cfg,
+        format,
+        config_path: path,
+    };
 
     match cli.command {
-        Command::Init => commands::init::run(&path),
-        Command::Config { action } => commands::config::run(action, &path),
+        Command::Init => commands::init::run(&ctx.config_path),
+        Command::Config { action } => commands::config::run(action, &ctx.config_path),
         Command::Server { action } => commands::server::run(action, &ctx).await,
         Command::Tool { action } => commands::tool::run(action, &ctx).await,
         Command::Resource { action } => commands::resource::run(action, &ctx).await,
         Command::Prompt { action } => commands::prompt::run(action, &ctx).await,
         Command::Ping { reference } => commands::ping::run(&reference, &ctx).await,
-        Command::Raw { reference, method, params } => {
-            commands::raw::run(&reference, &method, params.as_deref(), &ctx).await
-        }
+        Command::Raw { .. } => commands::raw::run(),
         Command::Completion { shell } => commands::completion::run(shell),
     }
 }
 
 fn init_tracing(verbosity: u8) {
-    let level = match verbosity {
-        0 => "warn",
-        1 => "info,mcpal=debug",
-        _ => "debug",
+    if verbosity == 0 && std::env::var_os("RUST_LOG").is_none() {
+        return;
+    }
+    let level = if verbosity == 1 {
+        "info,mcpal=debug"
+    } else {
+        "debug"
     };
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(level));
     let _ = tracing_subscriber::fmt()

@@ -118,7 +118,12 @@ pub struct ServerAddArgs {
     pub stdio: Option<String>,
 
     /// Argument for the stdio command (repeatable).
-    #[arg(long = "arg", value_name = "ARG", num_args = 1, allow_hyphen_values = true)]
+    #[arg(
+        long = "arg",
+        value_name = "ARG",
+        num_args = 1,
+        allow_hyphen_values = true
+    )]
     pub args: Vec<String>,
 
     /// Environment variable in K=V form (repeatable).
@@ -140,7 +145,12 @@ pub enum ToolAction {
         reference: String,
         name: String,
         /// `key=value` (repeatable). Values parse as JSON when possible.
-        #[arg(long = "arg", value_name = "K=V", num_args = 1, allow_hyphen_values = true)]
+        #[arg(
+            long = "arg",
+            value_name = "K=V",
+            num_args = 1,
+            allow_hyphen_values = true
+        )]
         args: Vec<String>,
         /// JSON object file with arguments.
         #[arg(long)]
