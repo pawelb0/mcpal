@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 
-use mcpal_core::{ServerSpec, connect};
+use mcpal_core::{Handler, ServerSpec, connect};
 
 #[tokio::test]
 async fn list_tools_against_everything_server() {
@@ -23,7 +23,7 @@ async fn list_tools_against_everything_server() {
         env: BTreeMap::new(),
     };
 
-    let client = connect(&spec).await.expect("connect");
+    let client = connect(&spec, Handler::default()).await.expect("connect");
     let tools = client.list_all_tools().await.expect("list_all_tools");
     assert!(!tools.is_empty(), "everything server exposes tools");
     assert!(tools.iter().any(|t| t.name == "echo"));

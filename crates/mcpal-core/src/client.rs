@@ -1,19 +1,25 @@
 use std::collections::HashMap;
 
 use http::{HeaderName, HeaderValue};
+use rmcp::service::RunningService;
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use rmcp::transport::{StreamableHttpClientTransport, TokioChildProcess};
-use rmcp::{RoleClient, ServiceExt, service::RunningService};
+use rmcp::{RoleClient, ServiceExt};
 use tokio::process::Command;
 
+use crate::handler::Handler;
 use crate::{AuthSpec, Error, Result, ServerSpec};
 
-pub type Client = RunningService<RoleClient, ()>;
+pub type Client = RunningService<RoleClient, Handler>;
 
-pub async fn connect(spec: &ServerSpec) -> Result<Client> {
+pub async fn connect(spec: &ServerSpec, handler: Handler) -> Result<Client> {
     match spec {
-        ServerSpec::Stdio { command, args, env } => connect_stdio(command, args, env).await,
-        ServerSpec::Http { url, headers, auth } => connect_http(url, headers, auth.as_ref()).await,
+        ServerSpec::Stdio { command, args, env } => {
+            connect_stdio(command, args, env, handler).await
+        }
+        ServerSpec::Http { url, headers, auth } => {
+            connect_http(url, headers, auth.as_ref(), handler).await
+        }
     }
 }
 
@@ -21,6 +27,7 @@ async fn connect_stdio(
     command: &str,
     args: &[String],
     env: &std::collections::BTreeMap<String, String>,
+    handler: Handler,
 ) -> Result<Client> {
     let mut cmd = Command::new(command);
     cmd.args(args);
@@ -28,7 +35,8 @@ async fn connect_stdio(
         cmd.env(k, v);
     }
     let transport = TokioChildProcess::new(cmd)?;
-    ().serve(transport)
+    handler
+        .serve(transport)
         .await
         .map_err(|e| Error::Service(e.to_string()))
 }
@@ -37,6 +45,7 @@ async fn connect_http(
     url: &str,
     headers: &std::collections::BTreeMap<String, String>,
     auth: Option<&AuthSpec>,
+    handler: Handler,
 ) -> Result<Client> {
     let mut config = StreamableHttpClientTransportConfig::with_uri(url.to_string());
     if let Some(h) = resolve_auth(auth)? {
@@ -55,7 +64,8 @@ async fn connect_http(
     }
 
     let transport = StreamableHttpClientTransport::from_config(config);
-    ().serve(transport)
+    handler
+        .serve(transport)
         .await
         .map_err(|e| Error::Service(e.to_string()))
 }

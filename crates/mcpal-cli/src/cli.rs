@@ -24,6 +24,10 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub no_interactive: bool,
 
+    /// Filesystem root to expose to servers that call `roots/list` (repeatable).
+    #[arg(long = "root", value_name = "PATH", global = true, num_args = 1)]
+    pub roots: Vec<String>,
+
     #[command(subcommand)]
     pub command: Command,
 }

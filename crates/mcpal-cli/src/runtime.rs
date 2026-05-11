@@ -2,7 +2,7 @@ use std::cell::OnceCell;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use mcpal_core::{AuthSpec, Client, ServerSpec, connect};
+use mcpal_core::{AuthSpec, Client, Handler, ServerSpec, connect};
 use mcpal_discovery::{DiscoveredServer, DiscoveryCtx, discover};
 use mcpal_output::Format;
 use serde_json::Value;
@@ -16,15 +16,17 @@ pub struct Ctx {
     pub cfg: Config,
     pub format: Format,
     pub config_path: PathBuf,
+    pub roots: Vec<String>,
     discovered: OnceCell<Vec<DiscoveredServer>>,
 }
 
 impl Ctx {
-    pub fn new(cfg: Config, format: Format, config_path: PathBuf) -> Self {
+    pub fn new(cfg: Config, format: Format, config_path: PathBuf, roots: Vec<String>) -> Self {
         Self {
             cfg,
             format,
             config_path,
+            roots,
             discovered: OnceCell::new(),
         }
     }
@@ -40,7 +42,8 @@ impl Ctx {
     pub async fn open(&self, reference: &str) -> Result<(ResolvedServer, Client)> {
         let mut resolved = resolve(reference, self)?;
         attach_bearer(&mut resolved.spec, reference);
-        let client = connect(&resolved.spec).await?;
+        let handler = Handler::default().with_roots(self.roots.clone());
+        let client = connect(&resolved.spec, handler).await?;
         Ok((resolved, client))
     }
 }
