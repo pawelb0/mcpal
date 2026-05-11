@@ -8,7 +8,7 @@ use mcpal_output::Format;
 use serde_json::Value;
 
 use crate::config::Config;
-use crate::keyring;
+use crate::keyring::{self, Kind};
 use crate::oauth;
 use crate::resolver::{ResolvedServer, resolve};
 
@@ -45,16 +45,21 @@ impl Ctx {
     }
 }
 
-/// Resolve credentials for an HTTP spec. Skips stdio, honours an inline
-/// `AuthSpec::Bearer` / `BearerEnv`, and otherwise picks the first stored
-/// credential it finds. Precedence: oauth → bearer → `MCPAL_BEARER` env.
+/// Resolve credentials for an HTTP spec. Skips stdio. If `auth` is already
+/// `AuthSpec::Oauth` we replace it with the stored access token (or warn if
+/// missing); any other explicit `auth` is left alone. With no explicit auth,
+/// fall through: oauth blob → keyring bearer → `MCPAL_BEARER` env.
 fn attach_bearer(spec: &mut ServerSpec, reference: &str) {
     let ServerSpec::Http { auth, .. } = spec else {
         return;
     };
     if let Some(AuthSpec::Oauth) = auth {
-        if let Some(token) = oauth::current_access_token(reference) {
-            *auth = Some(AuthSpec::Bearer { token });
+        match oauth::current_access_token(reference) {
+            Some(token) => *auth = Some(AuthSpec::Bearer { token }),
+            None => eprintln!(
+                "warning: '{reference}' is configured for OAuth but no token is stored; \
+                 run `mcpal auth login --oauth {reference}`"
+            ),
         }
         return;
     }
@@ -65,7 +70,7 @@ fn attach_bearer(spec: &mut ServerSpec, reference: &str) {
         *auth = Some(AuthSpec::Bearer { token });
         return;
     }
-    if let Some(token) = keyring::get_bearer(reference) {
+    if let Some(token) = keyring::get(reference, Kind::Bearer) {
         *auth = Some(AuthSpec::Bearer { token });
         return;
     }

@@ -12,17 +12,17 @@ use mcpal_core::rmcp::transport::{
 use serde::Deserialize;
 use tokio::sync::{Mutex, oneshot};
 
-use crate::keyring;
+use crate::keyring::{self, Kind};
 
 const CALLBACK_HTML: &str = "<!doctype html><html><body><h2>mcpal: authorized.</h2>\
 <p>You can close this tab.</p></body></html>";
 
-pub struct KeyringCredentialStore {
+pub(crate) struct KeyringCredentialStore {
     reference: String,
 }
 
 impl KeyringCredentialStore {
-    pub fn new(reference: impl Into<String>) -> Self {
+    pub fn new(reference: &str) -> Self {
         Self {
             reference: reference.into(),
         }
@@ -32,25 +32,26 @@ impl KeyringCredentialStore {
 #[async_trait]
 impl CredentialStore for KeyringCredentialStore {
     async fn load(&self) -> Result<Option<StoredCredentials>, AuthError> {
-        let Some(json) = keyring::get_oauth_blob(&self.reference) else {
+        let Some(json) = keyring::get(&self.reference, Kind::Oauth) else {
             return Ok(None);
         };
         serde_json::from_str(&json)
             .map(Some)
-            .map_err(|e| AuthError::InternalError(format!("decode creds: {e}")))
+            .map_err(|e| internal("decode creds", e))
     }
 
     async fn save(&self, c: StoredCredentials) -> Result<(), AuthError> {
-        let json = serde_json::to_string(&c)
-            .map_err(|e| AuthError::InternalError(format!("encode creds: {e}")))?;
-        keyring::put_oauth_blob(&self.reference, &json)
-            .map_err(|e| AuthError::InternalError(format!("store creds: {e:#}")))
+        let json = serde_json::to_string(&c).map_err(|e| internal("encode creds", e))?;
+        keyring::put(&self.reference, Kind::Oauth, &json).map_err(|e| internal("store creds", e))
     }
 
     async fn clear(&self) -> Result<(), AuthError> {
-        keyring::delete_oauth_blob(&self.reference)
-            .map_err(|e| AuthError::InternalError(format!("delete creds: {e:#}")))
+        keyring::delete(&self.reference, Kind::Oauth).map_err(|e| internal("delete creds", e))
     }
+}
+
+fn internal(ctx: &str, e: impl std::fmt::Display) -> AuthError {
+    AuthError::InternalError(format!("{ctx}: {e}"))
 }
 
 #[derive(Debug, Deserialize)]
@@ -102,8 +103,8 @@ pub async fn login(reference: &str, server_url: &str, open_browser: bool) -> Res
 
     eprintln!("Open this URL to authorize {reference}:");
     eprintln!("  {url}");
-    if open_browser {
-        let _ = webbrowser::open(&url);
+    if open_browser && let Err(e) = webbrowser::open(&url) {
+        eprintln!("  (couldn't launch browser: {e}; open the URL manually)");
     }
 
     let params = rx.await.context("waiting for callback")?;
@@ -135,10 +136,10 @@ pub async fn refresh(reference: &str, server_url: &str) -> Result<()> {
     Ok(())
 }
 
-/// Read the current access token from stored credentials. Walks serialized
-/// JSON directly to skip an `oauth2` crate dep just for one trait method.
-pub fn current_access_token(reference: &str) -> Option<String> {
-    let json = keyring::get_oauth_blob(reference)?;
+/// Walks the serialized credential blob directly so we don't need to depend on
+/// the `oauth2` crate's `TokenResponse` trait for one field access.
+pub(crate) fn current_access_token(reference: &str) -> Option<String> {
+    let json = keyring::get(reference, Kind::Oauth)?;
     let v: serde_json::Value = serde_json::from_str(&json).ok()?;
     v.pointer("/token_response/access_token")?
         .as_str()

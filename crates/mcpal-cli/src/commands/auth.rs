@@ -6,9 +6,9 @@ use mcpal_output::{Format, emit_one};
 use serde_json::{Value, json};
 
 use crate::cli::AuthAction;
-use crate::config::Config;
-use crate::keyring;
+use crate::keyring::{self, Kind};
 use crate::oauth;
+use crate::resolver::resolve;
 use crate::runtime::Ctx;
 
 pub async fn run(action: AuthAction, ctx: &Ctx) -> Result<()> {
@@ -45,7 +45,7 @@ async fn login(
     ctx: &Ctx,
 ) -> Result<()> {
     if oauth_flag {
-        let url = oauth_url_for(reference, url, &ctx.cfg)?;
+        let url = resolve_oauth_url(reference, url, ctx)?;
         oauth::login(reference, &url, !no_browser).await?;
         return report(
             ctx,
@@ -62,7 +62,7 @@ async fn login(
     if token.is_empty() {
         bail!("empty token");
     }
-    keyring::put_bearer(reference, &token)?;
+    keyring::put(reference, Kind::Bearer, &token)?;
     report(
         ctx,
         json!({"ok": true, "ref": reference, "action": "login", "method": "bearer"}),
@@ -71,8 +71,8 @@ async fn login(
 }
 
 fn logout(reference: &str, ctx: &Ctx) -> Result<()> {
-    keyring::delete_bearer(reference)?;
-    keyring::delete_oauth_blob(reference)?;
+    keyring::delete(reference, Kind::Bearer)?;
+    keyring::delete(reference, Kind::Oauth)?;
     report(
         ctx,
         json!({"ok": true, "ref": reference, "action": "logout"}),
@@ -84,8 +84,8 @@ fn status(reference: Option<&str>, ctx: &Ctx) -> Result<()> {
     let Some(reference) = reference else {
         bail!("pass a reference; listing all stored tokens isn't supported yet");
     };
-    let bearer = keyring::get_bearer(reference).is_some();
-    let oauth_present = keyring::get_oauth_blob(reference).is_some();
+    let bearer = keyring::get(reference, Kind::Bearer).is_some();
+    let oauth_present = keyring::get(reference, Kind::Oauth).is_some();
     report(
         ctx,
         json!({
@@ -95,10 +95,10 @@ fn status(reference: Option<&str>, ctx: &Ctx) -> Result<()> {
         }),
         || {
             let kinds = match (bearer, oauth_present) {
-                (false, false) => "no credentials".to_string(),
-                (true, false) => "bearer".to_string(),
-                (false, true) => "oauth".to_string(),
-                (true, true) => "bearer + oauth".to_string(),
+                (false, false) => "no credentials",
+                (true, false) => "bearer",
+                (false, true) => "oauth",
+                (true, true) => "bearer + oauth",
             };
             println!("{reference}: {kinds}");
         },
@@ -106,7 +106,7 @@ fn status(reference: Option<&str>, ctx: &Ctx) -> Result<()> {
 }
 
 async fn refresh(reference: &str, url: Option<&str>, ctx: &Ctx) -> Result<()> {
-    let url = oauth_url_for(reference, url, &ctx.cfg)?;
+    let url = resolve_oauth_url(reference, url, ctx)?;
     oauth::refresh(reference, &url).await?;
     report(
         ctx,
@@ -115,17 +115,19 @@ async fn refresh(reference: &str, url: Option<&str>, ctx: &Ctx) -> Result<()> {
     )
 }
 
-fn oauth_url_for(reference: &str, override_url: Option<&str>, cfg: &Config) -> Result<String> {
+/// Resolve the URL for an OAuth flow: explicit `--url` wins, then the resolved
+/// alias's HTTP URL via the standard ref-resolver (so `cursor:linear`,
+/// `mcpal server add`-defined names, and bare URLs all work).
+fn resolve_oauth_url(reference: &str, override_url: Option<&str>, ctx: &Ctx) -> Result<String> {
     if let Some(u) = override_url {
         return Ok(u.to_string());
     }
-    if let Some(ServerSpec::Http { url, .. }) = cfg.server.get(reference) {
-        return Ok(url.clone());
+    match resolve(reference, ctx)?.spec {
+        ServerSpec::Http { url, .. } => Ok(url),
+        ServerSpec::Stdio { .. } => {
+            bail!("'{reference}' is a stdio server; OAuth only applies to HTTP")
+        }
     }
-    bail!(
-        "no URL for '{reference}'; pass --url or add it as an HTTP server first \
-         (`mcpal server add {reference} --http <url>`)"
-    )
 }
 
 fn report(ctx: &Ctx, payload: Value, human: impl FnOnce()) -> Result<()> {

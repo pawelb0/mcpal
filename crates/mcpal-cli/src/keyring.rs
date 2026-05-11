@@ -2,51 +2,41 @@ use anyhow::{Context, Result};
 
 const SERVICE: &str = "mcpal";
 
-fn entry(account: &str) -> Result<keyring::Entry> {
-    keyring::Entry::new(SERVICE, account).with_context(|| format!("keyring entry for {account}"))
+#[derive(Clone, Copy)]
+pub enum Kind {
+    Bearer,
+    Oauth,
 }
 
-fn account_bearer(reference: &str) -> String {
-    format!("bearer:{reference}")
+impl Kind {
+    fn prefix(self) -> &'static str {
+        match self {
+            Self::Bearer => "bearer",
+            Self::Oauth => "oauth",
+        }
+    }
 }
 
-fn account_oauth(reference: &str) -> String {
-    format!("oauth:{reference}")
+fn entry(reference: &str, kind: Kind) -> Result<keyring::Entry> {
+    let account = format!("{}:{reference}", kind.prefix());
+    keyring::Entry::new(SERVICE, &account).with_context(|| format!("keyring entry for {account}"))
 }
 
-pub fn put_bearer(reference: &str, token: &str) -> Result<()> {
-    entry(&account_bearer(reference))?
-        .set_password(token)
-        .with_context(|| format!("store bearer for {reference}"))
+pub fn put(reference: &str, kind: Kind, value: &str) -> Result<()> {
+    entry(reference, kind)?
+        .set_password(value)
+        .with_context(|| format!("store {} for {reference}", kind.prefix()))
 }
 
-pub fn get_bearer(reference: &str) -> Option<String> {
-    entry(&account_bearer(reference)).ok()?.get_password().ok()
+pub fn get(reference: &str, kind: Kind) -> Option<String> {
+    entry(reference, kind).ok()?.get_password().ok()
 }
 
-pub fn delete_bearer(reference: &str) -> Result<()> {
-    delete_account(&account_bearer(reference), reference, "bearer")
-}
-
-pub fn put_oauth_blob(reference: &str, json: &str) -> Result<()> {
-    entry(&account_oauth(reference))?
-        .set_password(json)
-        .with_context(|| format!("store oauth creds for {reference}"))
-}
-
-pub fn get_oauth_blob(reference: &str) -> Option<String> {
-    entry(&account_oauth(reference)).ok()?.get_password().ok()
-}
-
-pub fn delete_oauth_blob(reference: &str) -> Result<()> {
-    delete_account(&account_oauth(reference), reference, "oauth")
-}
-
-fn delete_account(account: &str, reference: &str, what: &str) -> Result<()> {
-    let e = entry(account)?;
+pub fn delete(reference: &str, kind: Kind) -> Result<()> {
+    let e = entry(reference, kind)?;
     match e.delete_credential() {
         // Idempotent: deleting a non-existent entry is a no-op.
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(e).with_context(|| format!("delete {what} for {reference}")),
+        Err(e) => Err(e).with_context(|| format!("delete {} for {reference}", kind.prefix())),
     }
 }
