@@ -41,7 +41,7 @@ async fn dispatch(cli: Cli) -> Result<()> {
     let path = cli.config.unwrap_or_else(config::default_path);
     let cfg = Config::load(&path)?;
     let format = Format::resolve(cli.output.map(Into::into));
-    let ctx = Ctx::new(cfg, format, path, cli.roots);
+    let ctx = Ctx::new(cfg, format, path, cli.roots, !cli.no_interactive);
 
     match cli.command {
         Command::Init => commands::init::run(&ctx.config_path),

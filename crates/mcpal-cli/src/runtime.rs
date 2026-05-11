@@ -17,16 +17,24 @@ pub struct Ctx {
     pub format: Format,
     pub config_path: PathBuf,
     pub roots: Vec<String>,
+    pub interactive: bool,
     discovered: OnceCell<Vec<DiscoveredServer>>,
 }
 
 impl Ctx {
-    pub fn new(cfg: Config, format: Format, config_path: PathBuf, roots: Vec<String>) -> Self {
+    pub fn new(
+        cfg: Config,
+        format: Format,
+        config_path: PathBuf,
+        roots: Vec<String>,
+        interactive: bool,
+    ) -> Self {
         Self {
             cfg,
             format,
             config_path,
             roots,
+            interactive,
             discovered: OnceCell::new(),
         }
     }
@@ -42,7 +50,9 @@ impl Ctx {
     pub async fn open(&self, reference: &str) -> Result<(ResolvedServer, Client)> {
         let mut resolved = resolve(reference, self)?;
         attach_bearer(&mut resolved.spec, reference);
-        let handler = Handler::default().with_roots(self.roots.clone());
+        let handler = Handler::default()
+            .with_roots(self.roots.clone())
+            .interactive(self.interactive);
         let client = connect(&resolved.spec, handler).await?;
         Ok((resolved, client))
     }
