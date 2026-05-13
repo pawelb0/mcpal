@@ -1,17 +1,21 @@
-use std::io::{IsTerminal, Write};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result, anyhow};
 use mcpal_core::Client;
 use mcpal_core::rmcp::model::{
-    CallToolRequestParams, GetPromptRequestParams, ReadResourceRequestParams,
+    CallToolRequestParams, GetPromptRequestParams, ReadResourceRequestParams, Tool,
 };
+use rustyline::DefaultEditor;
+use rustyline::error::ReadlineError;
+use serde_json::Value;
 
 use crate::kv;
 use crate::runtime::{Ctx, probe};
 
 const HELP: &str = "\
 commands:
-  tools                       list available tools
+  tools                       compact list of available tools
+  describe <name>             tool description + example call
   tool <name> [k=v ...]       call a tool
   resources                   list resources
   resource <uri>              read a resource
@@ -24,38 +28,64 @@ commands:
 
 pub async fn run(reference: &str, ctx: &Ctx) -> Result<()> {
     let (resolved, client) = ctx.open(reference).await?;
-    let tty = std::io::stdin().is_terminal();
     let p = probe(&client);
-    if tty {
-        eprintln!(
-            "mcpal repl @ {} ({} {})",
-            resolved.display, p.name, p.version
-        );
-        eprintln!("type `help` for commands, `quit` to leave.");
+    eprintln!(
+        "mcpal repl @ {} ({} {})",
+        resolved.display, p.name, p.version
+    );
+    eprintln!("type `help` for commands, `quit` to leave.");
+
+    let history_path = history_file();
+    let mut editor: Option<DefaultEditor> = Some(DefaultEditor::new().context("rustyline init")?);
+    if let (Some(ed), Some(ref path)) = (editor.as_mut(), history_path.as_ref()) {
+        let _ = ed.load_history(path);
     }
 
-    let mut reader = stdin_lines();
     loop {
-        if tty {
-            eprint!("mcpal> ");
-            std::io::stderr().flush().ok();
-        }
-        let Some(line) = reader.next().await else {
-            break;
-        };
-        let line = line?;
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        let tokens: Vec<&str> = trimmed.split_whitespace().collect();
-        match dispatch(&tokens, &client).await {
-            Ok(Control::Continue) => {}
-            Ok(Control::Quit) => break,
-            Err(e) => eprintln!("error: {e:#}"),
+        let mut taken = editor.take().expect("editor present");
+        let (line, returned) = tokio::task::spawn_blocking(move || {
+            let r = taken.readline("mcpal> ");
+            if let Ok(ref l) = r {
+                let _ = taken.add_history_entry(l);
+            }
+            (r, taken)
+        })
+        .await?;
+        editor = Some(returned);
+
+        match line {
+            Ok(line) => {
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                let tokens: Vec<&str> = trimmed.split_whitespace().collect();
+                match dispatch(&tokens, &client).await {
+                    Ok(Control::Continue) => {}
+                    Ok(Control::Quit) => break,
+                    Err(e) => eprintln!("error: {e:#}"),
+                }
+            }
+            Err(ReadlineError::Interrupted | ReadlineError::Eof) => break,
+            Err(e) => {
+                eprintln!("readline: {e}");
+                break;
+            }
         }
     }
+
+    if let (Some(ed), Some(ref path)) = (editor.as_mut(), history_path.as_ref())
+        && let Some(parent) = path.parent()
+    {
+        let _ = std::fs::create_dir_all(parent);
+        let _ = ed.save_history(path);
+    }
     Ok(())
+}
+
+fn history_file() -> Option<PathBuf> {
+    let base = directories::BaseDirs::new()?;
+    Some(base.data_dir().join("mcpal").join("repl_history"))
 }
 
 enum Control {
@@ -72,17 +102,23 @@ async fn dispatch(tokens: &[&str], client: &Client) -> Result<Control> {
         }
         "ping" => {
             let p = probe(client);
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&serde_json::json!({
-                    "name": p.name, "version": p.version,
-                }))?
-            );
+            println!("{} {}", p.name, p.version);
             Ok(Control::Continue)
         }
         "tools" => {
             let tools = client.list_all_tools().await?;
-            print_json(&tools)
+            print_tools_brief(&tools);
+            Ok(Control::Continue)
+        }
+        "describe" => {
+            let name = tokens.get(1).ok_or_else(|| anyhow!("describe <name>"))?;
+            let tools = client.list_all_tools().await?;
+            let tool = tools
+                .iter()
+                .find(|t| t.name == **name)
+                .ok_or_else(|| anyhow!("no tool named '{name}'"))?;
+            print_tool_detail(tool);
+            Ok(Control::Continue)
         }
         "tool" => {
             let name = tokens
@@ -94,22 +130,30 @@ async fn dispatch(tokens: &[&str], client: &Client) -> Result<Control> {
                 params = params.with_arguments(args);
             }
             let result = client.call_tool(params).await.context("tools/call")?;
-            print_json(&result)
+            print_json(&result);
+            Ok(Control::Continue)
         }
         "resources" => {
             let resources = client.list_all_resources().await?;
-            print_json(&resources)
+            for r in &resources {
+                println!("{}  {}", r.uri, r.name);
+            }
+            Ok(Control::Continue)
         }
         "resource" => {
             let uri = tokens.get(1).ok_or_else(|| anyhow!("resource <uri>"))?;
             let result = client
                 .read_resource(ReadResourceRequestParams::new((*uri).to_string()))
                 .await?;
-            print_json(&result)
+            print_json(&result);
+            Ok(Control::Continue)
         }
         "prompts" => {
             let prompts = client.list_all_prompts().await?;
-            print_json(&prompts)
+            for p in &prompts {
+                println!("{}  {}", p.name, first_line(p.description.as_deref()));
+            }
+            Ok(Control::Continue)
         }
         "prompt" => {
             let name = tokens
@@ -121,49 +165,114 @@ async fn dispatch(tokens: &[&str], client: &Client) -> Result<Control> {
                     params.with_arguments(kv::parse_pairs(tokens[2..].iter().copied(), "arg")?);
             }
             let result = client.get_prompt(params).await?;
-            print_json(&result)
+            print_json(&result);
+            Ok(Control::Continue)
         }
         other => Err(anyhow!("unknown command: {other}; try `help`")),
     }
 }
 
-fn print_json<T: serde::Serialize>(v: &T) -> Result<Control> {
-    println!("{}", serde_json::to_string_pretty(v)?);
-    Ok(Control::Continue)
-}
-
-struct StdinLines {
-    rx: tokio::sync::mpsc::Receiver<std::io::Result<String>>,
-}
-
-impl StdinLines {
-    async fn next(&mut self) -> Option<std::io::Result<String>> {
-        self.rx.recv().await
+fn print_json<T: serde::Serialize>(v: &T) {
+    match serde_json::to_string_pretty(v) {
+        Ok(s) => println!("{s}"),
+        Err(e) => eprintln!("encode: {e}"),
     }
 }
 
-// The reader thread holds stdin.lock() until EOF. On early loop exit it
-// leaks until the process dies; that's fine for a one-shot CLI.
-fn stdin_lines() -> StdinLines {
-    let (tx, rx) = tokio::sync::mpsc::channel::<std::io::Result<String>>(16);
-    std::thread::spawn(move || {
-        let stdin = std::io::stdin();
-        let mut buf = String::new();
-        loop {
-            buf.clear();
-            match std::io::BufRead::read_line(&mut stdin.lock(), &mut buf) {
-                Ok(0) => break,
-                Ok(_) => {
-                    if tx.blocking_send(Ok(std::mem::take(&mut buf))).is_err() {
-                        break;
-                    }
-                }
-                Err(e) => {
-                    let _ = tx.blocking_send(Err(e));
-                    break;
-                }
+fn first_line(s: Option<&str>) -> &str {
+    s.and_then(|s| s.lines().next()).unwrap_or("")
+}
+
+fn print_tools_brief(tools: &[Tool]) {
+    let width = tools.iter().map(|t| t.name.len()).max().unwrap_or(0);
+    for t in tools {
+        println!(
+            "{:<width$}  {}",
+            t.name.as_ref(),
+            first_line(t.description.as_deref()),
+            width = width
+        );
+    }
+}
+
+fn print_tool_detail(tool: &Tool) {
+    println!("{}", tool.name);
+    if let Some(desc) = tool.description.as_deref() {
+        for line in desc.lines() {
+            println!("  {line}");
+        }
+        println!();
+    }
+
+    let schema = serde_json::to_value(&*tool.input_schema).unwrap_or(Value::Null);
+    let (required, optional) = split_schema(&schema);
+
+    if !required.is_empty() {
+        println!("required:");
+        for (name, ty) in &required {
+            println!("  {name}: {ty}");
+        }
+    }
+    if !optional.is_empty() {
+        println!("optional:");
+        for (name, ty) in &optional {
+            println!("  {name}: {ty}");
+        }
+    }
+
+    let example_args: Vec<String> = required
+        .iter()
+        .map(|(name, ty)| format!("{name}={}", placeholder_for(ty)))
+        .collect();
+    if example_args.is_empty() {
+        println!("\nexample:\n  tool {}", tool.name);
+    } else {
+        println!(
+            "\nexample:\n  tool {} {}",
+            tool.name,
+            example_args.join(" ")
+        );
+    }
+}
+
+type Field = (String, String);
+
+fn split_schema(schema: &Value) -> (Vec<Field>, Vec<Field>) {
+    let required: std::collections::HashSet<String> = schema
+        .get("required")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut req = Vec::new();
+    let mut opt = Vec::new();
+    if let Some(props) = schema.get("properties").and_then(Value::as_object) {
+        for (name, def) in props {
+            let ty = def
+                .get("type")
+                .and_then(Value::as_str)
+                .unwrap_or("any")
+                .to_string();
+            if required.contains(name) {
+                req.push((name.clone(), ty));
+            } else {
+                opt.push((name.clone(), ty));
             }
         }
-    });
-    StdinLines { rx }
+    }
+    (req, opt)
+}
+
+fn placeholder_for(ty: &str) -> &'static str {
+    match ty {
+        "string" => "<text>",
+        "number" | "integer" => "<n>",
+        "boolean" => "<true|false>",
+        "array" => "<json>",
+        "object" => "<json>",
+        _ => "<value>",
+    }
 }
