@@ -65,6 +65,8 @@ where
         }
         Format::Human | Format::Yaml => {
             let mut t = comfy_table::Table::new();
+            t.load_preset(comfy_table::presets::UTF8_HORIZONTAL_ONLY)
+                .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
             t.set_header(headers.to_vec());
             for i in items {
                 t.add_row(row(i));
