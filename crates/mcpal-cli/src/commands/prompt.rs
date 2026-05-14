@@ -26,10 +26,10 @@ async fn list(reference: &str, ctx: &Ctx) -> Result<()> {
     Ok(())
 }
 
-async fn get(reference: &str, name: &str, arg_pairs: &[String], ctx: &Ctx) -> Result<()> {
+async fn get(reference: &str, name: &str, flag_args: &[String], ctx: &Ctx) -> Result<()> {
     let mut params = GetPromptRequestParams::new(name.to_string());
-    if !arg_pairs.is_empty() {
-        params = params.with_arguments(kv::parse_pairs(arg_pairs, "arg")?);
+    if !flag_args.is_empty() {
+        params = params.with_arguments(kv::parse_flag_args(flag_args.iter())?);
     }
 
     let (_, client) = ctx.open(reference).await?;

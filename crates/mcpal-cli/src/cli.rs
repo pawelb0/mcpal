@@ -233,24 +233,22 @@ pub enum ToolAction {
     /// List tools exposed by a server.
     List { reference: String },
 
-    /// Call a tool with named arguments.
+    /// Show the schema + an example call for a tool.
+    Describe { reference: String, name: String },
+
+    /// Call a tool. Arguments use `--key value` pairs (AWS-CLI style).
+    /// Values parse as typed JSON when possible (numbers, booleans, JSON
+    /// literals), otherwise stay as strings.
     Call {
         reference: String,
         name: String,
-        /// `key=value` (repeatable). Values parse as JSON when possible.
-        #[arg(
-            long = "arg",
-            value_name = "K=V",
-            num_args = 1,
-            allow_hyphen_values = true
-        )]
+        /// JSON file (or `-` for stdin) used as the base argument object;
+        /// `--key value` pairs override individual fields.
+        #[arg(long, value_name = "PATH|-")]
+        cli_input_json: Option<String>,
+        /// Remaining tokens are interpreted as `--key value` pairs.
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 0..)]
         args: Vec<String>,
-        /// JSON object file with arguments.
-        #[arg(long)]
-        args_file: Option<PathBuf>,
-        /// Read JSON arguments from stdin.
-        #[arg(long)]
-        stdin_json: bool,
     },
 }
 
@@ -276,11 +274,11 @@ pub enum ResourceTemplateAction {
 pub enum PromptAction {
     /// List prompts.
     List { reference: String },
-    /// Get a prompt with arguments.
+    /// Get a prompt. Arguments use `--key value` pairs (AWS-CLI style).
     Get {
         reference: String,
         name: String,
-        #[arg(long = "arg", value_name = "K=V", num_args = 1)]
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 0..)]
         args: Vec<String>,
     },
 }

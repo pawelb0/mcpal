@@ -67,20 +67,37 @@ mcpal server import --from opencode tavily --as tav
 
 ### Call tools, read resources, fetch prompts
 
+Flags follow AWS-CLI style: `--key value` pairs. Values parse as typed JSON
+(numbers, booleans, JSON literals) when possible, otherwise stay strings.
+
 ```
 mcpal tool list <ref>
-mcpal tool call <ref> <name> --arg key=val ...
-mcpal tool call <ref> <name> --args-file args.json
-echo '{"k":"v"}' | mcpal tool call <ref> <name> --stdin-json
+mcpal tool describe <ref> <name>
+mcpal tool call <ref> <name> --key value ...
+mcpal tool call <ref> <name> --cli-input-json args.json --override-key new-value
+echo '{"k":"v"}' | mcpal tool call <ref> <name> --cli-input-json -
 
 mcpal resource list <ref>
 mcpal resource read <ref> <uri>
 mcpal resource template list <ref>
 
 mcpal prompt list <ref>
-mcpal prompt get <ref> <name> --arg city=Dallas
+mcpal prompt get <ref> <name> --city Dallas
 mcpal ping <ref>
 ```
+
+### Interactive shell
+
+```
+$ mcpal repl <ref>
+mcpal> tool list
+mcpal> tool describe echo
+mcpal> tool call echo --message hi
+mcpal> resource read demo://resource/static/document/architecture.md
+mcpal> quit
+```
+
+Arrow-up history, line editing, persisted across sessions.
 
 ### Auth
 

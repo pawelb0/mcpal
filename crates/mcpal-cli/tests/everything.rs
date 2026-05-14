@@ -64,14 +64,14 @@ fn m1_smoke() {
 
     mcpal(&cfg)
         .args([
+            "--output",
+            "json",
             "tool",
             "call",
             "everything",
             "echo",
-            "--arg",
-            "message=hello",
-            "--output",
-            "json",
+            "--message",
+            "hello",
         ])
         .timeout(std::time::Duration::from_secs(60))
         .assert()

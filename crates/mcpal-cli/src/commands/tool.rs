@@ -1,6 +1,5 @@
 use std::fs;
 use std::io::Read;
-use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 use mcpal_core::rmcp::model::CallToolRequestParams;
@@ -14,23 +13,13 @@ use crate::runtime::Ctx;
 pub async fn run(action: ToolAction, ctx: &Ctx) -> Result<()> {
     match action {
         ToolAction::List { reference } => list(&reference, ctx).await,
+        ToolAction::Describe { reference, name } => describe(&reference, &name, ctx).await,
         ToolAction::Call {
             reference,
             name,
+            cli_input_json,
             args,
-            args_file,
-            stdin_json,
-        } => {
-            call(
-                &reference,
-                &name,
-                &args,
-                args_file.as_deref(),
-                stdin_json,
-                ctx,
-            )
-            .await
-        }
+        } => call(&reference, &name, cli_input_json.as_deref(), &args, ctx).await,
     }
 }
 
@@ -46,15 +35,25 @@ async fn list(reference: &str, ctx: &Ctx) -> Result<()> {
     Ok(())
 }
 
+async fn describe(reference: &str, name: &str, ctx: &Ctx) -> Result<()> {
+    let (_, client) = ctx.open(reference).await?;
+    let tools = client.list_all_tools().await?;
+    let tool = tools
+        .iter()
+        .find(|t| t.name == *name)
+        .ok_or_else(|| anyhow::anyhow!("no tool named '{name}' on {reference}"))?;
+    emit_one(ctx.format, tool)?;
+    Ok(())
+}
+
 async fn call(
     reference: &str,
     name: &str,
-    arg_pairs: &[String],
-    args_file: Option<&Path>,
-    stdin_json: bool,
+    cli_input_json: Option<&str>,
+    flag_args: &[String],
     ctx: &Ctx,
 ) -> Result<()> {
-    let arguments = build_arguments(arg_pairs, args_file, stdin_json)?;
+    let arguments = build_arguments(cli_input_json, flag_args)?;
     let (_, client) = ctx.open(reference).await?;
 
     let mut params = CallToolRequestParams::new(name.to_string());
@@ -67,24 +66,25 @@ async fn call(
 }
 
 fn build_arguments(
-    arg_pairs: &[String],
-    args_file: Option<&Path>,
-    stdin_json: bool,
+    cli_input_json: Option<&str>,
+    flag_args: &[String],
 ) -> Result<Map<String, Value>> {
     let mut out = Map::new();
 
-    if stdin_json {
-        let mut buf = String::new();
-        std::io::stdin()
-            .read_to_string(&mut buf)
-            .context("read stdin")?;
-        merge_object(&mut out, &buf, "stdin")?;
+    if let Some(source) = cli_input_json {
+        let text = if source == "-" {
+            let mut buf = String::new();
+            std::io::stdin()
+                .read_to_string(&mut buf)
+                .context("read stdin")?;
+            buf
+        } else {
+            fs::read_to_string(source).with_context(|| format!("read {source}"))?
+        };
+        merge_object(&mut out, &text, source)?;
     }
-    if let Some(p) = args_file {
-        let text = fs::read_to_string(p).with_context(|| format!("read {}", p.display()))?;
-        merge_object(&mut out, &text, &p.display().to_string())?;
-    }
-    out.extend(kv::parse_pairs(arg_pairs, "arg")?);
+
+    out.extend(kv::parse_flag_args(flag_args.iter())?);
     Ok(out)
 }
 

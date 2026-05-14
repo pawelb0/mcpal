@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use mcpal_core::Client;
 use mcpal_core::rmcp::model::{
     CallToolRequestParams, GetPromptRequestParams, ReadResourceRequestParams, Tool,
@@ -13,17 +13,17 @@ use crate::kv;
 use crate::runtime::{Ctx, probe};
 
 const HELP: &str = "\
-commands:
-  tools [json]                compact list (or full JSON dump)
-  describe <name> [json]      tool description + example (or full JSON)
-  tool <name> [k=v ...]       call a tool
-  resources                   list resources
-  resource <uri>              read a resource
-  prompts                     list prompts
-  prompt <name> [k=v ...]     get a prompt
-  ping                        show server name + version
-  help                        this text
-  quit | exit | Ctrl-D        leave the repl
+commands (AWS-CLI style: noun verb --flag value):
+  tool list [json]                          compact list, or full JSON
+  tool describe <name> [json]               schema + example, or full JSON
+  tool call <name> [--key value ...]        call a tool with typed args
+  resource list                             list resources
+  resource read <uri>                       read a resource
+  prompt list                               list prompts
+  prompt get <name> [--key value ...]       fetch a prompt
+  ping                                      server name + version
+  help                                      this text
+  quit | exit | Ctrl-D                      leave the repl
 ";
 
 pub async fn run(reference: &str, ctx: &Ctx) -> Result<()> {
@@ -94,47 +94,50 @@ enum Control {
 }
 
 async fn dispatch(tokens: &[&str], client: &Client) -> Result<Control> {
-    match tokens[0] {
-        "quit" | "exit" => Ok(Control::Quit),
-        "help" | "?" => {
+    let head = tokens[0];
+    let verb = tokens.get(1).copied();
+    match (head, verb) {
+        ("quit" | "exit", _) => Ok(Control::Quit),
+        ("help" | "?", _) => {
             print!("{HELP}");
             Ok(Control::Continue)
         }
-        "ping" => {
+        ("ping", _) => {
             let p = probe(client);
             println!("{} {}", p.name, p.version);
             Ok(Control::Continue)
         }
-        "tools" => {
+
+        ("tool", Some("list")) => {
             let tools = client.list_all_tools().await?;
-            if tokens.get(1) == Some(&"json") {
+            if tokens.get(2) == Some(&"json") {
                 print_json(&tools);
             } else {
                 print_tools_brief(&tools);
             }
             Ok(Control::Continue)
         }
-        "describe" => {
+        ("tool", Some("describe")) => {
             let name = tokens
-                .get(1)
-                .ok_or_else(|| anyhow!("describe <name> [json]"))?;
+                .get(2)
+                .ok_or_else(|| anyhow!("tool describe <name> [json]"))?;
             let tools = client.list_all_tools().await?;
             let tool = tools
                 .iter()
                 .find(|t| t.name == **name)
                 .ok_or_else(|| anyhow!("no tool named '{name}'"))?;
-            if tokens.get(2) == Some(&"json") {
+            if tokens.get(3) == Some(&"json") {
                 print_json(tool);
             } else {
                 print_tool_detail(tool);
             }
             Ok(Control::Continue)
         }
-        "tool" => {
+        ("tool", Some("call")) => {
             let name = tokens
-                .get(1)
-                .ok_or_else(|| anyhow!("tool <name> [k=v ...]"))?;
-            let args = kv::parse_pairs(tokens[2..].iter().copied(), "arg")?;
+                .get(2)
+                .ok_or_else(|| anyhow!("tool call <name> [--key value ...]"))?;
+            let args = kv::parse_flag_args(tokens.get(3..).unwrap_or(&[]).iter().copied())?;
             let mut params = CallToolRequestParams::new(name.to_string());
             if !args.is_empty() {
                 params = params.with_arguments(args);
@@ -143,42 +146,61 @@ async fn dispatch(tokens: &[&str], client: &Client) -> Result<Control> {
             print_json(&result);
             Ok(Control::Continue)
         }
-        "resources" => {
+
+        ("resource", Some("list")) => {
             let resources = client.list_all_resources().await?;
             for r in &resources {
                 println!("{}  {}", r.uri, r.name);
             }
             Ok(Control::Continue)
         }
-        "resource" => {
-            let uri = tokens.get(1).ok_or_else(|| anyhow!("resource <uri>"))?;
+        ("resource", Some("read")) => {
+            let uri = tokens
+                .get(2)
+                .ok_or_else(|| anyhow!("resource read <uri>"))?;
             let result = client
                 .read_resource(ReadResourceRequestParams::new((*uri).to_string()))
                 .await?;
             print_json(&result);
             Ok(Control::Continue)
         }
-        "prompts" => {
+
+        ("prompt", Some("list")) => {
             let prompts = client.list_all_prompts().await?;
             for p in &prompts {
                 println!("{}  {}", p.name, first_line(p.description.as_deref()));
             }
             Ok(Control::Continue)
         }
-        "prompt" => {
+        ("prompt", Some("get")) => {
             let name = tokens
-                .get(1)
-                .ok_or_else(|| anyhow!("prompt <name> [k=v ...]"))?;
+                .get(2)
+                .ok_or_else(|| anyhow!("prompt get <name> [--key value ...]"))?;
             let mut params = GetPromptRequestParams::new(name.to_string());
-            if tokens.len() > 2 {
-                params =
-                    params.with_arguments(kv::parse_pairs(tokens[2..].iter().copied(), "arg")?);
+            if let Some(rest) = tokens.get(3..)
+                && !rest.is_empty()
+            {
+                params = params.with_arguments(kv::parse_flag_args(rest.iter().copied())?);
             }
             let result = client.get_prompt(params).await?;
             print_json(&result);
             Ok(Control::Continue)
         }
-        other => Err(anyhow!("unknown command: {other}; try `help`")),
+
+        (noun @ ("tool" | "resource" | "prompt"), v) => {
+            bail!(
+                "unknown {noun} verb: {}; try `{noun} list`, `{noun} {}`",
+                v.unwrap_or("(none)"),
+                if noun == "tool" {
+                    "call|describe"
+                } else if noun == "resource" {
+                    "read"
+                } else {
+                    "get"
+                }
+            )
+        }
+        (other, _) => Err(anyhow!("unknown command: {other}; try `help`")),
     }
 }
 
@@ -220,25 +242,25 @@ fn print_tool_detail(tool: &Tool) {
     if !required.is_empty() {
         println!("required:");
         for (name, ty) in &required {
-            println!("  {name}: {ty}");
+            println!("  --{name} <{ty}>");
         }
     }
     if !optional.is_empty() {
         println!("optional:");
         for (name, ty) in &optional {
-            println!("  {name}: {ty}");
+            println!("  --{name} <{ty}>");
         }
     }
 
     let example_args: Vec<String> = required
         .iter()
-        .map(|(name, ty)| format!("{name}={}", placeholder_for(ty)))
+        .map(|(name, ty)| format!("--{name} {}", placeholder_for(ty)))
         .collect();
     if example_args.is_empty() {
-        println!("\nexample:\n  tool {}", tool.name);
+        println!("\nexample:\n  tool call {}", tool.name);
     } else {
         println!(
-            "\nexample:\n  tool {} {}",
+            "\nexample:\n  tool call {} {}",
             tool.name,
             example_args.join(" ")
         );
