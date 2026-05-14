@@ -14,8 +14,8 @@ use crate::runtime::{Ctx, probe};
 
 const HELP: &str = "\
 commands:
-  tools                       compact list of available tools
-  describe <name>             tool description + example call
+  tools [json]                compact list (or full JSON dump)
+  describe <name> [json]      tool description + example (or full JSON)
   tool <name> [k=v ...]       call a tool
   resources                   list resources
   resource <uri>              read a resource
@@ -107,17 +107,27 @@ async fn dispatch(tokens: &[&str], client: &Client) -> Result<Control> {
         }
         "tools" => {
             let tools = client.list_all_tools().await?;
-            print_tools_brief(&tools);
+            if tokens.get(1) == Some(&"json") {
+                print_json(&tools);
+            } else {
+                print_tools_brief(&tools);
+            }
             Ok(Control::Continue)
         }
         "describe" => {
-            let name = tokens.get(1).ok_or_else(|| anyhow!("describe <name>"))?;
+            let name = tokens
+                .get(1)
+                .ok_or_else(|| anyhow!("describe <name> [json]"))?;
             let tools = client.list_all_tools().await?;
             let tool = tools
                 .iter()
                 .find(|t| t.name == **name)
                 .ok_or_else(|| anyhow!("no tool named '{name}'"))?;
-            print_tool_detail(tool);
+            if tokens.get(2) == Some(&"json") {
+                print_json(tool);
+            } else {
+                print_tool_detail(tool);
+            }
             Ok(Control::Continue)
         }
         "tool" => {
