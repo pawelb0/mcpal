@@ -334,6 +334,10 @@ pub enum ToolAction {
     /// Full schema for one tool (name, description, inputSchema, execution).
     Describe { reference: String, name: String },
 
+    /// Print an example JSON argument body populated from the tool's
+    /// inputSchema. Pipe into `tool call --cli-input-json -`.
+    Template { reference: String, name: String },
+
     /// Invoke a tool with AWS-CLI style `--key value` flags.
     ///
     /// Values parse as typed JSON when possible (numbers, booleans, JSON

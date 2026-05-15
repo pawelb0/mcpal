@@ -15,6 +15,7 @@ pub async fn run(action: ToolAction, ctx: &Ctx) -> Result<()> {
     match action {
         ToolAction::List { reference } => list(&reference, ctx).await,
         ToolAction::Describe { reference, name } => describe(&reference, &name, ctx).await,
+        ToolAction::Template { reference, name } => template(&reference, &name, ctx).await,
         ToolAction::Call {
             reference,
             name,
@@ -57,6 +58,47 @@ async fn describe(reference: &str, name: &str, ctx: &Ctx) -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("no tool named '{name}' on {reference}"))?;
     ctx.render_one(tool)?;
     Ok(())
+}
+
+async fn template(reference: &str, name: &str, ctx: &Ctx) -> Result<()> {
+    let (_, client) = ctx.open(reference).await?;
+    let tools = client.list_all_tools().await?;
+    let tool = tools
+        .iter()
+        .find(|t| t.name == *name)
+        .ok_or_else(|| anyhow::anyhow!("no tool named '{name}' on {reference}"))?;
+    let schema = serde_json::to_value(&*tool.input_schema).unwrap_or(Value::Null);
+    let example = schema_example(&schema);
+    ctx.render_one(&example)?;
+    Ok(())
+}
+
+/// Generate an example value from a JSON Schema fragment.
+fn schema_example(schema: &Value) -> Value {
+    let ty = schema.get("type").and_then(Value::as_str).unwrap_or("");
+    match ty {
+        "object" => {
+            let mut obj = serde_json::Map::new();
+            if let Some(props) = schema.get("properties").and_then(Value::as_object) {
+                for (k, v) in props {
+                    obj.insert(k.clone(), schema_example(v));
+                }
+            }
+            Value::Object(obj)
+        }
+        "array" => {
+            let items = schema
+                .get("items")
+                .map(schema_example)
+                .unwrap_or(Value::Null);
+            Value::Array(vec![items])
+        }
+        "string" => Value::String(String::new()),
+        "integer" | "number" => Value::Number(0.into()),
+        "boolean" => Value::Bool(false),
+        "null" => Value::Null,
+        _ => Value::Null,
+    }
 }
 
 async fn call(
