@@ -1,14 +1,64 @@
 # mcpal
 
-`aws` for the [Model Context Protocol](https://modelcontextprotocol.io).
+`curl` for the [Model Context Protocol](https://modelcontextprotocol.io).
 
 ```
 $ mcpal server list --all
 $ mcpal tool call cursor:linear get-issue --id ENG-123
-$ mcpal auth login --oauth notion
+$ mcpal auth login notion --oauth
+$ mcpal --query 'content[0].text' tool call ev echo --message hi
 ```
 
-Status: early. M1–M6 shipped (stdio + Streamable HTTP, 8-client discovery, bearer + OAuth 2.1 + DCR, server-initiated handler, sampling plugin, CI matrix, prebuilt-binaries workflow).
+A scriptable command-line client for MCP. No browser, no LLM, no Node or
+Python runtime. Single static Rust binary.
+
+## Why it exists
+
+If you build, run, or consume MCP servers, the existing tools leave three
+gaps. mcpal closes all three.
+
+1. **Reuse servers already on your machine.** Claude Code, Claude
+   Desktop, Cursor, Zed, opencode, LM Studio, Windsurf, and Cline all
+   store their MCP server configs on disk. mcpal reads every one of them
+   and lets you call those servers without copying their config:
+   `mcpal tool list cursor:linear` works the moment Cursor knows about
+   `linear`.
+2. **Speak the whole protocol.** Tools, resources, resource templates,
+   prompts, subscriptions, logging set-level, server-initiated requests
+   (`roots/list`, `elicitation/create`, `sampling/createMessage`), and a
+   `raw` passthrough for any JSON-RPC method that doesn't yet have a
+   first-party verb.
+3. **Survive pipelines.** Stable exit codes per failure class,
+   `--output json|yaml`, AWS-CLI-compatible `--query <jmespath>`,
+   rustc-style error blocks with stable `E####` codes, and
+   `mcpal explain E####` for the long-form prose. `case $?` works.
+
+## Why not the alternatives
+
+| | `mcpal` | MCP Inspector | mcptools (Go) | `claude mcp add` |
+|---|---|---|---|---|
+| Surface | CLI | browser GUI + CLI | CLI | config writer |
+| Runtime | Rust binary | Node | Go binary | bundled in Claude Code |
+| Calls servers | yes | yes | yes | no — only registers |
+| Reads other clients' configs | 8 clients | no | no | no |
+| `--mcp-json` overlay (no install) | yes | no | no | no |
+| OAuth 2.1 + PKCE + DCR | yes | browser-only | no | no |
+| Streamable HTTP (rustls, no OpenSSL) | yes | yes | yes | n/a |
+| `watch` streaming notifications | yes | partial | partial | no |
+| `raw` JSON-RPC passthrough | yes | no | no | no |
+| rustc-style errors + `explain` | yes | no | no | no |
+| `--query <jmespath>` | yes | no | partial | no |
+| `--timeout` + Ctrl-C cancellation | yes | no | no | n/a |
+| mdBook user manual | yes | partial | no | no |
+
+Use [MCP Inspector](https://github.com/modelcontextprotocol/inspector)
+when you want a browser GUI. Use
+[Goose](https://github.com/block/goose),
+[mcphost](https://github.com/mark3labs/mcphost), or
+[chrishayuk/mcp-cli](https://github.com/chrishayuk/mcp-cli) when you
+want an LLM-bundled agent shell. Use
+[FastMCP](https://github.com/jlowin/fastmcp) when you're writing a
+Python MCP server. Use mcpal when you want curl for MCP.
 
 ## Install
 
@@ -16,272 +66,157 @@ Status: early. M1–M6 shipped (stdio + Streamable HTTP, 8-client discovery, bea
 cargo install --path crates/mcpal-cli
 ```
 
-Prebuilt binaries: pending first tag (workflow ready in `.github/workflows/release.yml`).
+Prebuilt binaries: pending first tag. The `cargo-dist` workflow lands
+under `.github/workflows/release.yml`; once tagged it produces macOS
+(arm64 + x86_64), Linux (glibc + musl), Windows binaries, a Homebrew
+tap, and a `curl | sh` installer.
 
-## Features
+## 60-second tour
 
-| Surface | Status |
-|---|---|
-| Local stdio transport (`@modelcontextprotocol/server-everything` etc.) | ✓ |
-| Streamable HTTP transport, rustls | ✓ |
-| Bearer auth (inline, env var, OS keyring) | ✓ |
-| OAuth 2.1 + PKCE + Dynamic Client Registration | ✓ |
-| `list_roots` handler — `--root <path>` | ✓ |
-| Elicitation prompts + server log forwarding (via `tracing`) | ✓ |
-| Sampling plugin (`--sampling-handler <cmd>`) | ✓ |
-| Discovery across Claude Desktop, Claude Code, Cursor, Zed, opencode, LM Studio, Windsurf, Cline | ✓ |
-| YAML (default) + JSON output | ✓ |
+Replace `<ref>` with any of:
 
-## Quick tour
-
-Every example below is copy-paste ready. Replace `<ref>` with any of:
-- a mcpal-owned alias (`mcpal server add foo …`)
+- an alias you registered with `mcpal server add`
 - `<source>:<name>` from discovery (`cursor:linear`, `opencode:tavily`)
-- a bare name if unambiguous across discovered servers
+- a bare `<name>` if unambiguous across discovered sources
 - a raw `https://…` URL
 - a path to a JSON file containing one `ServerSpec`
 
-### 0. Init
+### Add a stdio server
 
 ```bash
-mcpal init
-```
-Writes a default config to `~/Library/Application Support/mcpal/config.toml` (macOS) or `~/.config/mcpal/config.toml` (Linux).
-
-### 1. Add a stdio server (local process)
-
-```bash
-mcpal server add everything \
-  --stdio npx --arg -y --arg @modelcontextprotocol/server-everything
-mcpal server test everything
+mcpal server add ev -- npx -y @modelcontextprotocol/server-everything
+mcpal server test ev
+mcpal server test ev --full          # also enumerates capabilities
 ```
 
-`server test` returns a yaml record with `ok: true` + serverInfo:
+Tokens after `--` are the command and its args (Claude Code / mcptools
+style). The older `--stdio <cmd> --arg <a> --arg <b>` form still works.
 
-```yaml
-ref: everything
-ok: true
-server:
-  name: mcp-servers/everything
-  version: 2.0.0
-peerInfo:
-  …
-```
-
-### 2. Add a remote HTTP server
-
-No auth:
+### Add a remote HTTP server
 
 ```bash
 mcpal server add ctx7 --http https://mcp.context7.com/mcp
 mcpal server test ctx7
-```
 
-With a bearer token (token goes to the OS keyring, never the TOML):
-
-```bash
 mcpal server add github --http https://api.githubcopilot.com/mcp/
-mcpal auth login github --bearer ghp_xxx
+mcpal auth login github --bearer ghp_xxx     # token → OS keyring
 mcpal tool list github
+
+mcpal server add notion --http https://mcp.notion.com/v1
+mcpal auth login notion --oauth              # PKCE + DCR + loopback callback
+mcpal auth refresh notion                    # mint a new access token later
 ```
 
-With OAuth (browser flow + DCR + PKCE, tokens persisted to keyring):
+Tokens always live in the OS keyring (Keychain on macOS, Secret Service
+on Linux, Credential Manager on Windows), never in `config.toml`.
+
+### Tools
 
 ```bash
-mcpal server add notion --http https://mcp.notion.com/v1 --auth oauth
-mcpal auth login notion --oauth
-mcpal tool list notion
-# later, if access token expires:
-mcpal auth refresh notion
+mcpal tool list ev                    # name + description + required args
+mcpal tool describe ev echo           # full input schema
+mcpal tool template ev echo           # known-good skeleton JSON
+mcpal tool call ev echo --message hi
+mcpal tool call ev echo --params '{"message":"hi"}'      # inline JSON
+mcpal tool call ev echo --cli-input-json @body.json      # from a file
+echo '{"message":"hi"}' | mcpal tool call ev echo --params -
 ```
 
-### 3. List + describe + call tools
-
-`tool list` is a compact summary (name, description, required args). The full schema lives in `tool describe`.
+### Resources, prompts, logging
 
 ```bash
-mcpal tool list everything
+mcpal resource list ev
+mcpal resource read ev demo://resource/static/document/architecture.md
+mcpal resource template list ev
+mcpal resource subscribe ev some://uri
+
+mcpal prompt list ev
+mcpal prompt get ev args-prompt --city Dallas --state Texas
+
+mcpal logging set-level ev debug
 ```
-```yaml
-- name: echo
-  description: Echoes back the input string
-  required:
-  - message
-- name: get-sum
-  description: Returns the sum of two numbers
-  required:
-  - a
-  - b
-- name: get-tiny-image
-  description: Returns a tiny MCP logo image.
-```
+
+### Watch notifications
 
 ```bash
-mcpal tool describe everything echo
-```
-```yaml
-name: echo
-title: Echo Tool
-description: Echoes back the input string
-inputSchema:
-  $schema: http://json-schema.org/draft-07/schema#
-  properties:
-    message:
-      description: Message to echo
-      type: string
-  required:
-  - message
-  type: object
+mcpal watch ev      # one YAML doc per progress / log / list_changed
+                    # notification; Ctrl-C to exit
 ```
 
-Call a tool — AWS-CLI style flags, values typed automatically:
+### Raw passthrough
 
 ```bash
-mcpal tool call everything echo --message "hello world"
-mcpal tool call everything get-sum --a 2 --b 40
-mcpal tool call everything trigger-long-running-operation --duration 3 --steps 5
+mcpal raw ev some/method --params '{"foo":"bar"}'
+mcpal raw ev some/method --params @payload.json
+mcpal raw ev some/method --params -
 ```
 
-Pass a JSON object as the base, override individual fields:
+### Discover servers from other clients
 
 ```bash
-echo '{"message":"piped"}' | mcpal tool call everything echo --cli-input-json -
-mcpal tool call everything echo --cli-input-json args.json --message override
-```
-
-### 4. Resources
-
-```bash
-mcpal resource list everything
-mcpal resource read everything demo://resource/static/document/architecture.md
-mcpal resource template list everything
-```
-
-### 5. Prompts
-
-```bash
-mcpal prompt list everything
-mcpal prompt get everything simple-prompt
-mcpal prompt get everything args-prompt --city Dallas --state Texas
-```
-
-### 6. Discover servers from other clients
-
-Scan every supported client on your machine:
-
-```bash
-mcpal discover
-```
-```yaml
-- source: claude-code
-  source_path: /Users/pawelb/.claude.json
-  name: chrome-devtools
-  spec:
-    transport: stdio
-    command: npx
-    args: [chrome-devtools-mcp@latest]
-  scope: global
-- source: opencode
-  …
-```
-
-Filter to one client:
-
-```bash
-mcpal discover --source cursor
-```
-
-Use a discovered entry directly — no copy needed:
-
-```bash
-mcpal tool list cursor:linear
-mcpal tool call opencode:tavily search --query "rust async runtimes"
-```
-
-Or copy it into your own config so you can override env / auth / alias:
-
-```bash
+mcpal discover                           # full dump
+mcpal discover --source cursor           # one client
+mcpal server list --all                  # mcpal-owned + discovered
+mcpal tool list opencode:tavily          # call directly, no copy step
+mcpal --mcp-json ./mcp.json tool list x  # use a Claude/Cursor config inline
 mcpal server import --from opencode tavily --as tav
-mcpal auth login tav --bearer $TAVILY_KEY
-mcpal tool call tav search --query rust
 ```
 
-`server list --all` shows mcpal-owned + discovered together:
+### Pipelines
 
 ```bash
-mcpal server list --all
-mcpal server list --discovered --source claude-code
-```
+mcpal --output json tool list ev | jq -r '.[].name'
+mcpal --query '[].name' tool list ev
+mcpal --timeout 5 tool call ev trigger-long-running-operation --duration 3 --steps 5
 
-### 7. Pipe into other tools
-
-YAML is the default for humans. Add `--output json` whenever you want machine-readable output:
-
-```bash
-# pick the tool with the longest description
-mcpal --output json tool list everything | jq -r 'max_by(.description|length).name'
-
-# extract the access token from a `server test` result
-mcpal --output json server test ctx7 | jq -r .peerInfo.serverInfo.version
-
-# script a series of calls
 for q in rust go python; do
   mcpal tool call github search --q "$q stars:>1000" --per_page 3
 done
 ```
 
-### 8. Auth lifecycle
+### Exit codes + error system
 
-```bash
-mcpal auth login github --bearer ghp_xxx     # bearer → keyring
-mcpal auth login notion --oauth              # OAuth flow → keyring
-mcpal auth status github                      # { bearer: true, oauth: false }
-mcpal auth refresh notion                     # refresh access token
-mcpal auth logout github                      # wipe both kinds for the ref
+| Code | Meaning | Common fix |
+|---|---|---|
+| 0 | success | — |
+| 1 | generic | check stderr |
+| 2 | usage | `mcpal <cmd> --help` |
+| 3 | server ref not found | `mcpal discover` |
+| 4 | auth required | `mcpal auth login <ref>` |
+| 5 | auth expired | `mcpal auth refresh <ref>` |
+| 6 | transport | network or stdio failure |
+| 7 | server error | check args vs `tool describe` |
+| 8 | timed out | retry; raise `--timeout` |
+| 130 | interrupted (Ctrl-C) | — |
+
+Each error renders with a stable `E####` code:
+
+```
+error[E0001]: server 'foo' not found (owned, URL, path, or discovered)
+help: run `mcpal discover` to scan installed MCP clients for servers
+help: or `mcpal server list --all` to see what's already configured
+help: or add one: `mcpal server add <alias> --stdio <command>`
+
+For more information about this error, try `mcpal explain E0001`.
 ```
 
-One-shot env override (no keyring write):
+Eleven codes today: E0000–E0011. `mcpal explain <code>` prints the
+long-form prose for each.
+
+### Sanity check
 
 ```bash
-MCPAL_BEARER=ghp_xxx mcpal tool list github
+mcpal doctor
 ```
 
-### 9. Server-initiated requests
-
-Some servers ask the client for things during a tool call. mcpal handles them by default:
-
-| Method | Default behavior |
-|---|---|
-| `roots/list` | Returns whatever paths you pass via `--root` |
-| `elicitation/create` (form) | Prompts on stderr; reads one line; or declines with `--no-interactive` |
-| `elicitation/create` (url) | Prints the URL + accepts |
-| `sampling/createMessage` | Without a handler: method-not-found. With `--sampling-handler <cmd>`: pipes the request JSON to that program on stdin, parses `CreateMessageResult` JSON from its stdout |
-| `logging/message` | Routed through `tracing`; respect `RUST_LOG` |
-
-Expose two workspace roots to the server:
-
-```bash
-mcpal --root ~/src/my-project --root /tmp tool call everything get-roots-list
-```
-
-Wire sampling to a local LLM CLI (the contract is JSON-in, JSON-out):
-
-```bash
-mcpal --sampling-handler "claude --output json" tool call ev trigger-sampling-request --prompt "summarize"
-```
-
-## Output
-
-YAML by default — readable + parseable in one shot. JSON when you need it:
-
-```bash
-mcpal tool list <ref>                # yaml
-mcpal --output json tool list <ref>  # pretty JSON
-```
+Checks: config readable, keyring round-trip, auth state per server,
+discovery counts. `--output json` for bug reports.
 
 ## Configuration
 
-`~/.config/mcpal/config.toml` (Linux), `~/Library/Application Support/mcpal/config.toml` (macOS), `%APPDATA%\mcpal\config.toml` (Windows). Override with `MCPAL_CONFIG=/path/to/file`.
+`~/.config/mcpal/config.toml` (Linux), `~/Library/Application
+Support/mcpal/config.toml` (macOS), `%APPDATA%\mcpal\config.toml`
+(Windows). Override with `MCPAL_CONFIG=/path/to/file`.
 
 ```toml
 [server.everything]
@@ -300,7 +235,14 @@ url = "https://mcp.notion.com/v1"
 auth = { type = "bearer_env", env = "NOTION_MCP_TOKEN" }
 ```
 
-Secrets never live in this file; they go to the OS keyring via `mcpal auth login`.
+Secrets never live in this file; they go to the OS keyring via
+`mcpal auth login`.
+
+## Status
+
+M1–M7 shipped. The full manual lives under `book/` (mdBook). Roadmap to
+`v0.1.0`: registry-aware `server install`, dynamic tool-name completion,
+cargo-dist release artifacts.
 
 ## License
 
