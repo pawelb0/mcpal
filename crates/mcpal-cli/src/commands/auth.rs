@@ -2,7 +2,7 @@ use std::io::{IsTerminal, Read, Write};
 
 use anyhow::{Context, Result, bail};
 use mcpal_core::ServerSpec;
-use mcpal_output::{Format, emit_one};
+use mcpal_output::emit_one;
 use serde_json::{Value, json};
 
 use crate::cli::AuthAction;
@@ -130,14 +130,8 @@ fn resolve_oauth_url(reference: &str, override_url: Option<&str>, ctx: &Ctx) -> 
     }
 }
 
-fn report(ctx: &Ctx, payload: Value, human: impl FnOnce()) -> Result<()> {
-    match ctx.format {
-        Format::Json | Format::Jsonl => emit_one(ctx.format, &payload).map_err(Into::into),
-        _ => {
-            human();
-            Ok(())
-        }
-    }
+fn report(ctx: &Ctx, payload: Value, _human: impl FnOnce()) -> Result<()> {
+    emit_one(ctx.format, &payload).map_err(Into::into)
 }
 
 fn read_stdin_token() -> Result<String> {

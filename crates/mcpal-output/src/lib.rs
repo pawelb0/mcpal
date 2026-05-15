@@ -1,24 +1,18 @@
-use std::io::{self, IsTerminal, Write};
+use std::io::{self, Write};
 
 use serde::Serialize;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Format {
-    Human,
-    Json,
-    Jsonl,
+    #[default]
     Yaml,
+    Json,
 }
 
 impl Format {
+    /// Honor `--output` if set, else default to YAML.
     pub fn resolve(explicit: Option<Format>) -> Self {
-        explicit.unwrap_or_else(|| {
-            if io::stdout().is_terminal() {
-                Self::Human
-            } else {
-                Self::Jsonl
-            }
-        })
+        explicit.unwrap_or(Self::Yaml)
     }
 }
 
@@ -29,51 +23,29 @@ pub fn emit_json<T: Serialize>(val: &T) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn emit_jsonl<T: Serialize>(val: &T) -> Result<(), Error> {
+pub fn emit_yaml<T: Serialize>(val: &T) -> Result<(), Error> {
     let mut out = io::stdout().lock();
-    serde_json::to_writer(&mut out, val)?;
-    out.write_all(b"\n")?;
+    serde_yaml::to_writer(&mut out, val)?;
     Ok(())
 }
 
-/// JSON pretty by default; JSONL when stdout is piped and Format::Jsonl was selected.
 pub fn emit_one<T: Serialize>(format: Format, value: &T) -> Result<(), Error> {
     match format {
-        Format::Jsonl => emit_jsonl(value),
-        _ => emit_json(value),
+        Format::Json => emit_json(value),
+        Format::Yaml => emit_yaml(value),
     }
 }
 
-/// Render a homogeneous list: JSON array, JSONL stream, or comfy-table.
-pub fn emit_list<T, F>(
-    format: Format,
-    items: &[T],
-    headers: &[&str],
-    mut row: F,
-) -> Result<(), Error>
+/// Render a list. `headers` and `row` are accepted for backward compatibility
+/// but ignored — both YAML and JSON output the typed list directly.
+pub fn emit_list<T, F>(format: Format, items: &[T], _headers: &[&str], _row: F) -> Result<(), Error>
 where
     T: Serialize,
     F: FnMut(&T) -> Vec<String>,
 {
     match format {
         Format::Json => emit_json(&items),
-        Format::Jsonl => {
-            for i in items {
-                emit_jsonl(i)?;
-            }
-            Ok(())
-        }
-        Format::Human | Format::Yaml => {
-            let mut t = comfy_table::Table::new();
-            t.load_preset(comfy_table::presets::UTF8_HORIZONTAL_ONLY)
-                .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
-            t.set_header(headers.to_vec());
-            for i in items {
-                t.add_row(row(i));
-            }
-            println!("{t}");
-            Ok(())
-        }
+        Format::Yaml => emit_yaml(&items),
     }
 }
 
@@ -83,7 +55,6 @@ pub enum Error {
     Io(#[from] io::Error),
     #[error(transparent)]
     Json(#[from] serde_json::Error),
+    #[error(transparent)]
+    Yaml(#[from] serde_yaml::Error),
 }
-
-pub use comfy_table;
-pub use owo_colors;

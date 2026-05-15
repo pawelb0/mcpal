@@ -48,11 +48,10 @@ fn m1_smoke() {
         .stdout(str::contains("everything"));
 
     mcpal(&cfg)
-        .args(["server", "test", "everything", "--output", "human"])
+        .args(["server", "test", "everything"])
         .timeout(std::time::Duration::from_secs(60))
         .assert()
         .success()
-        .stdout(str::starts_with("ok:"))
         .stdout(str::contains("mcp-servers/everything"));
 
     mcpal(&cfg)

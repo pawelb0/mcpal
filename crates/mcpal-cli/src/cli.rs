@@ -107,12 +107,6 @@ pub enum Command {
         source: Option<String>,
     },
 
-    /// Interactive shell over one open server session.
-    Repl {
-        /// Server reference (alias, URL, `<source>:<name>`, or path to JSON spec).
-        reference: String,
-    },
-
     /// Store and inspect bearer tokens in the OS keyring.
     Auth {
         #[command(subcommand)]
@@ -285,19 +279,15 @@ pub enum PromptAction {
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
 pub enum OutputFormat {
-    Human,
-    Json,
-    Jsonl,
     Yaml,
+    Json,
 }
 
 impl From<OutputFormat> for Format {
     fn from(f: OutputFormat) -> Self {
         match f {
-            OutputFormat::Human => Self::Human,
-            OutputFormat::Json => Self::Json,
-            OutputFormat::Jsonl => Self::Jsonl,
             OutputFormat::Yaml => Self::Yaml,
+            OutputFormat::Json => Self::Json,
         }
     }
 }

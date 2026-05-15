@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Result, anyhow, bail};
 use mcpal_core::ServerSpec;
-use mcpal_output::{Format, emit_list, emit_one};
+use mcpal_output::{emit_list, emit_one};
 use serde::Serialize;
 use serde_json::json;
 
@@ -63,31 +63,13 @@ fn list(args: ServerListArgs, ctx: &Ctx) -> Result<()> {
         }
     }
 
-    emit_list(
-        ctx.format,
-        &rows,
-        &["source", "alias", "kind", "detail"],
-        |r| {
-            vec![
-                r.source.clone(),
-                r.alias.clone(),
-                r.kind.clone(),
-                r.detail.clone(),
-            ]
-        },
-    )?;
+    emit_list(ctx.format, &rows, &[], |_| Vec::new())?;
     Ok(())
 }
 
 fn show(reference: &str, ctx: &Ctx) -> Result<()> {
     let r = resolve(reference, ctx)?;
-    match ctx.format {
-        Format::Json | Format::Jsonl => emit_one(ctx.format, &r.spec)?,
-        Format::Human | Format::Yaml => {
-            let toml_str = toml::to_string_pretty(&r.spec).context("serialize")?;
-            println!("[{}]\n{toml_str}", r.display);
-        }
-    }
+    emit_one(ctx.format, &r.spec)?;
     Ok(())
 }
 
@@ -122,7 +104,7 @@ fn add(args: ServerAddArgs, ctx: &Ctx) -> Result<()> {
     }
     cfg.server.insert(args.alias.clone(), spec);
     cfg.save(&ctx.config_path)?;
-    println!("added server '{}'", args.alias);
+    eprintln!("added server '{}'", args.alias);
     Ok(())
 }
 
@@ -132,7 +114,7 @@ fn remove(alias: &str, ctx: &Ctx) -> Result<()> {
         bail!("server '{alias}' not found");
     }
     cfg.save(&ctx.config_path)?;
-    println!("removed server '{alias}'");
+    eprintln!("removed server '{alias}'");
     Ok(())
 }
 
@@ -150,25 +132,21 @@ fn import(args: ServerImportArgs, ctx: &Ctx) -> Result<()> {
     }
     cfg.server.insert(alias.clone(), found.spec.clone());
     cfg.save(&ctx.config_path)?;
-    println!("imported {}:{} as '{alias}'", found.source, found.name);
+    eprintln!("imported {}:{} as '{alias}'", found.source, found.name);
     Ok(())
 }
 
 async fn test(reference: &str, ctx: &Ctx) -> Result<()> {
     let (r, client) = ctx.open(reference).await?;
     let p = probe(&client);
-
-    match ctx.format {
-        Format::Json | Format::Jsonl => emit_one(
-            ctx.format,
-            &json!({
-                "ref": r.display,
-                "ok": true,
-                "server": { "name": p.name, "version": p.version },
-                "peerInfo": p.info,
-            }),
-        )?,
-        _ => println!("ok: {} ({} {})", r.display, p.name, p.version),
-    }
+    emit_one(
+        ctx.format,
+        &json!({
+            "ref": r.display,
+            "ok": true,
+            "server": { "name": p.name, "version": p.version },
+            "peerInfo": p.info,
+        }),
+    )?;
     Ok(())
 }

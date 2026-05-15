@@ -29,8 +29,7 @@ Prebuilt binaries: pending (cargo-dist).
 | `list_roots` handler — `--root <path>` | ✓ |
 | Elicitation prompts + server log forwarding | ✓ |
 | Discovery across Claude Desktop, Claude Code, Cursor, Zed, opencode, LM Studio, Windsurf, Cline | ✓ (macOS/Linux; Windows pending) |
-| Sampling plugin (`--sampling-handler <cmd>`) | pending |
-| `mcpal repl` | pending |
+| Sampling plugin (`--sampling-handler <cmd>`) | ✓ |
 
 ## Usage
 
@@ -86,18 +85,6 @@ mcpal prompt get <ref> <name> --city Dallas
 mcpal ping <ref>
 ```
 
-### Interactive shell
-
-```
-$ mcpal repl <ref>
-mcpal> tool list
-mcpal> tool describe echo
-mcpal> tool call echo --message hi
-mcpal> resource read demo://resource/static/document/architecture.md
-mcpal> quit
-```
-
-Arrow-up history, line editing, persisted across sessions.
 
 ### Auth
 
@@ -121,11 +108,11 @@ mcpal auth logout <ref>
 
 ### Output
 
-Default detects TTY: human (comfy-table) on a terminal, JSONL when piped. Override:
+YAML by default (readable + parseable). JSON when you need it.
 
 ```
-mcpal --output json tool list <ref>
-mcpal --output jsonl resource list <ref>
+mcpal tool list <ref>                # yaml
+mcpal --output json tool list <ref>  # pretty JSON
 ```
 
 ## Configuration
