@@ -4,23 +4,56 @@ use clap::{ArgAction, Parser, Subcommand, ValueEnum};
 use mcpal_output::Format;
 
 #[derive(Parser, Debug)]
-#[command(name = "mcpal", version, about = "CLI for the Model Context Protocol")]
+#[command(
+    name = "mcpal",
+    version,
+    about = "CLI for the Model Context Protocol — like `aws` but for MCP",
+    long_about = "\
+mcpal is a command-line client for the Model Context Protocol.
+
+It speaks both local stdio MCP servers (e.g. `npx -y \
+@modelcontextprotocol/server-everything`) and remote Streamable HTTP \
+servers (with bearer or OAuth 2.1 auth). It also discovers MCP \
+servers configured by other clients (Claude Code, Claude Desktop, \
+Cursor, Zed, opencode, LM Studio, Windsurf, Cline) so you don't have \
+to re-enter them.
+
+Common workflows:
+  mcpal discover                        scan all clients for configured servers
+  mcpal server list --all               see mcpal-owned + discovered together
+  mcpal tool list <ref>                 compact list of tools on a server
+  mcpal tool describe <ref> <name>      full schema + example for one tool
+  mcpal tool call <ref> <name> [--key value ...]
+  mcpal auth login <ref> --oauth        OAuth 2.1 + PKCE + DCR
+
+`<ref>` accepts: mcpal-owned alias, <source>:<name> (from discovery),
+bare <name> if unambiguous, raw https:// URL, or path to a JSON spec.
+
+Default output is YAML; pass --output json for machine-readable JSON.\
+"
+)]
 pub struct Cli {
+    /// Reserved for future per-profile settings (currently a no-op).
     #[arg(long, global = true, env = "MCPAL_PROFILE", default_value = "default")]
     pub profile: String,
 
+    /// Output format. Default is `yaml`; `json` is pretty-printed JSON.
     #[arg(long, global = true, value_enum)]
     pub output: Option<OutputFormat>,
 
+    /// Path to the mcpal config file. Defaults to the OS config dir + `mcpal/config.toml`.
     #[arg(long, global = true, env = "MCPAL_CONFIG")]
     pub config: Option<PathBuf>,
 
+    /// Repeat for more tracing. `-v` enables info-level mcpal logs; `-vv` is debug.
     #[arg(short = 'v', long = "verbose", global = true, action = ArgAction::Count)]
     pub verbosity: u8,
 
+    /// Reserved — currently a no-op (no ANSI is emitted on stdout).
     #[arg(long, global = true)]
     pub no_color: bool,
 
+    /// Skip interactive prompts (elicitation requests decline by default).
     #[arg(long, global = true)]
     pub no_interactive: bool,
 
@@ -28,9 +61,9 @@ pub struct Cli {
     #[arg(long = "root", value_name = "PATH", global = true, num_args = 1)]
     pub roots: Vec<String>,
 
-    /// External program to handle `sampling/createMessage` requests.
-    /// mcpal pipes JSON params on stdin and reads CreateMessageResult JSON
-    /// on stdout. Use shell-style quoting via your shell.
+    /// External program that handles `sampling/createMessage` requests.
+    /// mcpal pipes the request JSON on stdin and reads a CreateMessageResult
+    /// JSON from stdout. Use your shell's quoting for multi-arg commands.
     #[arg(
         long = "sampling-handler",
         value_name = "CMD",
@@ -46,46 +79,51 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    /// Write a default config file.
+    /// Create an empty mcpal config file at the default path.
+    ///
+    /// Optional — `mcpal server add …` and the auth commands will create
+    /// the file lazily. Run `init` if you want the file to exist (e.g. to
+    /// open it in your editor via `mcpal config edit`) before adding any
+    /// servers.
     Init,
 
-    /// Inspect or edit mcpal config.
+    /// Inspect or edit the mcpal config file (path, contents, $EDITOR).
     Config {
         #[command(subcommand)]
         action: ConfigAction,
     },
 
-    /// Manage server entries.
+    /// Add, list, show, remove, import, or smoke-test server entries.
     Server {
         #[command(subcommand)]
         action: ServerAction,
     },
 
-    /// Discover and call tools.
+    /// List, describe, and call MCP tools on a server.
     Tool {
         #[command(subcommand)]
         action: ToolAction,
     },
 
-    /// List and read resources.
+    /// List resources and resource templates; read a resource by URI.
     Resource {
         #[command(subcommand)]
         action: ResourceAction,
     },
 
-    /// List and fetch prompts.
+    /// List prompts and fetch one with `--key value` arguments.
     Prompt {
         #[command(subcommand)]
         action: PromptAction,
     },
 
-    /// Initialize a session and round-trip a ping.
+    /// Round-trip MCP handshake against a server and print serverInfo.
     Ping {
-        /// Server reference (alias, URL, or path to JSON spec).
+        /// Server reference (alias, URL, `<source>:<name>`, or path to JSON spec).
         reference: String,
     },
 
-    /// Send an arbitrary JSON-RPC request.
+    /// Send an arbitrary JSON-RPC request. (Placeholder — lands with M3+.)
     Raw {
         reference: String,
         method: String,
@@ -94,20 +132,23 @@ pub enum Command {
         params: Option<String>,
     },
 
-    /// Generate shell completions.
+    /// Print shell completions for bash / zsh / fish.
     Completion {
         #[arg(value_enum)]
         shell: Shell,
     },
 
-    /// Scan other clients (Claude, Cursor, opencode, …) for configured MCP servers.
+    /// Scan installed MCP clients (Claude, Cursor, opencode, …) for servers
+    /// they already configured. Servers found this way are usable directly
+    /// as `<source>:<name>` without copying into mcpal config.
     Discover {
         /// Filter to a single source id (claude-code, cursor, …).
         #[arg(long)]
         source: Option<String>,
     },
 
-    /// Store and inspect bearer tokens in the OS keyring.
+    /// Store bearer tokens or run an OAuth 2.1 flow; tokens persist in the
+    /// OS keyring (Keychain / Secret Service / Credential Manager).
     Auth {
         #[command(subcommand)]
         action: AuthAction,
@@ -116,7 +157,9 @@ pub enum Command {
 
 #[derive(Subcommand, Debug)]
 pub enum AuthAction {
-    /// Store a bearer token (or run an OAuth login) for a server reference.
+    /// Store a bearer token, or run the OAuth 2.1 authorize flow, for a
+    /// server reference. Tokens persist in the OS keyring; bearer tokens
+    /// can also be supplied at call time via `MCPAL_BEARER`.
     Login {
         reference: String,
         /// Bearer token. `-` reads stdin; omit to prompt interactively.
@@ -147,27 +190,27 @@ pub enum AuthAction {
 
 #[derive(Subcommand, Debug)]
 pub enum ConfigAction {
-    /// Print the active config file path.
+    /// Print the active config file path (honors $MCPAL_CONFIG / --config).
     Path,
-    /// Print the config as TOML.
+    /// Print the parsed config as TOML.
     Show,
-    /// Open the config in `$EDITOR`.
+    /// Open the config in $VISUAL or $EDITOR (falls back to `vi`).
     Edit,
 }
 
 #[derive(Subcommand, Debug)]
 pub enum ServerAction {
-    /// List configured (and optionally discovered) servers.
+    /// List mcpal-owned servers; `--all` includes discovered ones too.
     List(ServerListArgs),
-    /// Show details for one server.
+    /// Print the full spec for one server (mcpal-owned or discovered).
     Show { reference: String },
-    /// Add a new mcpal-owned server.
+    /// Register a new server in mcpal config (stdio or HTTP).
     Add(ServerAddArgs),
-    /// Remove a mcpal-owned server.
+    /// Forget a mcpal-owned server (does not touch discovered entries).
     Remove { alias: String },
-    /// Snapshot a discovered server into mcpal config.
+    /// Copy a discovered server into mcpal config so you can override env/auth/alias.
     Import(ServerImportArgs),
-    /// Initialize against a server and ping it.
+    /// Open + initialize a connection to verify the server speaks MCP.
     Test { reference: String },
 }
 
@@ -224,15 +267,18 @@ pub struct ServerAddArgs {
 
 #[derive(Subcommand, Debug)]
 pub enum ToolAction {
-    /// List tools exposed by a server.
+    /// Compact list of tools on a server (name + description + required args).
     List { reference: String },
 
-    /// Show the schema + an example call for a tool.
+    /// Full schema for one tool (name, description, inputSchema, execution).
     Describe { reference: String, name: String },
 
-    /// Call a tool. Arguments use `--key value` pairs (AWS-CLI style).
+    /// Invoke a tool with AWS-CLI style `--key value` flags.
+    ///
     /// Values parse as typed JSON when possible (numbers, booleans, JSON
-    /// literals), otherwise stay as strings.
+    /// literals); strings fall back to plain text. Pass `--cli-input-json
+    /// <path|->` to read a base argument object from a file or stdin and
+    /// override individual fields with extra `--key value` flags.
     Call {
         reference: String,
         name: String,
