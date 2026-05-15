@@ -280,10 +280,10 @@ order:
   5. a bare `<name>` if it's unambiguous across discovered sources
 
 To fix:
-  • `mcpal discover` — list everything installed clients already configured
-  • `mcpal server list --all` — see mcpal-owned + discovered together
-  • `mcpal server add <alias> --stdio <command>` — register a stdio server
-  • `mcpal server add <alias> --http <url>` — register an HTTP server
+  - `mcpal discover` — list everything installed clients already configured
+  - `mcpal server list --all` — see mcpal-owned + discovered together
+  - `mcpal server add <alias> --stdio <command>` — register a stdio server
+  - `mcpal server add <alias> --http <url>` — register an HTTP server
 \n"
         }
 
@@ -295,9 +295,9 @@ mcpal couldn't parse the arguments you supplied. Most commonly this is a
 malformed `--key value` flag pair.
 
 To fix:
-  • use AWS-CLI style flags: `mcpal tool call ev echo --message hi`
-  • for nested JSON, use `--cli-input-json @args.json` (or `-` for stdin)
-  • `mcpal tool template <ref> <name>` prints an example body you can pipe in
+  - use AWS-CLI style flags: `mcpal tool call ev echo --message hi`
+  - for nested JSON, use `--cli-input-json @args.json` (or `-` for stdin)
+  - `mcpal tool template <ref> <name>` prints an example body you can pipe in
 \n"
         }
 
@@ -309,9 +309,9 @@ The server (or the tool/resource you're calling) needs credentials and none
 are configured.
 
 To fix:
-  • bearer:  `mcpal auth login <ref> --bearer <TOKEN>`
-  • OAuth:   `mcpal auth login <ref> --oauth`
-  • one-shot env: `MCPAL_BEARER=… mcpal tool list <ref>`
+  - bearer:  `mcpal auth login <ref> --bearer <TOKEN>`
+  - OAuth:   `mcpal auth login <ref> --oauth`
+  - one-shot env: `MCPAL_BEARER=… mcpal tool list <ref>`
 
 Tokens persist in the OS keyring (Keychain on macOS, Secret Service on
 Linux, Credential Manager on Windows). They never touch the TOML config.
@@ -326,9 +326,9 @@ The server rejected the credentials mcpal sent. The access token has
 likely expired.
 
 To fix:
-  • `mcpal auth refresh <ref>` — use the refresh token to mint a new one
-  • `mcpal auth login <ref> --oauth` — full re-authorize when refresh fails
-  • `mcpal auth status <ref>` — see what's currently stored
+  - `mcpal auth refresh <ref>` — use the refresh token to mint a new one
+  - `mcpal auth login <ref> --oauth` — full re-authorize when refresh fails
+  - `mcpal auth status <ref>` — see what's currently stored
 \n"
         }
 
@@ -340,11 +340,11 @@ mcpal couldn't talk to the server. For stdio, the spawned process may have
 failed to start; for HTTP, the URL may be wrong or unreachable.
 
 To fix:
-  • verify the URL with `curl -I <url>` (HEAD should return 200/4xx, not a
+  - verify the URL with `curl -I <url>` (HEAD should return 200/4xx, not a
     network error)
-  • for stdio: confirm the command is on $PATH and runs standalone
-  • re-run with `-v` (or `-vv`) to see the underlying request
-  • `mcpal server test <ref>` is the smallest reproducer
+  - for stdio: confirm the command is on $PATH and runs standalone
+  - re-run with `-v` (or `-vv`) to see the underlying request
+  - `mcpal server test <ref>` is the smallest reproducer
 \n"
         }
 
@@ -355,14 +355,14 @@ E0006 — server returned a JSON-RPC error.
 mcpal got a well-formed response, but the server returned an error code
 inside the JSON-RPC payload. Common causes:
 
-  • the tool/resource/prompt doesn't exist on this server
-  • the arguments don't match `inputSchema`
-  • a server-side runtime failure
+  - the tool/resource/prompt doesn't exist on this server
+  - the arguments don't match `inputSchema`
+  - a server-side runtime failure
 
 To fix:
-  • `mcpal tool describe <ref> <name>` — confirm the input schema
-  • `mcpal tool template <ref> <name>` — get a valid skeleton to fill in
-  • re-run with `-v` for the raw JSON-RPC frame
+  - `mcpal tool describe <ref> <name>` — confirm the input schema
+  - `mcpal tool template <ref> <name>` — get a valid skeleton to fill in
+  - re-run with `-v` for the raw JSON-RPC frame
 \n"
         }
 
@@ -375,9 +375,10 @@ common cause is `npx -y @some-pkg` doing a fresh install (~30s on a cold
 cache).
 
 To fix:
-  • simply retry; subsequent runs hit the npx cache
-  • check the server isn't waiting on input (some stdio servers prompt
-    interactively for config when first launched)
+  - retry; subsequent runs hit the npx cache
+  - check the server isn't waiting on stdin (some stdio servers prompt
+    for config when first launched)
+  - raise the budget with `--timeout <SECS>` (default: unlimited)
 \n"
         }
 
@@ -389,8 +390,8 @@ mcpal recognised the request but the underlying rmcp library (or mcpal
 itself) doesn't implement the necessary plumbing yet.
 
 To fix:
-  • check `mcpal --version` and update if a newer release is out
-  • for advanced flows, the `mcpal raw <ref> <method> --params …` escape
+  - check `mcpal --version` and update if a newer release is out
+  - for advanced flows, the `mcpal raw <ref> <method> --params …` escape
     hatch sends arbitrary JSON-RPC directly
 \n"
         }
@@ -402,15 +403,15 @@ E0009 — bad JMESPath query.
 `--query` couldn't compile your expression or it ran but returned an
 error. Common causes:
 
-  • unbalanced brackets or quotes (`tools[0` instead of `tools[0]`)
-  • trying to flatten a non-array (`foo[]` where `foo` is an object)
-  • a function call against a missing field
+  - unbalanced brackets or quotes (`tools[0` instead of `tools[0]`)
+  - trying to flatten a non-array (`foo[]` where `foo` is an object)
+  - a function call against a missing field
 
 To fix:
-  • run the same command without `--query` to inspect the actual shape
-  • cheat sheet: `field`, `field.subfield`, `arr[]`, `arr[0]`,
+  - run the same command without `--query` to inspect the actual shape
+  - cheat sheet: `field`, `field.subfield`, `arr[]`, `arr[0]`,
     `arr[].field`, `arr[?field == 'x'].name`
-  • tutorial: https://jmespath.org/tutorial.html
+  - tutorial: https://jmespath.org/tutorial.html
 \n"
         }
 
@@ -423,10 +424,10 @@ with `mcpal raw --params <inline|@file|->` and
 `mcpal tool call --cli-input-json <file|->`.
 
 To fix:
-  • quote inline JSON for your shell:
+  - quote inline JSON for your shell:
         mcpal raw ev tools/call --params '{\"name\":\"echo\"}'
-  • for files: `@/absolute/or/relative/path.json` (note the `@`)
-  • `mcpal tool template <ref> <name>` prints a known-good skeleton
+  - for files: `@/absolute/or/relative/path.json` (note the `@`)
+  - `mcpal tool template <ref> <name>` prints a known-good skeleton
 \n"
         }
 
@@ -439,10 +440,10 @@ the server. mcpal drops the in-flight request and exits with code 130
 (the conventional code for SIGINT-terminated programs).
 
 Notes:
-  • The server may still complete the operation on its end — mcpal just
+  - The server may still complete the operation on its end — mcpal just
     stops waiting. There is no MCP method today to tell the server
     \"never mind\" once the request is in flight.
-  • If you want a hard deadline instead, pass `--timeout <SECS>`.
+  - If you want a hard deadline instead, pass `--timeout <SECS>`.
 \n"
         }
 

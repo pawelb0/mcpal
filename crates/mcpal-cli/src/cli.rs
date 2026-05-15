@@ -27,15 +27,15 @@ Exit codes:
 mcpal is a scriptable command-line client for the Model Context Protocol.
 
 What it provides:
-  • Local stdio + remote Streamable HTTP transports (rustls, no OpenSSL).
-  • Discovery: reads the MCP server configs already on disk from Claude
+  - Local stdio + remote Streamable HTTP transports (rustls, no OpenSSL).
+  - Discovery: reads the MCP server configs already on disk from Claude
     Code, Claude Desktop, Cursor, Zed, opencode, LM Studio, Windsurf,
     and Cline — you can call those servers without re-entering anything.
-  • Full protocol: tools, resources, resource templates, prompts,
+  - Full protocol: tools, resources, resource templates, prompts,
     subscriptions, logging, server-initiated requests, plus `raw` for
     any JSON-RPC method without a first-party verb.
-  • Auth: bearer (env var or OS keyring) and OAuth 2.1 + PKCE + DCR.
-  • Pipeline-friendly: stable exit codes, `--output json|yaml`,
+  - Auth: bearer (env var or OS keyring) and OAuth 2.1 + PKCE + DCR.
+  - Pipeline-friendly: stable exit codes, `--output json|yaml`,
     `--query <jmespath>`, rustc-style errors with `E####` codes, and
     `--timeout SECS` + Ctrl-C cancellation.
 
@@ -159,8 +159,7 @@ pub enum Command {
     },
 
     /// Send an arbitrary JSON-RPC request. Escape hatch for MCP methods
-    /// without a dedicated subcommand. `params` accepts inline JSON,
-    /// `@file.json`, or `-` for stdin.
+    /// without a dedicated subcommand.
     Raw {
         reference: String,
         method: String,

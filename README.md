@@ -1,6 +1,8 @@
 # mcpal
 
-`curl` for the [Model Context Protocol](https://modelcontextprotocol.io).
+A scriptable command-line client for the
+[Model Context Protocol](https://modelcontextprotocol.io). Single static
+Rust binary. No browser, no LLM, no Node or Python runtime.
 
 ```
 $ mcpal server list --all
@@ -9,28 +11,23 @@ $ mcpal auth login notion --oauth
 $ mcpal --query 'content[0].text' tool call ev echo --message hi
 ```
 
-A scriptable command-line client for MCP. No browser, no LLM, no Node or
-Python runtime. Single static Rust binary.
-
 ## What it does
 
-Three things, well.
-
-1. **Reuses servers already on your machine.** Claude Code, Claude
-   Desktop, Cursor, Zed, opencode, LM Studio, Windsurf, and Cline all
-   store their MCP server configs on disk. mcpal reads every one of
-   them and lets you call those servers without copying their config:
-   `mcpal tool list cursor:linear` works the moment Cursor knows about
-   `linear`.
-2. **Speaks the whole protocol.** Tools, resources, resource templates,
+1. **Reuses servers already configured by other clients.** Claude Code,
+   Claude Desktop, Cursor, Zed, opencode, LM Studio, Windsurf, and
+   Cline all store their MCP server configs on disk. mcpal reads every
+   one of them, so `mcpal tool list cursor:linear` works the moment
+   Cursor knows about `linear`.
+2. **Speaks the full protocol.** Tools, resources, resource templates,
    prompts, subscriptions, logging set-level, server-initiated requests
-   (`roots/list`, `elicitation/create`, `sampling/createMessage`), and a
-   `raw` passthrough for any JSON-RPC method that doesn't yet have a
+   (`roots/list`, `elicitation/create`, `sampling/createMessage`), and
+   a `raw` passthrough for any JSON-RPC method that doesn't yet have a
    first-party verb.
-3. **Survives pipelines.** Stable exit codes per failure class,
+3. **Works in pipelines.** Stable exit codes per failure class,
    `--output json|yaml`, AWS-CLI-compatible `--query <jmespath>`,
-   rustc-style error blocks with stable `E####` codes, and
-   `mcpal explain E####` for the long-form prose. `case $?` works.
+   rustc-style error blocks with stable `E####` codes,
+   `mcpal explain E####` for the long-form prose, `--timeout SECS` and
+   Ctrl-C cancellation.
 
 ## Install
 
@@ -40,8 +37,7 @@ cargo install --path crates/mcpal-cli
 
 Prebuilt binaries: pending first tag. The release workflow at
 `.github/workflows/release.yml` builds macOS (arm64 + x86_64), Linux
-(x86_64 GNU), and Windows binaries. Homebrew tap and `curl | sh`
-installer are tracked for a later milestone.
+(x86_64 GNU), and Windows binaries.
 
 ## 60-second tour
 
@@ -75,12 +71,11 @@ mcpal auth login github --bearer ghp_xxx     # token → OS keyring
 mcpal tool list github
 
 mcpal server add notion --http https://mcp.notion.com/v1
-mcpal auth login notion --oauth              # PKCE + DCR + loopback callback
+mcpal auth login notion --oauth              # PKCE + DCR
 mcpal auth refresh notion                    # mint a new access token later
 ```
 
-Tokens always live in the OS keyring (Keychain on macOS, Secret Service
-on Linux, Credential Manager on Windows), never in `config.toml`.
+Tokens live in the OS keyring, never in `config.toml`.
 
 ### Tools
 
@@ -129,7 +124,7 @@ mcpal raw ev some/method --params -
 mcpal discover                           # full dump
 mcpal discover --source cursor           # one client
 mcpal server list --all                  # mcpal-owned + discovered
-mcpal tool list opencode:tavily          # call directly, no copy step
+mcpal tool list opencode:tavily          # call directly
 mcpal --mcp-json ./mcp.json tool list x  # use a Claude/Cursor config inline
 mcpal server import --from opencode tavily --as tav
 ```
@@ -198,7 +193,7 @@ args = ["-y", "@modelcontextprotocol/server-everything"]
 
 [server.linear]
 transport = "http"
-url = "https://mcp.linear.app/sse"
+url = "https://mcp.linear.app/mcp"
 auth = { type = "oauth" }
 
 [server.notion]

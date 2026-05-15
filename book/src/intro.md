@@ -1,6 +1,8 @@
 # mcpal
 
-`curl` for the [Model Context Protocol](https://modelcontextprotocol.io).
+A scriptable command-line client for the
+[Model Context Protocol](https://modelcontextprotocol.io). Single static
+Rust binary. No browser, no LLM, no Node or Python runtime.
 
 ```bash
 mcpal server list --all
@@ -9,43 +11,25 @@ mcpal auth login notion --oauth
 mcpal --query 'content[0].text' tool call ev echo --message hi
 ```
 
-A scriptable command-line client for MCP. No browser, no LLM, no Node or
-Python runtime. Single static Rust binary.
-
 ## What it does
 
-Three things, well.
-
-1. **Reuses servers already on your machine.** Claude Code, Claude
-   Desktop, Cursor, Zed, opencode, LM Studio, Windsurf, and Cline all
-   store their MCP server configs on disk. mcpal reads every one of
-   them and lets you call those servers without copying their config:
-   `mcpal tool list cursor:linear` works the moment Cursor knows about
-   `linear`.
-2. **Speaks the whole protocol.** Tools, resources, resource templates,
+1. **Reuses servers already configured by other clients.** Claude Code,
+   Claude Desktop, Cursor, Zed, opencode, LM Studio, Windsurf, and
+   Cline all store their MCP server configs on disk. mcpal reads every
+   one of them, so `mcpal tool list cursor:linear` works the moment
+   Cursor knows about `linear`.
+2. **Speaks the full protocol.** Tools, resources, resource templates,
    prompts, subscriptions, logging set-level, server-initiated requests
-   (`roots/list`, `elicitation/create`, `sampling/createMessage`), and a
-   `raw` passthrough for any JSON-RPC method that doesn't yet have a
+   (`roots/list`, `elicitation/create`, `sampling/createMessage`), and
+   a `raw` passthrough for any JSON-RPC method that doesn't yet have a
    first-party verb.
-3. **Survives pipelines.** Stable exit codes per failure class,
+3. **Works in pipelines.** Stable exit codes per failure class,
    `--output json|yaml`, AWS-CLI-compatible `--query <jmespath>`,
-   rustc-style error blocks with stable `E####` codes, and
-   `mcpal explain E####` for the long-form prose. `case $?` works.
+   rustc-style error blocks with stable `E####` codes,
+   `mcpal explain E####` for the long-form prose, `--timeout SECS` and
+   Ctrl-C cancellation.
 
-## Chapters
-
-- [Concepts](./concepts.md). Refs, transports, discovery, auth, output.
-- [Getting started](./getting-started.md). Install plus a first tool call.
-- [Recipes](./recipes.md). Task-indexed snippets.
-- [Auth deep dive](./auth.md). Bearer tokens, OAuth 2.1 + PKCE + DCR,
-  keyring storage, `MCPAL_BEARER`.
-- [Scripting & exit codes](./scripting.md). Exit codes, `--output json`,
-  `--query`, error codes.
-- [Troubleshooting](./troubleshooting.md). `mcpal doctor` and the common
-  failures.
-- [Protocol compliance matrix](./protocol-matrix.md). MCP methods mcpal
-  exposes as verbs versus `raw` passthrough.
-- [Error codes](./error-codes.md). Every `E####` with long-form prose.
+Read [Concepts](./concepts.md) next.
 
 ## License
 

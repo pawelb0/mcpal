@@ -19,8 +19,7 @@ mcpal server add ev -- npx -y @modelcontextprotocol/server-everything
 mcpal server test ev
 ```
 
-The tokens after `--` are the command and its args. `mcpal server add
-ev --stdio npx --arg -y --arg @…` also works and is equivalent.
+Tokens after `--` are the command and its args.
 
 ```yaml
 ref: ev

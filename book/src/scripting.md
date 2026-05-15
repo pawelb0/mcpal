@@ -20,7 +20,7 @@ mcpal is meant for pipelines:
 | 5 | auth expired | E0004 | `mcpal auth refresh <ref>` |
 | 6 | transport / not yet supported | E0005, E0008 | network unreachable or `mcpal raw` |
 | 7 | server returned a JSON-RPC error | E0006 | check args against `tool describe` |
-| 8 | request timed out | E0007 | retry or raise `--timeout SECS` |
+| 8 | request timed out | E0007 | retry; with `--timeout`, raise the value |
 | 130 | interrupted (Ctrl-C) | E0011 | — |
 
 Each error prints `error[E####]:` plus hints. `mcpal explain E####`

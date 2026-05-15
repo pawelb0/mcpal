@@ -31,8 +31,8 @@ echo '{"message":"hi"}' | mcpal tool call ev some-tool --params -
 mcpal tool call ev some-tool --params @args.json
 ```
 
-`--cli-input-json` is the same flag with the AWS-CLI name. Mix `--params`
-with extra `--key value` overrides:
+`--cli-input-json` is the AWS-CLI-compatible alias. Mix `--params` with
+`--key value` overrides; flag values win:
 
 ```bash
 mcpal tool call ev some-tool --params @base.json --message override
@@ -152,8 +152,6 @@ diff \
   <(mcpal --output json tool list <ref-a> | jq -S) \
   <(mcpal --output json tool list <ref-b> | jq -S)
 ```
-
-A `mcpal diff` verb is not yet implemented.
 
 ## Shell completions
 
