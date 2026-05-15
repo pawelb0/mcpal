@@ -1,4 +1,4 @@
-use std::io::{BufRead, IsTerminal};
+use std::io::{BufRead, IsTerminal, Write};
 
 use rmcp::ClientHandler;
 use rmcp::RoleClient;
@@ -68,6 +68,7 @@ impl ClientHandler for Handler {
                 }
                 eprintln!("[server elicitation] {message}");
                 eprint!("> ");
+                std::io::stderr().flush().ok();
                 let line = tokio::task::spawn_blocking(|| {
                     let mut buf = String::new();
                     std::io::stdin().lock().read_line(&mut buf).map(|_| buf)

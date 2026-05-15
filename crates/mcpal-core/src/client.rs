@@ -34,6 +34,15 @@ async fn connect_stdio(
     for (k, v) in env {
         cmd.env(k, v);
     }
+    // Drop child stderr by default so banner lines and any stray ANSI escape
+    // sequences from the spawned server don't bleed into our terminal.
+    // `MCPAL_CHILD_STDERR=inherit` opts back in for debugging.
+    let inherit = std::env::var("MCPAL_CHILD_STDERR")
+        .map(|v| v == "inherit")
+        .unwrap_or(false);
+    if !inherit {
+        cmd.stderr(std::process::Stdio::null());
+    }
     let transport = TokioChildProcess::new(cmd)?;
     handler
         .serve(transport)
