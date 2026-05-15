@@ -16,17 +16,21 @@ Python runtime. Single static Rust binary.
 
 Three things, well.
 
-1. **Reuses servers already on disk.** Claude Code, Claude Desktop,
-   Cursor, Zed, opencode, LM Studio, Windsurf, and Cline all store
-   their MCP server configs on disk. mcpal reads every one of them and
-   lets you talk to those servers without copying their config.
+1. **Reuses servers already on your machine.** Claude Code, Claude
+   Desktop, Cursor, Zed, opencode, LM Studio, Windsurf, and Cline all
+   store their MCP server configs on disk. mcpal reads every one of
+   them and lets you call those servers without copying their config:
+   `mcpal tool list cursor:linear` works the moment Cursor knows about
+   `linear`.
 2. **Speaks the whole protocol.** Tools, resources, resource templates,
-   prompts, subscriptions, logging, server-initiated requests, and
-   `mcpal raw` for any JSON-RPC method without a first-party verb yet.
+   prompts, subscriptions, logging set-level, server-initiated requests
+   (`roots/list`, `elicitation/create`, `sampling/createMessage`), and a
+   `raw` passthrough for any JSON-RPC method that doesn't yet have a
+   first-party verb.
 3. **Survives pipelines.** Stable exit codes per failure class,
-   `--output json|yaml`, AWS-CLI `--query <jmespath>`, rustc-style
-   error blocks with stable `E####` codes, `--timeout SECS`, Ctrl-C
-   cancellation. `case $?` works.
+   `--output json|yaml`, AWS-CLI-compatible `--query <jmespath>`,
+   rustc-style error blocks with stable `E####` codes, and
+   `mcpal explain E####` for the long-form prose. `case $?` works.
 
 ## Chapters
 

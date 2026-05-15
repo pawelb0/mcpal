@@ -5,39 +5,47 @@ use mcpal_output::Format;
 
 pub const EXIT_CODES_HELP: &str = "\
 Exit codes:
-  0   success
-  1   generic error
-  2   usage / invalid arguments
-  3   server reference not found (try `mcpal discover` or `mcpal server list`)
-  4   auth required (run `mcpal auth login <ref>` or `--oauth`)
-  5   auth expired (run `mcpal auth refresh <ref>`)
-  6   transport error (server unreachable / pipe broken)
-  7   server returned a JSON-RPC error
-  8   request timed out
+  0    success
+  1    generic error
+  2    usage / invalid arguments
+  3    server reference not found (try `mcpal discover` or `mcpal server list`)
+  4    auth required (run `mcpal auth login <ref>` or `--oauth`)
+  5    auth expired (run `mcpal auth refresh <ref>`)
+  6    transport error / not yet supported
+  7    server returned a JSON-RPC error
+  8    request timed out (raise with `--timeout <SECS>`)
+  130  interrupted by Ctrl-C
 ";
 
 #[derive(Parser, Debug)]
 #[command(
     name = "mcpal",
     version,
-    about = "CLI for the Model Context Protocol — like `aws` but for MCP",
+    about = "Scriptable command-line client for the Model Context Protocol",
     after_help = EXIT_CODES_HELP,
     long_about = "\
-mcpal is a command-line client for the Model Context Protocol.
+mcpal is a scriptable command-line client for the Model Context Protocol.
 
-It speaks both local stdio MCP servers (e.g. `npx -y \
-@modelcontextprotocol/server-everything`) and remote Streamable HTTP \
-servers (with bearer or OAuth 2.1 auth). It also discovers MCP \
-servers configured by other clients (Claude Code, Claude Desktop, \
-Cursor, Zed, opencode, LM Studio, Windsurf, Cline) so you don't have \
-to re-enter them.
+What it provides:
+  • Local stdio + remote Streamable HTTP transports (rustls, no OpenSSL).
+  • Discovery: reads the MCP server configs already on disk from Claude
+    Code, Claude Desktop, Cursor, Zed, opencode, LM Studio, Windsurf,
+    and Cline — you can call those servers without re-entering anything.
+  • Full protocol: tools, resources, resource templates, prompts,
+    subscriptions, logging, server-initiated requests, plus `raw` for
+    any JSON-RPC method without a first-party verb.
+  • Auth: bearer (env var or OS keyring) and OAuth 2.1 + PKCE + DCR.
+  • Pipeline-friendly: stable exit codes, `--output json|yaml`,
+    `--query <jmespath>`, rustc-style errors with `E####` codes, and
+    `--timeout SECS` + Ctrl-C cancellation.
 
 Common workflows:
   mcpal discover                        scan all clients for configured servers
-  mcpal server list --all               see mcpal-owned + discovered together
-  mcpal server test <ref>               verify a server speaks MCP
+  mcpal server list --all               mcpal-owned + discovered together
+  mcpal server add <alias> -- <cmd>     register a stdio server
+  mcpal server test <ref> [--full]      handshake + optional capability dump
   mcpal tool list <ref>                 compact list of tools on a server
-  mcpal tool describe <ref> <name>      full schema + example for one tool
+  mcpal tool describe <ref> <name>      full schema for one tool
   mcpal tool call <ref> <name> [--key value ...]
   mcpal auth login <ref> --oauth        OAuth 2.1 + PKCE + DCR
 
