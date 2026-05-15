@@ -151,19 +151,6 @@ Fixes:
 
 Exit code **2**.
 
-## E0011 — interrupted by Ctrl-C
-
-You pressed Ctrl-C while mcpal was waiting on a response from the
-server. mcpal drops the in-flight request and exits with code 130 (the
-conventional code for SIGINT-terminated programs).
-
-The server may still complete the operation on its end — mcpal just
-stops waiting. There is no MCP method today to tell the server "never
-mind" once the request is in flight. For a hard deadline instead, pass
-`--timeout <SECS>`.
-
-Exit code **130**.
-
 ## E0010 — JSON payload didn't parse
 
 mcpal expected a JSON document and got something else. This happens
@@ -180,3 +167,16 @@ Fixes:
 - `mcpal tool template <ref> <name>` for a known-good skeleton.
 
 Exit code **2**.
+
+## E0011 — interrupted by Ctrl-C
+
+You pressed Ctrl-C while mcpal was waiting on a response from the
+server. mcpal drops the in-flight request and exits with code 130 (the
+conventional code for SIGINT-terminated programs).
+
+The server may still complete the operation on its end — mcpal just
+stops waiting. There is no MCP method today to tell the server "never
+mind" once the request is in flight. For a hard deadline instead, pass
+`--timeout <SECS>`.
+
+Exit code **130**.
