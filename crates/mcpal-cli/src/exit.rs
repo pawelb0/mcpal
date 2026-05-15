@@ -106,6 +106,17 @@ pub fn classify(err: &anyhow::Error) -> Diagnostic {
     }
 
     let s = format!("{err:#}").to_lowercase();
+    if s.contains("interrupted by ctrl-c") {
+        return Diagnostic::build(
+            130,
+            "E0011",
+            err.to_string(),
+            &[
+                "the request was aborted before the server responded",
+                "the server may still complete the operation server-side",
+            ],
+        );
+    }
     if s.contains("timeout") || s.contains("timed out") {
         return Diagnostic::build(
             8,
@@ -114,6 +125,7 @@ pub fn classify(err: &anyhow::Error) -> Diagnostic {
             &[
                 "retry, the server may have been slow",
                 "for stdio servers, the initial `npx -y` install can take 30s+ on a cold cache",
+                "raise the budget with `--timeout <SECS>` (default: unlimited)",
             ],
         );
     }
@@ -380,6 +392,22 @@ To fix:
   • check `mcpal --version` and update if a newer release is out
   • for advanced flows, the `mcpal raw <ref> <method> --params …` escape
     hatch sends arbitrary JSON-RPC directly
+\n"
+        }
+
+        "E0011" => {
+            "\
+E0011 — interrupted by Ctrl-C.
+
+You pressed Ctrl-C (SIGINT) while mcpal was waiting on a response from
+the server. mcpal drops the in-flight request and exits with code 130
+(the conventional code for SIGINT-terminated programs).
+
+Notes:
+  • The server may still complete the operation on its end — mcpal just
+    stops waiting. There is no MCP method today to tell the server
+    \"never mind\" once the request is in flight.
+  • If you want a hard deadline instead, pass `--timeout <SECS>`.
 \n"
         }
 

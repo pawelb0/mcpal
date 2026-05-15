@@ -88,6 +88,12 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "JMESPATH")]
     pub query: Option<String>,
 
+    /// Abort an in-flight request after N seconds. Without this flag mcpal
+    /// waits indefinitely (servers can hang on cold `npx -y` installs).
+    /// Ctrl-C aborts the wait at any time.
+    #[arg(long, global = true, value_name = "SECS")]
+    pub timeout: Option<u64>,
+
     /// External program that handles `sampling/createMessage` requests.
     /// mcpal pipes the request JSON on stdin and reads a CreateMessageResult
     /// JSON from stdout. Use your shell's quoting for multi-arg commands.

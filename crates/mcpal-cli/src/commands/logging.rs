@@ -13,9 +13,8 @@ pub async fn run(action: LoggingAction, ctx: &Ctx) -> Result<()> {
 
 async fn set_level(reference: &str, level: LogLevel, ctx: &Ctx) -> Result<()> {
     let (_, client) = ctx.open(reference).await?;
-    client
-        .set_level(SetLevelRequestParams::new(level.into()))
-        .await?;
+    ctx.under_deadline(client.set_level(SetLevelRequestParams::new(level.into())))
+        .await??;
     ctx.render_one(&json!({"ok": true, "level": format!("{level:?}").to_lowercase()}))?;
     Ok(())
 }

@@ -13,12 +13,12 @@ use crate::runtime::Ctx;
 pub async fn run(reference: &str, method: &str, params: Option<&str>, ctx: &Ctx) -> Result<()> {
     let params = parse_params(params)?;
     let (_, client) = ctx.open(reference).await?;
-    let result = client
-        .send_request(ClientRequest::CustomRequest(CustomRequest::new(
+    let result = ctx
+        .under_deadline(client.send_request(ClientRequest::CustomRequest(CustomRequest::new(
             method.to_string(),
             params,
-        )))
-        .await
+        ))))
+        .await?
         .with_context(|| format!("raw {method}"))?;
     let v = serde_json::to_value(&result)?;
     ctx.render_one(&v)?;

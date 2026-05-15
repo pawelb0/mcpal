@@ -1,7 +1,9 @@
 use std::cell::OnceCell;
+use std::future::Future;
 use std::path::PathBuf;
+use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use mcpal_core::{AuthSpec, Client, Handler, HandlerOptions, ServerSpec, connect};
 use mcpal_discovery::{DiscoveredServer, DiscoveryCtx, discover};
 use mcpal_output::{Format, emit_list, emit_one};
@@ -17,6 +19,7 @@ pub struct Ctx {
     pub cfg: Config,
     pub format: Format,
     pub query: Option<String>,
+    pub timeout: Option<u64>,
     pub config_path: PathBuf,
     pub handler_opts: HandlerOptions,
     discovered: OnceCell<Vec<DiscoveredServer>>,
@@ -27,6 +30,7 @@ impl Ctx {
         cfg: Config,
         format: Format,
         query: Option<String>,
+        timeout: Option<u64>,
         config_path: PathBuf,
         handler_opts: HandlerOptions,
     ) -> Self {
@@ -34,9 +38,29 @@ impl Ctx {
             cfg,
             format,
             query,
+            timeout,
             config_path,
             handler_opts,
             discovered: OnceCell::new(),
+        }
+    }
+
+    /// Race a request future against `--timeout` and Ctrl-C. Returns the
+    /// future's output verbatim; cancellation paths become anyhow errors that
+    /// `exit::classify` maps to E0007 (timeout) and E0011 (interrupt).
+    pub async fn under_deadline<F: Future>(&self, fut: F) -> Result<F::Output> {
+        let sleeper: Box<dyn Future<Output = ()> + Unpin + Send> = match self.timeout {
+            Some(secs) => Box::new(Box::pin(tokio::time::sleep(Duration::from_secs(secs)))),
+            None => Box::new(Box::pin(std::future::pending::<()>())),
+        };
+        tokio::pin!(fut);
+        tokio::select! {
+            out = &mut fut => Ok(out),
+            _ = sleeper => Err(anyhow!(
+                "request timed out after {}s",
+                self.timeout.unwrap_or_default()
+            )),
+            _ = tokio::signal::ctrl_c() => Err(anyhow!("interrupted by ctrl-c")),
         }
     }
 

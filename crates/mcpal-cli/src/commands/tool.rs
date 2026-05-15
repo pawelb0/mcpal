@@ -36,7 +36,7 @@ struct ToolSummary<'a> {
 
 async fn list(reference: &str, ctx: &Ctx) -> Result<()> {
     let (_, client) = ctx.open(reference).await?;
-    let tools = client.list_all_tools().await?;
+    let tools = ctx.under_deadline(client.list_all_tools()).await??;
     let summaries: Vec<ToolSummary<'_>> = tools
         .iter()
         .map(|t| ToolSummary {
@@ -51,7 +51,7 @@ async fn list(reference: &str, ctx: &Ctx) -> Result<()> {
 
 async fn describe(reference: &str, name: &str, ctx: &Ctx) -> Result<()> {
     let (_, client) = ctx.open(reference).await?;
-    let tools = client.list_all_tools().await?;
+    let tools = ctx.under_deadline(client.list_all_tools()).await??;
     let tool = tools
         .iter()
         .find(|t| t.name == *name)
@@ -62,7 +62,7 @@ async fn describe(reference: &str, name: &str, ctx: &Ctx) -> Result<()> {
 
 async fn template(reference: &str, name: &str, ctx: &Ctx) -> Result<()> {
     let (_, client) = ctx.open(reference).await?;
-    let tools = client.list_all_tools().await?;
+    let tools = ctx.under_deadline(client.list_all_tools()).await??;
     let tool = tools
         .iter()
         .find(|t| t.name == *name)
@@ -115,7 +115,10 @@ async fn call(
     if !arguments.is_empty() {
         params = params.with_arguments(arguments);
     }
-    let result = client.call_tool(params).await.context("tools/call")?;
+    let result = ctx
+        .under_deadline(client.call_tool(params))
+        .await?
+        .context("tools/call")?;
     ctx.render_one(&result)?;
     Ok(())
 }

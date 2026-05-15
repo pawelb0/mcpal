@@ -29,7 +29,7 @@ struct PromptSummary<'a> {
 
 async fn list(reference: &str, ctx: &Ctx) -> Result<()> {
     let (_, client) = ctx.open(reference).await?;
-    let prompts = client.list_all_prompts().await?;
+    let prompts = ctx.under_deadline(client.list_all_prompts()).await??;
     let summaries: Vec<PromptSummary<'_>> = prompts
         .iter()
         .map(|p| PromptSummary {
@@ -56,7 +56,7 @@ async fn get(reference: &str, name: &str, flag_args: &[String], ctx: &Ctx) -> Re
     }
 
     let (_, client) = ctx.open(reference).await?;
-    let result = client.get_prompt(params).await?;
+    let result = ctx.under_deadline(client.get_prompt(params)).await??;
     ctx.render_one(&result)?;
     Ok(())
 }

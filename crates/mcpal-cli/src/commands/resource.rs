@@ -39,7 +39,7 @@ struct TemplateSummary<'a> {
 
 async fn list(reference: &str, ctx: &Ctx) -> Result<()> {
     let (_, client) = ctx.open(reference).await?;
-    let resources = client.list_all_resources().await?;
+    let resources = ctx.under_deadline(client.list_all_resources()).await??;
     let summaries: Vec<ResourceSummary<'_>> = resources
         .iter()
         .map(|r| ResourceSummary {
@@ -54,32 +54,34 @@ async fn list(reference: &str, ctx: &Ctx) -> Result<()> {
 
 async fn read(reference: &str, uri: &str, ctx: &Ctx) -> Result<()> {
     let (_, client) = ctx.open(reference).await?;
-    let result = client
-        .read_resource(ReadResourceRequestParams::new(uri))
-        .await?;
+    let result = ctx
+        .under_deadline(client.read_resource(ReadResourceRequestParams::new(uri)))
+        .await??;
     ctx.render_one(&result)?;
     Ok(())
 }
 
 async fn subscribe(reference: &str, uri: &str, ctx: &Ctx) -> Result<()> {
     let (_, client) = ctx.open(reference).await?;
-    client.subscribe(SubscribeRequestParams::new(uri)).await?;
+    ctx.under_deadline(client.subscribe(SubscribeRequestParams::new(uri)))
+        .await??;
     ctx.render_one(&json!({"ok": true, "subscribed": uri}))?;
     Ok(())
 }
 
 async fn unsubscribe(reference: &str, uri: &str, ctx: &Ctx) -> Result<()> {
     let (_, client) = ctx.open(reference).await?;
-    client
-        .unsubscribe(UnsubscribeRequestParams::new(uri))
-        .await?;
+    ctx.under_deadline(client.unsubscribe(UnsubscribeRequestParams::new(uri)))
+        .await??;
     ctx.render_one(&json!({"ok": true, "unsubscribed": uri}))?;
     Ok(())
 }
 
 async fn templates(reference: &str, ctx: &Ctx) -> Result<()> {
     let (_, client) = ctx.open(reference).await?;
-    let templates = client.list_all_resource_templates().await?;
+    let templates = ctx
+        .under_deadline(client.list_all_resource_templates())
+        .await??;
     let summaries: Vec<TemplateSummary<'_>> = templates
         .iter()
         .map(|t| TemplateSummary {
