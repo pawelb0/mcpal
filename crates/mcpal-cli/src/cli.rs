@@ -185,6 +185,11 @@ pub enum Command {
     /// Explain an error code in long form (like `rustc --explain`).
     /// Example: `mcpal explain E0001`.
     Explain { code: String },
+
+    /// Sanity-check mcpal's local environment: config, keyring, stored
+    /// credentials per server, discovery sources. Pastable into a bug
+    /// report (use `--output json`).
+    Doctor,
 }
 
 #[derive(Subcommand, Debug)]

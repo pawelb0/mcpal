@@ -89,6 +89,7 @@ async fn dispatch(cli: Cli) -> Result<()> {
             }
             None => anyhow::bail!("no documentation for error code '{code}'"),
         },
+        Command::Doctor => commands::doctor::run(&ctx),
     }
 }
 
