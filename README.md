@@ -12,53 +12,25 @@ $ mcpal --query 'content[0].text' tool call ev echo --message hi
 A scriptable command-line client for MCP. No browser, no LLM, no Node or
 Python runtime. Single static Rust binary.
 
-## Why it exists
+## What it does
 
-If you build, run, or consume MCP servers, the existing tools leave three
-gaps. mcpal closes all three.
+Three things, well.
 
-1. **Reuse servers already on your machine.** Claude Code, Claude
+1. **Reuses servers already on your machine.** Claude Code, Claude
    Desktop, Cursor, Zed, opencode, LM Studio, Windsurf, and Cline all
-   store their MCP server configs on disk. mcpal reads every one of them
-   and lets you call those servers without copying their config:
+   store their MCP server configs on disk. mcpal reads every one of
+   them and lets you call those servers without copying their config:
    `mcpal tool list cursor:linear` works the moment Cursor knows about
    `linear`.
-2. **Speak the whole protocol.** Tools, resources, resource templates,
+2. **Speaks the whole protocol.** Tools, resources, resource templates,
    prompts, subscriptions, logging set-level, server-initiated requests
    (`roots/list`, `elicitation/create`, `sampling/createMessage`), and a
    `raw` passthrough for any JSON-RPC method that doesn't yet have a
    first-party verb.
-3. **Survive pipelines.** Stable exit codes per failure class,
+3. **Survives pipelines.** Stable exit codes per failure class,
    `--output json|yaml`, AWS-CLI-compatible `--query <jmespath>`,
    rustc-style error blocks with stable `E####` codes, and
    `mcpal explain E####` for the long-form prose. `case $?` works.
-
-## Why not the alternatives
-
-| | `mcpal` | MCP Inspector | mcptools (Go) | `claude mcp add` |
-|---|---|---|---|---|
-| Surface | CLI | browser GUI + CLI | CLI | config writer |
-| Runtime | Rust binary | Node | Go binary | bundled in Claude Code |
-| Calls servers | yes | yes | yes | no — only registers |
-| Reads other clients' configs | 8 clients | no | no | no |
-| `--mcp-json` overlay (no install) | yes | no | no | no |
-| OAuth 2.1 + PKCE + DCR | yes | browser-only | no | no |
-| Streamable HTTP (rustls, no OpenSSL) | yes | yes | yes | n/a |
-| `watch` streaming notifications | yes | partial | partial | no |
-| `raw` JSON-RPC passthrough | yes | no | no | no |
-| rustc-style errors + `explain` | yes | no | no | no |
-| `--query <jmespath>` | yes | no | partial | no |
-| `--timeout` + Ctrl-C cancellation | yes | no | no | n/a |
-| mdBook user manual | yes | partial | no | no |
-
-Use [MCP Inspector](https://github.com/modelcontextprotocol/inspector)
-when you want a browser GUI. Use
-[Goose](https://github.com/block/goose),
-[mcphost](https://github.com/mark3labs/mcphost), or
-[chrishayuk/mcp-cli](https://github.com/chrishayuk/mcp-cli) when you
-want an LLM-bundled agent shell. Use
-[FastMCP](https://github.com/jlowin/fastmcp) when you're writing a
-Python MCP server. Use mcpal when you want curl for MCP.
 
 ## Install
 
