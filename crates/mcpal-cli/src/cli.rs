@@ -300,7 +300,15 @@ pub enum ServerAction {
     Import(ServerImportArgs),
     /// Open + initialize a connection and print serverInfo. Acts as a
     /// liveness check (the MCP handshake fails if the server is broken).
-    Test { reference: String },
+    /// Pass `--full` to also list tool / resource / prompt counts and
+    /// advertised capabilities.
+    Test {
+        reference: String,
+        /// Enumerate tools, resources, prompts and report counts +
+        /// advertised capabilities.
+        #[arg(long)]
+        full: bool,
+    },
 }
 
 #[derive(clap::Args, Debug)]
@@ -332,11 +340,13 @@ pub struct ServerImportArgs {
 pub struct ServerAddArgs {
     pub alias: String,
 
-    /// Stdio command. Mutually exclusive with --http.
+    /// Stdio command. Mutually exclusive with --http. Prefer the
+    /// `mcpal server add <alias> -- <cmd> <args...>` form instead.
     #[arg(long, conflicts_with = "http")]
     pub stdio: Option<String>,
 
-    /// Argument for the stdio command (repeatable).
+    /// Argument for the stdio command (repeatable). Prefer the trailing
+    /// `-- <cmd> <args...>` form.
     #[arg(
         long = "arg",
         value_name = "ARG",
@@ -352,6 +362,12 @@ pub struct ServerAddArgs {
     /// HTTP URL. Mutually exclusive with --stdio.
     #[arg(long)]
     pub http: Option<String>,
+
+    /// Stdio command + args after `--`. The first token is the program,
+    /// the rest are its arguments. Example:
+    /// `mcpal server add ev -- npx -y @modelcontextprotocol/server-everything`.
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 0..)]
+    pub command: Vec<String>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -379,6 +395,10 @@ pub enum ToolAction {
         /// `--key value` pairs override individual fields.
         #[arg(long, value_name = "PATH|-")]
         cli_input_json: Option<String>,
+        /// Inline JSON body. Accepts `'{"k":"v"}'`, `@path`, or `-` for
+        /// stdin. Mutually exclusive with `--cli-input-json`.
+        #[arg(long, value_name = "JSON|@PATH|-", conflicts_with = "cli_input_json")]
+        params: Option<String>,
         /// Remaining tokens are interpreted as `--key value` pairs.
         #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 0..)]
         args: Vec<String>,

@@ -18,7 +18,7 @@ pub async fn run(action: ServerAction, ctx: &Ctx) -> Result<()> {
         ServerAction::Add(args) => add(args, ctx),
         ServerAction::Remove { alias } => remove(&alias, ctx),
         ServerAction::Import(args) => import(args, ctx),
-        ServerAction::Test { reference } => test(&reference, ctx).await,
+        ServerAction::Test { reference, full } => test(&reference, full, ctx).await,
     }
 }
 
@@ -73,7 +73,20 @@ fn show(reference: &str, ctx: &Ctx) -> Result<()> {
 }
 
 fn add(args: ServerAddArgs, ctx: &Ctx) -> Result<()> {
-    let spec = match (args.stdio, args.http) {
+    let mut command = args.stdio;
+    let mut stdio_args = args.args;
+    if let Some((first, rest)) = args.command.split_first() {
+        if command.is_some() {
+            bail!("can't combine `--stdio` with a trailing `-- <cmd>`; pick one form");
+        }
+        command = Some(first.clone());
+        if !stdio_args.is_empty() {
+            bail!("can't combine `--arg` with a trailing `-- <cmd>`; pick one form");
+        }
+        stdio_args = rest.to_vec();
+    }
+
+    let spec = match (command, args.http) {
         (Some(cmd), None) => {
             let mut env = BTreeMap::new();
             for kv in args.env {
@@ -84,7 +97,7 @@ fn add(args: ServerAddArgs, ctx: &Ctx) -> Result<()> {
             }
             ServerSpec::Stdio {
                 command: cmd,
-                args: args.args,
+                args: stdio_args,
                 env,
             }
         }
@@ -93,8 +106,8 @@ fn add(args: ServerAddArgs, ctx: &Ctx) -> Result<()> {
             headers: BTreeMap::new(),
             auth: None,
         },
-        (Some(_), Some(_)) => bail!("--stdio and --http are mutually exclusive"),
-        (None, None) => bail!("provide --stdio or --http"),
+        (Some(_), Some(_)) => bail!("--stdio/`-- cmd` and --http are mutually exclusive"),
+        (None, None) => bail!("provide a stdio command (`-- cmd args…`) or `--http <url>`"),
     };
 
     let mut cfg = Config::load(&ctx.config_path)?;
@@ -135,14 +148,25 @@ fn import(args: ServerImportArgs, ctx: &Ctx) -> Result<()> {
     Ok(())
 }
 
-async fn test(reference: &str, ctx: &Ctx) -> Result<()> {
+async fn test(reference: &str, full: bool, ctx: &Ctx) -> Result<()> {
     let (r, client) = ctx.open(reference).await?;
     let p = probe(&client);
-    ctx.render_one(&json!({
+    let mut out = json!({
         "ref": r.display,
         "ok": true,
         "server": { "name": p.name, "version": p.version },
         "peerInfo": p.info,
-    }))?;
+    });
+    if full {
+        let tools = ctx.under_deadline(client.list_all_tools()).await?.ok();
+        let resources = ctx.under_deadline(client.list_all_resources()).await?.ok();
+        let prompts = ctx.under_deadline(client.list_all_prompts()).await?.ok();
+        out["capabilities"] = json!({
+            "tools": tools.as_ref().map(Vec::len).unwrap_or(0),
+            "resources": resources.as_ref().map(Vec::len).unwrap_or(0),
+            "prompts": prompts.as_ref().map(Vec::len).unwrap_or(0),
+        });
+    }
+    ctx.render_one(&out)?;
     Ok(())
 }

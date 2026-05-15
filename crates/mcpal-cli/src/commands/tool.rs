@@ -20,8 +20,19 @@ pub async fn run(action: ToolAction, ctx: &Ctx) -> Result<()> {
             reference,
             name,
             cli_input_json,
+            params,
             args,
-        } => call(&reference, &name, cli_input_json.as_deref(), &args, ctx).await,
+        } => {
+            call(
+                &reference,
+                &name,
+                cli_input_json.as_deref(),
+                params.as_deref(),
+                &args,
+                ctx,
+            )
+            .await
+        }
     }
 }
 
@@ -105,10 +116,11 @@ async fn call(
     reference: &str,
     name: &str,
     cli_input_json: Option<&str>,
+    params: Option<&str>,
     flag_args: &[String],
     ctx: &Ctx,
 ) -> Result<()> {
-    let arguments = build_arguments(cli_input_json, flag_args)?;
+    let arguments = build_arguments(cli_input_json, params, flag_args)?;
     let (_, client) = ctx.open(reference).await?;
 
     let mut params = CallToolRequestParams::new(name.to_string());
@@ -137,25 +149,51 @@ fn required_fields(schema: &Map<String, Value>) -> Vec<String> {
 
 fn build_arguments(
     cli_input_json: Option<&str>,
+    params: Option<&str>,
     flag_args: &[String],
 ) -> Result<Map<String, Value>> {
     let mut out = Map::new();
 
     if let Some(source) = cli_input_json {
-        let text = if source == "-" {
-            let mut buf = String::new();
-            std::io::stdin()
-                .read_to_string(&mut buf)
-                .context("read stdin")?;
-            buf
-        } else {
-            fs::read_to_string(source).with_context(|| format!("read {source}"))?
-        };
+        let text = read_payload(source)?;
         merge_object(&mut out, &text, source)?;
+    }
+    if let Some(spec) = params {
+        let (text, source) = read_params(spec)?;
+        merge_object(&mut out, &text, &source)?;
     }
 
     out.extend(kv::parse_flag_args(flag_args.iter())?);
     Ok(out)
+}
+
+fn read_payload(source: &str) -> Result<String> {
+    if source == "-" {
+        let mut buf = String::new();
+        std::io::stdin()
+            .read_to_string(&mut buf)
+            .context("read stdin")?;
+        Ok(buf)
+    } else {
+        fs::read_to_string(source).with_context(|| format!("read {source}"))
+    }
+}
+
+fn read_params(spec: &str) -> Result<(String, String)> {
+    if spec == "-" {
+        let mut buf = String::new();
+        std::io::stdin()
+            .read_to_string(&mut buf)
+            .context("read stdin")?;
+        Ok((buf, "stdin".into()))
+    } else if let Some(path) = spec.strip_prefix('@') {
+        Ok((
+            fs::read_to_string(path).with_context(|| format!("read {path}"))?,
+            path.to_string(),
+        ))
+    } else {
+        Ok((spec.to_string(), "--params".into()))
+    }
 }
 
 fn merge_object(into: &mut Map<String, Value>, text: &str, source: &str) -> Result<()> {
