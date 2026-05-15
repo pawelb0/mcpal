@@ -181,6 +181,10 @@ pub enum Command {
     /// (progress, log, resource-updated, list-changed) as YAML/JSON
     /// documents until Ctrl-C.
     Watch { reference: String },
+
+    /// Explain an error code in long form (like `rustc --explain`).
+    /// Example: `mcpal explain E0001`.
+    Explain { code: String },
 }
 
 #[derive(Subcommand, Debug)]

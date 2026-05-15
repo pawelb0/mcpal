@@ -25,12 +25,9 @@ fn main() {
     let code = match run(cli) {
         Ok(()) => 0,
         Err(err) => {
-            let classified = exit::classify(&err);
-            eprintln!("error: {err:#}");
-            if let Some(hint) = classified.hint {
-                eprintln!("hint: {hint}");
-            }
-            classified.code
+            let d = exit::classify(&err);
+            eprintln!("{}", exit::render(&d));
+            d.code
         }
     };
     std::process::exit(code);
@@ -75,6 +72,13 @@ async fn dispatch(cli: Cli) -> Result<()> {
         Command::Auth { action } => commands::auth::run(action, &ctx).await,
         Command::Logging { action } => commands::logging::run(action, &ctx).await,
         Command::Watch { reference } => commands::watch::run(&reference, &ctx).await,
+        Command::Explain { code } => match exit::explain(&code) {
+            Some(text) => {
+                print!("{text}");
+                Ok(())
+            }
+            None => anyhow::bail!("no documentation for error code '{code}'"),
+        },
     }
 }
 
