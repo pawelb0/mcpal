@@ -1,16 +1,15 @@
 # Troubleshooting
 
-First step is always:
+## `mcpal doctor`
 
 ```bash
 mcpal doctor
 ```
 
-It checks: config readable, keyring round-trips, every owned server's
-auth state, discovery counts per source. Output is YAML by default;
-`--output json` for paste-into-issue.
+Checks: config readable, keyring round-trip, auth state per server,
+discovery counts. YAML default; `--output json` for bug reports.
 
-## "server 'X' not found"
+## E0001 — "server 'X' not found"
 
 ```
 error[E0001]: server 'foo' not found (owned, URL, path, or discovered)
@@ -19,54 +18,53 @@ help: or `mcpal server list --all` to see what's already configured
 help: or add one: `mcpal server add <alias> --stdio <command>`
 ```
 
-- `mcpal discover` to see all eight client configs mcpal scans.
-- If you copied a config from Cursor/Claude Desktop, try `mcpal --mcp-json
-  ./mcp.json tool list <name>` to skip the registration step.
-- `mcpal explain E0001` for the full resolver order.
+- `mcpal discover` lists every client config mcpal scans.
+- If you copied a config from Cursor or Claude Desktop, try
+  `mcpal --mcp-json ./mcp.json tool list <name>` and skip registration.
+- `mcpal explain E0001` for the resolver order.
 
-## "auth required" / "auth expired"
+## E0003 / E0004 — auth
 
-E0003 = no credentials at all. Run `mcpal auth login <ref> --bearer …` or
-`--oauth`. E0004 = the server rejected the token mcpal sent. Run
-`mcpal auth refresh <ref>` (uses the refresh token to mint a new access
-token). If refresh also fails, do a full re-login.
+- E0003: no credentials. `mcpal auth login <ref> --bearer …` or
+  `--oauth`.
+- E0004: server rejected the token. `mcpal auth refresh <ref>`; if
+  refresh fails, re-login.
 
 `mcpal auth status <ref>` shows what's stored.
 
-## "transport error"
+## E0005 — transport error
 
-E0005. The server didn't even start responding.
+No response from the server.
 
-- For HTTP: verify with `curl -I <url>` that you can reach it.
-- For stdio: confirm the command runs standalone. `npx -y` first runs
-  download a package on a cold cache; takes 10–60s. Subsequent runs are
-  fast.
-- Run with `-v` (or `-vv`) for the tracing log of the request.
+- HTTP: verify with `curl -I <url>` that the host is reachable.
+- stdio: confirm the command runs standalone. `npx -y` on a cold cache
+  installs the package (10–60s); subsequent runs complete in <5s.
+- Re-run with `-v` (or `-vv`) for the request trace.
+- `mcpal server test <ref>` is the smallest reproducer.
 
-## "server error" — the server said no
+## E0006 — server-returned error
 
-E0006 = a well-formed JSON-RPC error from the server. Common causes:
+A well-formed JSON-RPC error from the server.
 
-- The tool/resource/prompt name is wrong. Check
+- The tool, resource, or prompt name is wrong. Check
   `mcpal tool list <ref>`.
 - The arguments don't match `inputSchema`. Verify with
-  `mcpal tool describe <ref> <name>` and re-build with
+  `mcpal tool describe <ref> <name>` and rebuild with
   `mcpal tool template <ref> <name>`.
 
-## "request timed out"
+## E0007 — request timed out
 
-E0007. Usually the first run of `npx -y @some-pkg` doing a cold install.
-Retry — subsequent runs hit the npx cache and complete in <5s.
+Triggered when no response arrives within the deadline. First `npx -y`
+runs commonly hit this on a cold cache. Retry; subsequent runs hit the
+cache and complete in <5s. Also check the server isn't waiting on
+stdin.
 
-## "not yet supported"
+## E0008 — not yet supported
 
-E0008. The MCP feature you're hitting isn't wired in mcpal yet. The
-`mcpal raw <ref> <method> --params <...>` escape hatch lets you send the
-JSON-RPC directly while we wait.
+The MCP feature isn't wired in mcpal yet. Use
+`mcpal raw <ref> <method> --params <…>` to send the JSON-RPC directly.
 
-## "query: …" — JMESPath errors
-
-E0009. Your `--query` expression didn't compile or returned an error.
+## E0009 — JMESPath errors
 
 ```
 error[E0009]: query: search: …
@@ -78,14 +76,13 @@ help: preview without the filter to inspect the shape first
 Print the unfiltered response first to see the shape:
 
 ```bash
-mcpal --output json tool list <ref>     # without --query
-# then layer in the query
+mcpal --output json tool list <ref>
 mcpal --query '[].name' tool list <ref>
 ```
 
-## "JSON payload didn't parse"
+## E0010 — JSON payload didn't parse
 
-E0010. Shell quoting issues are the #1 cause:
+Shell quoting is the common cause:
 
 ```bash
 # wrong: shell strips the inner quotes
@@ -95,13 +92,12 @@ mcpal raw ev tools/call --params {"name":"echo"}
 mcpal raw ev tools/call --params '{"name":"echo","arguments":{"message":"hi"}}'
 ```
 
-Use `mcpal tool template <ref> <name>` to get a known-good skeleton, or
-use `--cli-input-json @file.json`.
+Use `mcpal tool template <ref> <name>` for a known-good skeleton, or
+`--cli-input-json @file.json`.
 
-## ANSI / weird terminal output
+## Spawned server stderr is hidden
 
-Spawned stdio servers print to stderr by default — and that stderr is
-silenced (sent to `/dev/null`). If you want to see it, set:
+Spawned stdio servers' stderr is redirected to `/dev/null`. To see it:
 
 ```bash
 MCPAL_CHILD_STDERR=inherit mcpal tool call <ref> …
@@ -109,23 +105,16 @@ MCPAL_CHILD_STDERR=inherit mcpal tool call <ref> …
 
 ## Keyring failures on Linux
 
-If `mcpal doctor` reports `keyring round-trip failed`, your session may
-not have a running Secret Service daemon. Install `gnome-keyring` or
-`kwallet`, or use `MCPAL_BEARER=…` as a one-shot env override.
-
-## "no Secret Service / D-Bus running"
-
-Same fix as above. Or in unattended environments (CI, containers), skip
-keyring entirely with `MCPAL_BEARER`.
+If `mcpal doctor` reports `keyring round-trip failed`, the session has
+no running Secret Service daemon. Install `gnome-keyring` or `kwallet`.
+In CI or containers, skip the keyring entirely with `MCPAL_BEARER=…`.
 
 ## Filing a bug
-
-Paste the output of:
 
 ```bash
 mcpal --version
 mcpal --output json doctor
 ```
 
-Plus the failing command and its `-vv` trace output. The
-`error[E####]` prefix is stable; please quote it verbatim.
+Include the failing command and its `-vv` trace. The `error[E####]`
+prefix is stable; quote it verbatim.

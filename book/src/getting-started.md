@@ -1,7 +1,6 @@
 # Getting started
 
-A 60-second tour. Replace `npx` with whatever spawn command works on your
-machine.
+Replace `npx` with whatever command spawns servers on your machine.
 
 ## Install
 
@@ -10,17 +9,16 @@ cargo install --path crates/mcpal-cli
 mcpal --version
 ```
 
-Prebuilt binaries land at GitHub Releases once the first tag ships.
+Prebuilt binaries will be published to GitHub Releases on the first
+tagged release.
 
-## 1. Talk to the reference server
+## Talk to the reference server
 
 ```bash
 mcpal server add ev \
   --stdio npx --arg -y --arg @modelcontextprotocol/server-everything
 mcpal server test ev
 ```
-
-Expected output:
 
 ```yaml
 ref: ev
@@ -29,11 +27,10 @@ server:
   name: mcp-servers/everything
   version: 2.0.0
 peerInfo:
-  protocolVersion: 2025-11-25
-  …
+  protocolVersion: …
 ```
 
-## 2. List + describe + call tools
+## List, describe, call
 
 ```bash
 mcpal tool list ev
@@ -41,8 +38,8 @@ mcpal tool describe ev echo
 mcpal tool call ev echo --message hi
 ```
 
-The compact `tool list` returns just `{name, description, required}`.
-For the full schema use `tool describe`.
+`tool list` returns `{name, description, required}`. Use `tool describe`
+for the full schema.
 
 ```yaml
 content:
@@ -50,33 +47,34 @@ content:
   text: 'Echo: hi'
 ```
 
-## 3. Discover what other clients already have
+## Discover
 
 ```bash
 mcpal discover
 mcpal server list --all
 ```
 
-If you've configured servers in Claude Code, Cursor, opencode, etc.,
-they show up — usable by `<source>:<name>`:
+If servers are configured in Claude Code, Cursor, opencode, or any of
+the other supported clients, they show up. Call them with
+`<source>:<name>`:
 
 ```bash
 mcpal tool list cursor:linear
 ```
 
-## 4. Pipe results into jq
+## Pipe through jq
 
 ```bash
 mcpal --output json tool list ev | jq -r '.[].name'
 ```
 
-Or skip jq with `--query` (JMESPath):
+Or skip `jq` with `--query`:
 
 ```bash
 mcpal --query '[].name' tool list ev
 ```
 
-## 5. Auth
+## Auth
 
 Bearer:
 
@@ -88,22 +86,20 @@ mcpal tool list github
 OAuth 2.1:
 
 ```bash
-mcpal server add notion --http https://mcp.notion.com/v1 --auth oauth
+mcpal server add notion --http https://mcp.notion.com/v1
 mcpal auth login notion --oauth
 mcpal tool list notion
 ```
 
-Token storage is the OS keyring, never the TOML config.
+Tokens go to the OS keyring, not the TOML config.
 
-## 6. Sanity check
-
-If anything looks odd:
+## Health check
 
 ```bash
 mcpal doctor
 ```
 
-If you hit an error, the rustc-style block tells you what to fix:
+Errors render in rustc style:
 
 ```
 error[E0001]: server 'foo' not found …
@@ -112,5 +108,4 @@ help: run `mcpal discover` …
 For more information about this error, try `mcpal explain E0001`.
 ```
 
-That's the whole tour. Recipes for specific tasks live in
-[Recipes](./recipes.md).
+Recipes are in [Recipes](./recipes.md).
