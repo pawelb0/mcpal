@@ -138,11 +138,13 @@ pub enum Command {
         action: PromptAction,
     },
 
-    /// Send an arbitrary JSON-RPC request. (Placeholder — lands with M3+.)
+    /// Send an arbitrary JSON-RPC request. Escape hatch for MCP methods
+    /// without a dedicated subcommand. `params` accepts inline JSON,
+    /// `@file.json`, or `-` for stdin.
     Raw {
         reference: String,
         method: String,
-        /// Inline params, `@file.json`, or `-` for stdin.
+        /// Params payload: inline JSON, `@path/to/file.json`, or `-` for stdin.
         #[arg(long)]
         params: Option<String>,
     },

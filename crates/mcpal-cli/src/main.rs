@@ -64,7 +64,11 @@ async fn dispatch(cli: Cli) -> Result<()> {
         Command::Tool { action } => commands::tool::run(action, &ctx).await,
         Command::Resource { action } => commands::resource::run(action, &ctx).await,
         Command::Prompt { action } => commands::prompt::run(action, &ctx).await,
-        Command::Raw { .. } => commands::raw::run(),
+        Command::Raw {
+            reference,
+            method,
+            params,
+        } => commands::raw::run(&reference, &method, params.as_deref(), &ctx).await,
         Command::Completion { shell } => commands::completion::run(shell),
         Command::Discover { source } => commands::discover::run(source.as_deref(), &ctx),
         Command::Auth { action } => commands::auth::run(action, &ctx).await,
