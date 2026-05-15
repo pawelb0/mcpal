@@ -76,6 +76,12 @@ pub struct Cli {
     #[arg(long = "root", value_name = "PATH", global = true, num_args = 1)]
     pub roots: Vec<String>,
 
+    /// Read a Claude/Cursor-style `mcp.json` and merge its servers into the
+    /// session config without writing to disk. Useful for `mcpal --mcp-json
+    /// ./mcp.json tool list <name>` against configs your team already has.
+    #[arg(long, value_name = "PATH", global = true)]
+    pub mcp_json: Option<PathBuf>,
+
     /// JMESPath expression applied to the response before output (AWS-CLI
     /// `--query` semantics). Drops everything that doesn't match. Example:
     /// `mcpal --query 'content[0].text' tool call ev echo --message hi`.

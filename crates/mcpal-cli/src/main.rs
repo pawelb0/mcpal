@@ -4,6 +4,7 @@ mod config;
 mod exit;
 mod keyring;
 mod kv;
+mod mcp_json;
 mod oauth;
 mod resolver;
 mod runtime;
@@ -52,7 +53,11 @@ fn run(cli: Cli) -> Result<()> {
 
 async fn dispatch(cli: Cli) -> Result<()> {
     let path = cli.config.unwrap_or_else(config::default_path);
-    let cfg = Config::load(&path)?;
+    let mut cfg = Config::load(&path)?;
+    if let Some(mcp_json) = cli.mcp_json.as_deref() {
+        let extra = mcp_json::load(mcp_json)?;
+        cfg.server.extend(extra);
+    }
     let format = Format::resolve(cli.output.map(Into::into));
     let handler_opts = HandlerOptions {
         roots: cli.roots,
