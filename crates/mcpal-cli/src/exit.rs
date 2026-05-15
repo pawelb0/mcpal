@@ -125,7 +125,7 @@ pub fn classify(err: &anyhow::Error) -> Diagnostic {
             &[
                 "retry, the server may have been slow",
                 "for stdio servers, the initial `npx -y` install can take 30s+ on a cold cache",
-                "raise the budget with `--timeout <SECS>` (default: unlimited)",
+                "with `--timeout`, raise the value (default: no deadline)",
             ],
         );
     }

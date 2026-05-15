@@ -57,8 +57,8 @@ mcpal server test ev
 mcpal server test ev --full          # also enumerates capabilities
 ```
 
-Tokens after `--` are the command and its args (Claude Code / mcptools
-style). The older `--stdio <cmd> --arg <a> --arg <b>` form still works.
+Tokens after `--` are the command and its args. The older `--stdio
+<cmd> --arg <a> --arg <b>` form still works.
 
 ### Add a remote HTTP server
 
@@ -153,7 +153,7 @@ done
 | 5 | auth expired | `mcpal auth refresh <ref>` |
 | 6 | transport | network or stdio failure |
 | 7 | server error | check args vs `tool describe` |
-| 8 | timed out | retry; raise `--timeout` |
+| 8 | timed out | retry; with `--timeout`, raise the value |
 | 130 | interrupted (Ctrl-C) | — |
 
 Each error renders with a stable `E####` code:

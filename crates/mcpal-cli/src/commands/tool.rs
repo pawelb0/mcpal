@@ -154,35 +154,45 @@ fn build_arguments(
 ) -> Result<Map<String, Value>> {
     let mut out = Map::new();
 
-    for spec in [cli_input_json, params].into_iter().flatten() {
-        let (text, source) = read_spec(spec, /* allow_inline = */ Some(spec) == params)?;
+    if let Some(spec) = cli_input_json {
+        let (text, source) = read_spec(spec, BareIs::Path)?;
+        merge_object(&mut out, &text, &source)?;
+    }
+    if let Some(spec) = params {
+        let (text, source) = read_spec(spec, BareIs::Inline)?;
         merge_object(&mut out, &text, &source)?;
     }
     out.extend(kv::parse_flag_args(flag_args.iter())?);
     Ok(out)
 }
 
-/// Read a `@path`, `-` (stdin), bare path, or inline JSON spec.
-/// `--params` accepts all four; `--cli-input-json` accepts the first three.
-fn read_spec(spec: &str, allow_inline: bool) -> Result<(String, String)> {
+/// What a bare (no `@`, no `-`) value means for a given flag.
+enum BareIs {
+    Path,
+    Inline,
+}
+
+/// `-` reads stdin, `@path` reads a file, everything else depends on the flag.
+fn read_spec(spec: &str, bare: BareIs) -> Result<(String, String)> {
     if spec == "-" {
         let mut buf = String::new();
         std::io::stdin()
             .read_to_string(&mut buf)
             .context("read stdin")?;
-        Ok((buf, "stdin".into()))
-    } else if let Some(path) = spec.strip_prefix('@') {
-        Ok((
+        return Ok((buf, "stdin".into()));
+    }
+    if let Some(path) = spec.strip_prefix('@') {
+        return Ok((
             fs::read_to_string(path).with_context(|| format!("read {path}"))?,
             path.into(),
-        ))
-    } else if allow_inline && spec.trim_start().starts_with(['{', '[']) {
-        Ok((spec.into(), "--params".into()))
-    } else {
-        Ok((
+        ));
+    }
+    match bare {
+        BareIs::Path => Ok((
             fs::read_to_string(spec).with_context(|| format!("read {spec}"))?,
             spec.into(),
-        ))
+        )),
+        BareIs::Inline => Ok((spec.into(), "--params".into())),
     }
 }
 
