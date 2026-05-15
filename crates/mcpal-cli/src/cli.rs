@@ -3,11 +3,25 @@ use std::path::PathBuf;
 use clap::{ArgAction, Parser, Subcommand, ValueEnum};
 use mcpal_output::Format;
 
+pub const EXIT_CODES_HELP: &str = "\
+Exit codes:
+  0   success
+  1   generic error
+  2   usage / invalid arguments
+  3   server reference not found (try `mcpal discover` or `mcpal server list`)
+  4   auth required (run `mcpal auth login <ref>` or `--oauth`)
+  5   auth expired (run `mcpal auth refresh <ref>`)
+  6   transport error (server unreachable / pipe broken)
+  7   server returned a JSON-RPC error
+  8   request timed out
+";
+
 #[derive(Parser, Debug)]
 #[command(
     name = "mcpal",
     version,
     about = "CLI for the Model Context Protocol — like `aws` but for MCP",
+    after_help = EXIT_CODES_HELP,
     long_about = "\
 mcpal is a command-line client for the Model Context Protocol.
 

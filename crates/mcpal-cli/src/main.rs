@@ -1,6 +1,7 @@
 mod cli;
 mod commands;
 mod config;
+mod exit;
 mod keyring;
 mod kv;
 mod oauth;
@@ -24,9 +25,12 @@ fn main() {
     let code = match run(cli) {
         Ok(()) => 0,
         Err(err) => {
+            let classified = exit::classify(&err);
             eprintln!("error: {err:#}");
-            err.downcast_ref::<mcpal_core::Error>()
-                .map_or(1, mcpal_core::Error::exit_code)
+            if let Some(hint) = classified.hint {
+                eprintln!("hint: {hint}");
+            }
+            classified.code
         }
     };
     std::process::exit(code);
