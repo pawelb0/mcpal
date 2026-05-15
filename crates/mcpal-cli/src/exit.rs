@@ -3,6 +3,7 @@
 //! expand into a longer note.
 
 use mcpal_core::Error as CoreError;
+use mcpal_output::Error as OutputError;
 
 #[derive(Debug)]
 pub struct Diagnostic {
@@ -29,6 +30,19 @@ impl Diagnostic {
 }
 
 pub fn classify(err: &anyhow::Error) -> Diagnostic {
+    if let Some(OutputError::Query(msg)) = err.downcast_ref::<OutputError>() {
+        return Diagnostic::build(
+            2,
+            "E0009",
+            format!("query: {msg}"),
+            &[
+                "JMESPath syntax — see https://jmespath.org/tutorial.html",
+                "common: `.field` projects, `[]` flattens, `[?cond]` filters",
+                "preview without the filter to inspect the shape first",
+            ],
+        );
+    }
+
     if let Some(core) = err.downcast_ref::<CoreError>() {
         return match core {
             CoreError::Io(e) => Diagnostic::build(
@@ -128,7 +142,79 @@ pub fn classify(err: &anyhow::Error) -> Diagnostic {
             ],
         );
     }
+    if s.contains("parse json from") || s.contains("parse params as json") {
+        return Diagnostic::build(
+            2,
+            "E0010",
+            err.to_string(),
+            &[
+                "the payload isn't valid JSON; check for missing quotes or trailing commas",
+                "`mcpal tool template <ref> <name>` prints a known-good skeleton you can pipe in",
+                "for inline params, mind your shell's quoting: --params '{\"k\":\"v\"}'",
+            ],
+        );
+    }
     Diagnostic::build(1, "E0000", err.to_string(), &[])
+}
+
+/// Render a clap parse error in rustc style. Returns the Diagnostic plus
+/// the rendered clap usage block (so users still see the full help on
+/// MissingSubcommand / DisplayHelp / DisplayVersion).
+pub fn from_clap(err: &clap::Error) -> Option<(Diagnostic, String)> {
+    use clap::error::ErrorKind as K;
+    let kind = err.kind();
+    let raw = err.render().to_string();
+    let title = first_line(&raw).to_string();
+    let (error_code, hints): (&'static str, &[&'static str]) = match kind {
+        K::DisplayHelp | K::DisplayVersion | K::DisplayHelpOnMissingArgumentOrSubcommand => {
+            return None;
+        }
+        K::UnknownArgument | K::InvalidSubcommand => (
+            "E0002",
+            &[
+                "run `mcpal --help` (or `mcpal <subcommand> --help`) for the full grammar",
+                "for arbitrary JSON-RPC methods use `mcpal raw <ref> <method> --params <...>`",
+            ],
+        ),
+        K::MissingRequiredArgument | K::MissingSubcommand => (
+            "E0002",
+            &[
+                "see the usage block above; positional args must come in order",
+                "run `mcpal <subcommand> --help` to see the full grammar",
+            ],
+        ),
+        K::InvalidValue | K::ValueValidation => (
+            "E0002",
+            &[
+                "the value didn't match the expected format or enum",
+                "see the `[possible values: …]` hint above",
+            ],
+        ),
+        K::ArgumentConflict => (
+            "E0002",
+            &[
+                "two mutually exclusive flags were both set",
+                "drop one (e.g. `--stdio` vs `--http`, `--bearer` vs `--oauth`)",
+            ],
+        ),
+        K::TooManyValues | K::TooFewValues | K::WrongNumberOfValues => (
+            "E0002",
+            &[
+                "this flag takes a fixed number of values per occurrence",
+                "repeat the flag for multiple values: `--arg foo --arg bar`",
+            ],
+        ),
+        K::Io | K::Format => ("E0000", &[]),
+        _ => ("E0002", &["run `mcpal --help`"]),
+    };
+    Some((Diagnostic::build(2, error_code, title, hints), raw))
+}
+
+fn first_line(s: &str) -> &str {
+    s.lines()
+        .find(|l| !l.trim().is_empty())
+        .unwrap_or(s)
+        .trim_start_matches("error: ")
 }
 
 /// Format a diagnostic in the rustc-style block:

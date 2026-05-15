@@ -19,7 +19,17 @@ use config::Config;
 use runtime::Ctx;
 
 fn main() {
-    let cli = Cli::parse();
+    let cli = match Cli::try_parse() {
+        Ok(c) => c,
+        Err(e) => match exit::from_clap(&e) {
+            Some((d, usage)) => {
+                eprint!("{usage}");
+                eprintln!("{}", exit::render(&d));
+                std::process::exit(d.code);
+            }
+            None => e.exit(),
+        },
+    };
     init_tracing(cli.verbosity);
 
     let code = match run(cli) {
