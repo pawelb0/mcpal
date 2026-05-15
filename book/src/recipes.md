@@ -21,14 +21,21 @@ disk.
 ## Call a tool with a JSON arg body
 
 ```bash
-echo '{"message":"hi","count":3}' \
-  | mcpal tool call ev some-tool --cli-input-json -
+mcpal tool call ev some-tool --params '{"message":"hi","count":3}'
 ```
 
-From a file:
+From stdin or file:
 
 ```bash
-mcpal tool call ev some-tool --cli-input-json @args.json
+echo '{"message":"hi"}' | mcpal tool call ev some-tool --params -
+mcpal tool call ev some-tool --params @args.json
+```
+
+`--cli-input-json` is the same flag with the AWS-CLI name. Mix `--params`
+with extra `--key value` overrides:
+
+```bash
+mcpal tool call ev some-tool --params @base.json --message override
 ```
 
 Or generate a skeleton:
