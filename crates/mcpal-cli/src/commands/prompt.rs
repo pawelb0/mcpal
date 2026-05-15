@@ -1,6 +1,7 @@
 use anyhow::Result;
 use mcpal_core::rmcp::model::GetPromptRequestParams;
 use mcpal_output::{emit_list, emit_one};
+use serde::Serialize;
 
 use crate::cli::PromptAction;
 use crate::kv;
@@ -17,12 +18,34 @@ pub async fn run(action: PromptAction, ctx: &Ctx) -> Result<()> {
     }
 }
 
+#[derive(Serialize)]
+struct PromptSummary<'a> {
+    name: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<&'a str>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    required: Vec<&'a str>,
+}
+
 async fn list(reference: &str, ctx: &Ctx) -> Result<()> {
     let (_, client) = ctx.open(reference).await?;
     let prompts = client.list_all_prompts().await?;
-    emit_list(ctx.format, &prompts, &["name", "description"], |p| {
-        vec![p.name.clone(), p.description.clone().unwrap_or_default()]
-    })?;
+    let summaries: Vec<PromptSummary<'_>> = prompts
+        .iter()
+        .map(|p| PromptSummary {
+            name: &p.name,
+            description: p.description.as_deref(),
+            required: p
+                .arguments
+                .as_deref()
+                .unwrap_or(&[])
+                .iter()
+                .filter(|a| a.required.unwrap_or(false))
+                .map(|a| a.name.as_str())
+                .collect(),
+        })
+        .collect();
+    emit_list(ctx.format, &summaries, &[], |_| Vec::new())?;
     Ok(())
 }
 

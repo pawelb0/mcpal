@@ -1,6 +1,7 @@
 use anyhow::Result;
 use mcpal_core::rmcp::model::ReadResourceRequestParams;
 use mcpal_output::{emit_list, emit_one};
+use serde::Serialize;
 
 use crate::cli::{ResourceAction, ResourceTemplateAction};
 use crate::runtime::Ctx;
@@ -15,16 +16,34 @@ pub async fn run(action: ResourceAction, ctx: &Ctx) -> Result<()> {
     }
 }
 
+#[derive(Serialize)]
+struct ResourceSummary<'a> {
+    uri: &'a str,
+    name: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mime: Option<&'a str>,
+}
+
+#[derive(Serialize)]
+struct TemplateSummary<'a> {
+    uri_template: &'a str,
+    name: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mime: Option<&'a str>,
+}
+
 async fn list(reference: &str, ctx: &Ctx) -> Result<()> {
     let (_, client) = ctx.open(reference).await?;
     let resources = client.list_all_resources().await?;
-    emit_list(ctx.format, &resources, &["uri", "name", "mime"], |r| {
-        vec![
-            r.uri.clone(),
-            r.name.clone(),
-            r.mime_type.clone().unwrap_or_default(),
-        ]
-    })?;
+    let summaries: Vec<ResourceSummary<'_>> = resources
+        .iter()
+        .map(|r| ResourceSummary {
+            uri: &r.uri,
+            name: &r.name,
+            mime: r.mime_type.as_deref(),
+        })
+        .collect();
+    emit_list(ctx.format, &summaries, &[], |_| Vec::new())?;
     Ok(())
 }
 
@@ -40,17 +59,14 @@ async fn read(reference: &str, uri: &str, ctx: &Ctx) -> Result<()> {
 async fn templates(reference: &str, ctx: &Ctx) -> Result<()> {
     let (_, client) = ctx.open(reference).await?;
     let templates = client.list_all_resource_templates().await?;
-    emit_list(
-        ctx.format,
-        &templates,
-        &["uri_template", "name", "mime"],
-        |t| {
-            vec![
-                t.uri_template.clone(),
-                t.name.clone(),
-                t.mime_type.clone().unwrap_or_default(),
-            ]
-        },
-    )?;
+    let summaries: Vec<TemplateSummary<'_>> = templates
+        .iter()
+        .map(|t| TemplateSummary {
+            uri_template: &t.uri_template,
+            name: &t.name,
+            mime: t.mime_type.as_deref(),
+        })
+        .collect();
+    emit_list(ctx.format, &summaries, &[], |_| Vec::new())?;
     Ok(())
 }

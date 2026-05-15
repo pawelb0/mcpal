@@ -4,6 +4,7 @@ use std::io::Read;
 use anyhow::{Context, Result, bail};
 use mcpal_core::rmcp::model::CallToolRequestParams;
 use mcpal_output::{emit_list, emit_one};
+use serde::Serialize;
 use serde_json::{Map, Value};
 
 use crate::cli::ToolAction;
@@ -23,15 +24,27 @@ pub async fn run(action: ToolAction, ctx: &Ctx) -> Result<()> {
     }
 }
 
+#[derive(Serialize)]
+struct ToolSummary<'a> {
+    name: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<&'a str>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    required: Vec<String>,
+}
+
 async fn list(reference: &str, ctx: &Ctx) -> Result<()> {
     let (_, client) = ctx.open(reference).await?;
     let tools = client.list_all_tools().await?;
-    emit_list(ctx.format, &tools, &["name", "description"], |t| {
-        vec![
-            t.name.to_string(),
-            t.description.as_deref().unwrap_or("").into(),
-        ]
-    })?;
+    let summaries: Vec<ToolSummary<'_>> = tools
+        .iter()
+        .map(|t| ToolSummary {
+            name: t.name.as_ref(),
+            description: t.description.as_deref(),
+            required: required_fields(&t.input_schema),
+        })
+        .collect();
+    emit_list(ctx.format, &summaries, &[], |_| Vec::new())?;
     Ok(())
 }
 
@@ -63,6 +76,18 @@ async fn call(
     let result = client.call_tool(params).await.context("tools/call")?;
     emit_one(ctx.format, &result)?;
     Ok(())
+}
+
+fn required_fields(schema: &Map<String, Value>) -> Vec<String> {
+    schema
+        .get("required")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn build_arguments(
