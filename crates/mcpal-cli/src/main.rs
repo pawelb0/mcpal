@@ -60,7 +60,6 @@ async fn dispatch(cli: Cli) -> Result<()> {
         Command::Tool { action } => commands::tool::run(action, &ctx).await,
         Command::Resource { action } => commands::resource::run(action, &ctx).await,
         Command::Prompt { action } => commands::prompt::run(action, &ctx).await,
-        Command::Ping { reference } => commands::ping::run(&reference, &ctx).await,
         Command::Raw { .. } => commands::raw::run(),
         Command::Completion { shell } => commands::completion::run(shell),
         Command::Discover { source } => commands::discover::run(source.as_deref(), &ctx),

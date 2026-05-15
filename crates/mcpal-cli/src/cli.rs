@@ -21,6 +21,7 @@ to re-enter them.
 Common workflows:
   mcpal discover                        scan all clients for configured servers
   mcpal server list --all               see mcpal-owned + discovered together
+  mcpal server test <ref>               verify a server speaks MCP
   mcpal tool list <ref>                 compact list of tools on a server
   mcpal tool describe <ref> <name>      full schema + example for one tool
   mcpal tool call <ref> <name> [--key value ...]
@@ -117,12 +118,6 @@ pub enum Command {
         action: PromptAction,
     },
 
-    /// Round-trip MCP handshake against a server and print serverInfo.
-    Ping {
-        /// Server reference (alias, URL, `<source>:<name>`, or path to JSON spec).
-        reference: String,
-    },
-
     /// Send an arbitrary JSON-RPC request. (Placeholder — lands with M3+.)
     Raw {
         reference: String,
@@ -210,7 +205,8 @@ pub enum ServerAction {
     Remove { alias: String },
     /// Copy a discovered server into mcpal config so you can override env/auth/alias.
     Import(ServerImportArgs),
-    /// Open + initialize a connection to verify the server speaks MCP.
+    /// Open + initialize a connection and print serverInfo. Acts as a
+    /// liveness check (the MCP handshake fails if the server is broken).
     Test { reference: String },
 }
 

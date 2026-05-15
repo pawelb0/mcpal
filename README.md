@@ -165,13 +165,7 @@ mcpal prompt get everything simple-prompt
 mcpal prompt get everything args-prompt --city Dallas --state Texas
 ```
 
-### 6. Ping
-
-```bash
-mcpal ping everything
-```
-
-### 7. Discover servers from other clients
+### 6. Discover servers from other clients
 
 Scan every supported client on your machine:
 
@@ -219,7 +213,7 @@ mcpal server list --all
 mcpal server list --discovered --source claude-code
 ```
 
-### 8. Pipe into other tools
+### 7. Pipe into other tools
 
 YAML is the default for humans. Add `--output json` whenever you want machine-readable output:
 
@@ -236,7 +230,7 @@ for q in rust go python; do
 done
 ```
 
-### 9. Auth lifecycle
+### 8. Auth lifecycle
 
 ```bash
 mcpal auth login github --bearer ghp_xxx     # bearer → keyring
@@ -252,7 +246,7 @@ One-shot env override (no keyring write):
 MCPAL_BEARER=ghp_xxx mcpal tool list github
 ```
 
-### 10. Server-initiated requests
+### 9. Server-initiated requests
 
 Some servers ask the client for things during a tool call. mcpal handles them by default:
 
