@@ -9,3 +9,4 @@ pub mod raw;
 pub mod resource;
 pub mod server;
 pub mod tool;
+pub mod watch;

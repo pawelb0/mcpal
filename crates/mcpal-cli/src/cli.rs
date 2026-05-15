@@ -176,6 +176,11 @@ pub enum Command {
         #[command(subcommand)]
         action: LoggingAction,
     },
+
+    /// Open a session and tail every server-initiated notification
+    /// (progress, log, resource-updated, list-changed) as YAML/JSON
+    /// documents until Ctrl-C.
+    Watch { reference: String },
 }
 
 #[derive(Subcommand, Debug)]

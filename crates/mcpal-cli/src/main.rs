@@ -54,6 +54,7 @@ async fn dispatch(cli: Cli) -> Result<()> {
             .sampling_handler
             .as_deref()
             .map(|s| s.split_whitespace().map(String::from).collect()),
+        events: None,
     };
     let ctx = Ctx::new(cfg, format, cli.query, path, handler_opts);
 
@@ -73,6 +74,7 @@ async fn dispatch(cli: Cli) -> Result<()> {
         Command::Discover { source } => commands::discover::run(source.as_deref(), &ctx),
         Command::Auth { action } => commands::auth::run(action, &ctx).await,
         Command::Logging { action } => commands::logging::run(action, &ctx).await,
+        Command::Watch { reference } => commands::watch::run(&reference, &ctx).await,
     }
 }
 

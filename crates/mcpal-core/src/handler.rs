@@ -3,14 +3,16 @@ use std::io::{BufRead, IsTerminal, Write};
 use rmcp::ClientHandler;
 use rmcp::RoleClient;
 use rmcp::model::{
-    CreateElicitationRequestParams, CreateElicitationResult, CreateMessageRequestParams,
-    CreateMessageResult, ElicitationAction, ErrorData, ListRootsResult, LoggingLevel,
-    LoggingMessageNotificationParam, Root,
+    CancelledNotificationParam, CreateElicitationRequestParams, CreateElicitationResult,
+    CreateMessageRequestParams, CreateMessageResult, ElicitationAction, ErrorData, ListRootsResult,
+    LoggingLevel, LoggingMessageNotificationParam, ProgressNotificationParam,
+    ResourceUpdatedNotificationParam, Root,
 };
 use rmcp::service::{NotificationContext, RequestContext};
-use serde_json::json;
+use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
+use tokio::sync::mpsc::UnboundedSender;
 
 /// Client-side hooks for server-initiated traffic.
 ///
@@ -26,6 +28,7 @@ pub struct Handler {
     roots: Vec<String>,
     interactive: bool,
     sampling_handler: Option<Vec<String>>,
+    events: Option<UnboundedSender<Value>>,
 }
 
 /// Bundle of client-side defaults consumed by `Handler` and `Ctx`. Grouping
@@ -35,6 +38,9 @@ pub struct HandlerOptions {
     pub roots: Vec<String>,
     pub interactive: bool,
     pub sampling_handler: Option<Vec<String>>,
+    /// If set, the handler forwards every server-initiated notification it
+    /// observes as a JSON `{kind, …}` document on this channel.
+    pub events: Option<UnboundedSender<Value>>,
 }
 
 impl Handler {
@@ -43,6 +49,13 @@ impl Handler {
             roots: opts.roots,
             interactive: opts.interactive,
             sampling_handler: opts.sampling_handler.filter(|v| !v.is_empty()),
+            events: opts.events,
+        }
+    }
+
+    fn emit(&self, value: Value) {
+        if let Some(tx) = &self.events {
+            let _ = tx.send(value);
         }
     }
 }
@@ -113,6 +126,12 @@ impl ClientHandler for Handler {
     ) {
         let logger = params.logger.as_deref().unwrap_or("server");
         let data = serde_json::to_string(&params.data).unwrap_or_default();
+        self.emit(json!({
+            "kind": "log",
+            "level": format!("{:?}", params.level).to_lowercase(),
+            "logger": logger,
+            "data": params.data,
+        }));
         match params.level {
             LoggingLevel::Debug => tracing::debug!(target: "mcpal::server", logger, %data),
             LoggingLevel::Info | LoggingLevel::Notice => {
@@ -126,6 +145,52 @@ impl ClientHandler for Handler {
                 tracing::error!(target: "mcpal::server", logger, %data);
             }
         }
+    }
+
+    async fn on_progress(
+        &self,
+        params: ProgressNotificationParam,
+        _ctx: NotificationContext<RoleClient>,
+    ) {
+        self.emit(json!({
+            "kind": "progress",
+            "token": params.progress_token,
+            "progress": params.progress,
+            "total": params.total,
+            "message": params.message,
+        }));
+    }
+
+    async fn on_resource_updated(
+        &self,
+        params: ResourceUpdatedNotificationParam,
+        _ctx: NotificationContext<RoleClient>,
+    ) {
+        self.emit(json!({ "kind": "resource_updated", "uri": params.uri }));
+    }
+
+    async fn on_resource_list_changed(&self, _ctx: NotificationContext<RoleClient>) {
+        self.emit(json!({ "kind": "resource_list_changed" }));
+    }
+
+    async fn on_tool_list_changed(&self, _ctx: NotificationContext<RoleClient>) {
+        self.emit(json!({ "kind": "tool_list_changed" }));
+    }
+
+    async fn on_prompt_list_changed(&self, _ctx: NotificationContext<RoleClient>) {
+        self.emit(json!({ "kind": "prompt_list_changed" }));
+    }
+
+    async fn on_cancelled(
+        &self,
+        params: CancelledNotificationParam,
+        _ctx: NotificationContext<RoleClient>,
+    ) {
+        self.emit(json!({
+            "kind": "cancelled",
+            "requestId": params.request_id,
+            "reason": params.reason,
+        }));
     }
 }
 
