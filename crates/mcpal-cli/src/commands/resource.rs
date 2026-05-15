@@ -1,7 +1,10 @@
 use anyhow::Result;
-use mcpal_core::rmcp::model::ReadResourceRequestParams;
+use mcpal_core::rmcp::model::{
+    ReadResourceRequestParams, SubscribeRequestParams, UnsubscribeRequestParams,
+};
 use mcpal_output::{emit_list, emit_one};
 use serde::Serialize;
+use serde_json::json;
 
 use crate::cli::{ResourceAction, ResourceTemplateAction};
 use crate::runtime::Ctx;
@@ -10,6 +13,8 @@ pub async fn run(action: ResourceAction, ctx: &Ctx) -> Result<()> {
     match action {
         ResourceAction::List { reference } => list(&reference, ctx).await,
         ResourceAction::Read { reference, uri } => read(&reference, &uri, ctx).await,
+        ResourceAction::Subscribe { reference, uri } => subscribe(&reference, &uri, ctx).await,
+        ResourceAction::Unsubscribe { reference, uri } => unsubscribe(&reference, &uri, ctx).await,
         ResourceAction::Template { action } => match action {
             ResourceTemplateAction::List { reference } => templates(&reference, ctx).await,
         },
@@ -53,6 +58,22 @@ async fn read(reference: &str, uri: &str, ctx: &Ctx) -> Result<()> {
         .read_resource(ReadResourceRequestParams::new(uri))
         .await?;
     emit_one(ctx.format, &result)?;
+    Ok(())
+}
+
+async fn subscribe(reference: &str, uri: &str, ctx: &Ctx) -> Result<()> {
+    let (_, client) = ctx.open(reference).await?;
+    client.subscribe(SubscribeRequestParams::new(uri)).await?;
+    emit_one(ctx.format, &json!({"ok": true, "subscribed": uri}))?;
+    Ok(())
+}
+
+async fn unsubscribe(reference: &str, uri: &str, ctx: &Ctx) -> Result<()> {
+    let (_, client) = ctx.open(reference).await?;
+    client
+        .unsubscribe(UnsubscribeRequestParams::new(uri))
+        .await?;
+    emit_one(ctx.format, &json!({"ok": true, "unsubscribed": uri}))?;
     Ok(())
 }
 

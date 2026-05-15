@@ -148,6 +148,51 @@ pub enum Command {
         #[command(subcommand)]
         action: AuthAction,
     },
+
+    /// Tell the server which log level to emit via `logging/setLevel`.
+    Logging {
+        #[command(subcommand)]
+        action: LoggingAction,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum LoggingAction {
+    /// Set the server-side logging verbosity. Level matches the MCP spec:
+    /// debug | info | notice | warning | error | critical | alert | emergency.
+    SetLevel {
+        reference: String,
+        #[arg(value_enum)]
+        level: LogLevel,
+    },
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum)]
+pub enum LogLevel {
+    Debug,
+    Info,
+    Notice,
+    Warning,
+    Error,
+    Critical,
+    Alert,
+    Emergency,
+}
+
+impl From<LogLevel> for mcpal_core::rmcp::model::LoggingLevel {
+    fn from(l: LogLevel) -> Self {
+        use mcpal_core::rmcp::model::LoggingLevel as L;
+        match l {
+            LogLevel::Debug => L::Debug,
+            LogLevel::Info => L::Info,
+            LogLevel::Notice => L::Notice,
+            LogLevel::Warning => L::Warning,
+            LogLevel::Error => L::Error,
+            LogLevel::Critical => L::Critical,
+            LogLevel::Alert => L::Alert,
+            LogLevel::Emergency => L::Emergency,
+        }
+    }
 }
 
 #[derive(Subcommand, Debug)]
@@ -294,6 +339,11 @@ pub enum ResourceAction {
     List { reference: String },
     /// Read a resource by URI.
     Read { reference: String, uri: String },
+    /// Subscribe to updates for one resource. Use `mcpal watch` (lands next)
+    /// to actually stream the resulting notifications.
+    Subscribe { reference: String, uri: String },
+    /// Cancel a prior subscription.
+    Unsubscribe { reference: String, uri: String },
     /// List resource templates.
     Template {
         #[command(subcommand)]

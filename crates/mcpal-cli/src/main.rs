@@ -64,6 +64,7 @@ async fn dispatch(cli: Cli) -> Result<()> {
         Command::Completion { shell } => commands::completion::run(shell),
         Command::Discover { source } => commands::discover::run(source.as_deref(), &ctx),
         Command::Auth { action } => commands::auth::run(action, &ctx).await,
+        Command::Logging { action } => commands::logging::run(action, &ctx).await,
     }
 }
 
