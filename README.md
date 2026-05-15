@@ -38,10 +38,10 @@ Three things, well.
 cargo install --path crates/mcpal-cli
 ```
 
-Prebuilt binaries: pending first tag. The `cargo-dist` workflow lands
-under `.github/workflows/release.yml`; once tagged it produces macOS
-(arm64 + x86_64), Linux (glibc + musl), Windows binaries, a Homebrew
-tap, and a `curl | sh` installer.
+Prebuilt binaries: pending first tag. The release workflow at
+`.github/workflows/release.yml` builds macOS (arm64 + x86_64), Linux
+(x86_64 GNU), and Windows binaries. Homebrew tap and `curl | sh`
+installer are tracked for a later milestone.
 
 ## 60-second tour
 
@@ -172,8 +172,8 @@ help: or add one: `mcpal server add <alias> --stdio <command>`
 For more information about this error, try `mcpal explain E0001`.
 ```
 
-Eleven codes today: E0000–E0011. `mcpal explain <code>` prints the
-long-form prose for each.
+Codes E0000–E0011 today. `mcpal explain <code>` prints the long-form
+prose for each.
 
 ### Sanity check
 
@@ -199,7 +199,7 @@ args = ["-y", "@modelcontextprotocol/server-everything"]
 [server.linear]
 transport = "http"
 url = "https://mcp.linear.app/sse"
-auth = "oauth"
+auth = { type = "oauth" }
 
 [server.notion]
 transport = "http"

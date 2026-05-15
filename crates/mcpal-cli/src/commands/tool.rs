@@ -154,32 +154,17 @@ fn build_arguments(
 ) -> Result<Map<String, Value>> {
     let mut out = Map::new();
 
-    if let Some(source) = cli_input_json {
-        let text = read_payload(source)?;
-        merge_object(&mut out, &text, source)?;
-    }
-    if let Some(spec) = params {
-        let (text, source) = read_params(spec)?;
+    for spec in [cli_input_json, params].into_iter().flatten() {
+        let (text, source) = read_spec(spec, /* allow_inline = */ Some(spec) == params)?;
         merge_object(&mut out, &text, &source)?;
     }
-
     out.extend(kv::parse_flag_args(flag_args.iter())?);
     Ok(out)
 }
 
-fn read_payload(source: &str) -> Result<String> {
-    if source == "-" {
-        let mut buf = String::new();
-        std::io::stdin()
-            .read_to_string(&mut buf)
-            .context("read stdin")?;
-        Ok(buf)
-    } else {
-        fs::read_to_string(source).with_context(|| format!("read {source}"))
-    }
-}
-
-fn read_params(spec: &str) -> Result<(String, String)> {
+/// Read a `@path`, `-` (stdin), bare path, or inline JSON spec.
+/// `--params` accepts all four; `--cli-input-json` accepts the first three.
+fn read_spec(spec: &str, allow_inline: bool) -> Result<(String, String)> {
     if spec == "-" {
         let mut buf = String::new();
         std::io::stdin()
@@ -189,10 +174,15 @@ fn read_params(spec: &str) -> Result<(String, String)> {
     } else if let Some(path) = spec.strip_prefix('@') {
         Ok((
             fs::read_to_string(path).with_context(|| format!("read {path}"))?,
-            path.to_string(),
+            path.into(),
         ))
+    } else if allow_inline && spec.trim_start().starts_with(['{', '[']) {
+        Ok((spec.into(), "--params".into()))
     } else {
-        Ok((spec.to_string(), "--params".into()))
+        Ok((
+            fs::read_to_string(spec).with_context(|| format!("read {spec}"))?,
+            spec.into(),
+        ))
     }
 }
 

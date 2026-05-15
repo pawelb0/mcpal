@@ -395,6 +395,41 @@ To fix:
 \n"
         }
 
+        "E0009" => {
+            "\
+E0009 — bad JMESPath query.
+
+`--query` couldn't compile your expression or it ran but returned an
+error. Common causes:
+
+  • unbalanced brackets or quotes (`tools[0` instead of `tools[0]`)
+  • trying to flatten a non-array (`foo[]` where `foo` is an object)
+  • a function call against a missing field
+
+To fix:
+  • run the same command without `--query` to inspect the actual shape
+  • cheat sheet: `field`, `field.subfield`, `arr[]`, `arr[0]`,
+    `arr[].field`, `arr[?field == 'x'].name`
+  • tutorial: https://jmespath.org/tutorial.html
+\n"
+        }
+
+        "E0010" => {
+            "\
+E0010 — JSON payload didn't parse.
+
+mcpal expected a JSON document and got something else. This happens
+with `mcpal raw --params <inline|@file|->` and
+`mcpal tool call --cli-input-json <file|->`.
+
+To fix:
+  • quote inline JSON for your shell:
+        mcpal raw ev tools/call --params '{\"name\":\"echo\"}'
+  • for files: `@/absolute/or/relative/path.json` (note the `@`)
+  • `mcpal tool template <ref> <name>` prints a known-good skeleton
+\n"
+        }
+
         "E0011" => {
             "\
 E0011 — interrupted by Ctrl-C.

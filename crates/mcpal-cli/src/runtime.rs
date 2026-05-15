@@ -46,19 +46,22 @@ impl Ctx {
     }
 
     /// Race a request future against `--timeout` and Ctrl-C. Returns the
-    /// future's output verbatim; cancellation paths become anyhow errors that
-    /// `exit::classify` maps to E0007 (timeout) and E0011 (interrupt).
+    /// future's output verbatim. A fired timeout becomes an `anyhow!` whose
+    /// message `exit::classify` matches as E0007; Ctrl-C becomes E0011.
     pub async fn under_deadline<F: Future>(&self, fut: F) -> Result<F::Output> {
-        let sleeper: Box<dyn Future<Output = ()> + Unpin + Send> = match self.timeout {
-            Some(secs) => Box::new(Box::pin(tokio::time::sleep(Duration::from_secs(secs)))),
-            None => Box::new(Box::pin(std::future::pending::<()>())),
+        let timeout = self.timeout;
+        let sleeper = async move {
+            match timeout {
+                Some(secs) => tokio::time::sleep(Duration::from_secs(secs)).await,
+                None => std::future::pending::<()>().await,
+            }
         };
-        tokio::pin!(fut);
+        tokio::pin!(fut, sleeper);
         tokio::select! {
             out = &mut fut => Ok(out),
-            _ = sleeper => Err(anyhow!(
+            _ = &mut sleeper => Err(anyhow!(
                 "request timed out after {}s",
-                self.timeout.unwrap_or_default()
+                timeout.expect("sleeper only fires when timeout is set"),
             )),
             _ = tokio::signal::ctrl_c() => Err(anyhow!("interrupted by ctrl-c")),
         }
