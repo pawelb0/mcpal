@@ -1,6 +1,5 @@
 use anyhow::Result;
 use mcpal_core::ServerSpec;
-use mcpal_output::emit_list;
 
 use crate::runtime::Ctx;
 
@@ -10,19 +9,7 @@ pub fn run(source: Option<&str>, ctx: &Ctx) -> Result<()> {
         Some(s) => all.iter().filter(|d| d.source == s).cloned().collect(),
         None => all.to_vec(),
     };
-    emit_list(
-        ctx.format,
-        &filtered,
-        &["source", "name", "scope", "detail"],
-        |s| {
-            vec![
-                s.source.into(),
-                s.name.clone(),
-                s.scope.to_string(),
-                describe_spec(&s.spec),
-            ]
-        },
-    )?;
+    ctx.render_list(&filtered)?;
     Ok(())
 }
 

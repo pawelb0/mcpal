@@ -76,6 +76,12 @@ pub struct Cli {
     #[arg(long = "root", value_name = "PATH", global = true, num_args = 1)]
     pub roots: Vec<String>,
 
+    /// JMESPath expression applied to the response before output (AWS-CLI
+    /// `--query` semantics). Drops everything that doesn't match. Example:
+    /// `mcpal --query 'content[0].text' tool call ev echo --message hi`.
+    #[arg(long, global = true, value_name = "JMESPATH")]
+    pub query: Option<String>,
+
     /// External program that handles `sampling/createMessage` requests.
     /// mcpal pipes the request JSON on stdin and reads a CreateMessageResult
     /// JSON from stdout. Use your shell's quoting for multi-arg commands.

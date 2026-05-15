@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 
 use anyhow::{Result, anyhow, bail};
 use mcpal_core::ServerSpec;
-use mcpal_output::{emit_list, emit_one};
 use serde::Serialize;
 use serde_json::json;
 
@@ -63,13 +62,13 @@ fn list(args: ServerListArgs, ctx: &Ctx) -> Result<()> {
         }
     }
 
-    emit_list(ctx.format, &rows, &[], |_| Vec::new())?;
+    ctx.render_list(&rows)?;
     Ok(())
 }
 
 fn show(reference: &str, ctx: &Ctx) -> Result<()> {
     let r = resolve(reference, ctx)?;
-    emit_one(ctx.format, &r.spec)?;
+    ctx.render_one(&r.spec)?;
     Ok(())
 }
 
@@ -139,14 +138,11 @@ fn import(args: ServerImportArgs, ctx: &Ctx) -> Result<()> {
 async fn test(reference: &str, ctx: &Ctx) -> Result<()> {
     let (r, client) = ctx.open(reference).await?;
     let p = probe(&client);
-    emit_one(
-        ctx.format,
-        &json!({
-            "ref": r.display,
-            "ok": true,
-            "server": { "name": p.name, "version": p.version },
-            "peerInfo": p.info,
-        }),
-    )?;
+    ctx.render_one(&json!({
+        "ref": r.display,
+        "ok": true,
+        "server": { "name": p.name, "version": p.version },
+        "peerInfo": p.info,
+    }))?;
     Ok(())
 }

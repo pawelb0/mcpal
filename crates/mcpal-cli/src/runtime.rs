@@ -4,7 +4,8 @@ use std::path::PathBuf;
 use anyhow::Result;
 use mcpal_core::{AuthSpec, Client, Handler, HandlerOptions, ServerSpec, connect};
 use mcpal_discovery::{DiscoveredServer, DiscoveryCtx, discover};
-use mcpal_output::Format;
+use mcpal_output::{Format, emit_list, emit_one};
+use serde::Serialize;
 use serde_json::Value;
 
 use crate::config::Config;
@@ -15,6 +16,7 @@ use crate::resolver::{ResolvedServer, resolve};
 pub struct Ctx {
     pub cfg: Config,
     pub format: Format,
+    pub query: Option<String>,
     pub config_path: PathBuf,
     pub handler_opts: HandlerOptions,
     discovered: OnceCell<Vec<DiscoveredServer>>,
@@ -24,16 +26,36 @@ impl Ctx {
     pub fn new(
         cfg: Config,
         format: Format,
+        query: Option<String>,
         config_path: PathBuf,
         handler_opts: HandlerOptions,
     ) -> Self {
         Self {
             cfg,
             format,
+            query,
             config_path,
             handler_opts,
             discovered: OnceCell::new(),
         }
+    }
+
+    pub fn render_one<T: Serialize>(&self, value: &T) -> Result<(), mcpal_output::Error> {
+        if let Some(q) = self.query.as_deref() {
+            let v = serde_json::to_value(value)?;
+            let filtered = mcpal_output::apply_query(v, Some(q))?;
+            return emit_one(self.format, &filtered);
+        }
+        emit_one(self.format, value)
+    }
+
+    pub fn render_list<T: Serialize>(&self, items: &[T]) -> Result<(), mcpal_output::Error> {
+        if let Some(q) = self.query.as_deref() {
+            let v = serde_json::to_value(items)?;
+            let filtered = mcpal_output::apply_query(v, Some(q))?;
+            return emit_one(self.format, &filtered);
+        }
+        emit_list(self.format, items, &[], |_| Vec::new())
     }
 
     pub fn discovered(&self) -> Result<&[DiscoveredServer]> {

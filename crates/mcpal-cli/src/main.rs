@@ -55,7 +55,7 @@ async fn dispatch(cli: Cli) -> Result<()> {
             .as_deref()
             .map(|s| s.split_whitespace().map(String::from).collect()),
     };
-    let ctx = Ctx::new(cfg, format, path, handler_opts);
+    let ctx = Ctx::new(cfg, format, cli.query, path, handler_opts);
 
     match cli.command {
         Command::Init => commands::init::run(&ctx.config_path),

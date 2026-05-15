@@ -2,7 +2,7 @@ use anyhow::Result;
 use mcpal_core::rmcp::model::{
     ReadResourceRequestParams, SubscribeRequestParams, UnsubscribeRequestParams,
 };
-use mcpal_output::{emit_list, emit_one};
+
 use serde::Serialize;
 use serde_json::json;
 
@@ -48,7 +48,7 @@ async fn list(reference: &str, ctx: &Ctx) -> Result<()> {
             mime: r.mime_type.as_deref(),
         })
         .collect();
-    emit_list(ctx.format, &summaries, &[], |_| Vec::new())?;
+    ctx.render_list(&summaries)?;
     Ok(())
 }
 
@@ -57,14 +57,14 @@ async fn read(reference: &str, uri: &str, ctx: &Ctx) -> Result<()> {
     let result = client
         .read_resource(ReadResourceRequestParams::new(uri))
         .await?;
-    emit_one(ctx.format, &result)?;
+    ctx.render_one(&result)?;
     Ok(())
 }
 
 async fn subscribe(reference: &str, uri: &str, ctx: &Ctx) -> Result<()> {
     let (_, client) = ctx.open(reference).await?;
     client.subscribe(SubscribeRequestParams::new(uri)).await?;
-    emit_one(ctx.format, &json!({"ok": true, "subscribed": uri}))?;
+    ctx.render_one(&json!({"ok": true, "subscribed": uri}))?;
     Ok(())
 }
 
@@ -73,7 +73,7 @@ async fn unsubscribe(reference: &str, uri: &str, ctx: &Ctx) -> Result<()> {
     client
         .unsubscribe(UnsubscribeRequestParams::new(uri))
         .await?;
-    emit_one(ctx.format, &json!({"ok": true, "unsubscribed": uri}))?;
+    ctx.render_one(&json!({"ok": true, "unsubscribed": uri}))?;
     Ok(())
 }
 
@@ -88,6 +88,6 @@ async fn templates(reference: &str, ctx: &Ctx) -> Result<()> {
             mime: t.mime_type.as_deref(),
         })
         .collect();
-    emit_list(ctx.format, &summaries, &[], |_| Vec::new())?;
+    ctx.render_list(&summaries)?;
     Ok(())
 }

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use mcpal_core::rmcp::model::GetPromptRequestParams;
-use mcpal_output::{emit_list, emit_one};
+
 use serde::Serialize;
 
 use crate::cli::PromptAction;
@@ -45,7 +45,7 @@ async fn list(reference: &str, ctx: &Ctx) -> Result<()> {
                 .collect(),
         })
         .collect();
-    emit_list(ctx.format, &summaries, &[], |_| Vec::new())?;
+    ctx.render_list(&summaries)?;
     Ok(())
 }
 
@@ -57,6 +57,6 @@ async fn get(reference: &str, name: &str, flag_args: &[String], ctx: &Ctx) -> Re
 
     let (_, client) = ctx.open(reference).await?;
     let result = client.get_prompt(params).await?;
-    emit_one(ctx.format, &result)?;
+    ctx.render_one(&result)?;
     Ok(())
 }

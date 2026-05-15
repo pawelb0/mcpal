@@ -3,7 +3,7 @@ use std::io::Read;
 
 use anyhow::{Context, Result, bail};
 use mcpal_core::rmcp::model::CallToolRequestParams;
-use mcpal_output::{emit_list, emit_one};
+
 use serde::Serialize;
 use serde_json::{Map, Value};
 
@@ -44,7 +44,7 @@ async fn list(reference: &str, ctx: &Ctx) -> Result<()> {
             required: required_fields(&t.input_schema),
         })
         .collect();
-    emit_list(ctx.format, &summaries, &[], |_| Vec::new())?;
+    ctx.render_list(&summaries)?;
     Ok(())
 }
 
@@ -55,7 +55,7 @@ async fn describe(reference: &str, name: &str, ctx: &Ctx) -> Result<()> {
         .iter()
         .find(|t| t.name == *name)
         .ok_or_else(|| anyhow::anyhow!("no tool named '{name}' on {reference}"))?;
-    emit_one(ctx.format, tool)?;
+    ctx.render_one(tool)?;
     Ok(())
 }
 
@@ -74,7 +74,7 @@ async fn call(
         params = params.with_arguments(arguments);
     }
     let result = client.call_tool(params).await.context("tools/call")?;
-    emit_one(ctx.format, &result)?;
+    ctx.render_one(&result)?;
     Ok(())
 }
 

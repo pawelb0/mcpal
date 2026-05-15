@@ -1,6 +1,5 @@
 use anyhow::Result;
 use mcpal_core::rmcp::model::SetLevelRequestParams;
-use mcpal_output::emit_one;
 use serde_json::json;
 
 use crate::cli::{LogLevel, LoggingAction};
@@ -17,9 +16,6 @@ async fn set_level(reference: &str, level: LogLevel, ctx: &Ctx) -> Result<()> {
     client
         .set_level(SetLevelRequestParams::new(level.into()))
         .await?;
-    emit_one(
-        ctx.format,
-        &json!({"ok": true, "level": format!("{level:?}").to_lowercase()}),
-    )?;
+    ctx.render_one(&json!({"ok": true, "level": format!("{level:?}").to_lowercase()}))?;
     Ok(())
 }
