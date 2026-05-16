@@ -80,9 +80,8 @@ strip = "symbols"
 [workspace.metadata.dist]
 cargo-dist-version = "0.31.0"
 ci = "github"
-installers = ["shell", "homebrew"]
+installers = ["shell"]
 hosting = ["github"]
-tap = "pawelb/homebrew-tap"
 targets = [
     "aarch64-apple-darwin",
     "x86_64-apple-darwin",
@@ -90,6 +89,10 @@ targets = [
     "x86_64-unknown-linux-musl",
     "x86_64-pc-windows-msvc",
 ]
-publish-jobs = ["homebrew"]
 pr-run-mode = "plan"
 install-updater = false
+# To enable Homebrew publishing, create the tap repo (e.g.
+# `pawelb/homebrew-tap`), then add:
+#   installers = ["shell", "homebrew"]
+#   tap = "pawelb/homebrew-tap"
+#   publish-jobs = ["homebrew"]

@@ -48,12 +48,12 @@ The script downloads the matching `mcpal-<tag>-<target>.tar.gz`
 artifact from GitHub Releases and drops `mcpal` into
 `$HOME/.local/bin` (override with `MCPAL_INSTALL_DIR`).
 
-A Homebrew formula template lives at `dist/Formula/mcpal.rb`; once a
-tap exists (`pawelb/homebrew-tap`), `brew install mcpal` will work.
 The release workflow at `.github/workflows/release.yml` builds macOS
 (arm64 + x86_64), Linux (x86_64 GNU), and Windows binaries today.
-Running `dist init --yes` regenerates the workflow against the
-`[workspace.metadata.dist]` config (musl + tap + auto-publish).
+`[workspace.metadata.dist]` in `Cargo.toml` is the cargo-dist config
+that adds Linux musl + a curl installer once `dist init` runs. A
+Homebrew formula template lives at `dist/Formula/mcpal.rb` for the
+eventual `pawelb/homebrew-tap`.
 
 ## 60-second tour
 

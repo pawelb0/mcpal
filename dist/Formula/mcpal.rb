@@ -1,6 +1,7 @@
 # Homebrew formula template for mcpal. cargo-dist will regenerate this
-# file (and publish it to pawelb/homebrew-tap) on each release; the
-# placeholders below let `brew install --HEAD` work in the meantime.
+# file (and publish it to pawelb/homebrew-tap) once a tagged release
+# ships; until then `brew install --HEAD pawelb/tap/mcpal` builds from
+# `main`.
 class Mcpal < Formula
   desc "Scriptable command-line client for the Model Context Protocol"
   homepage "https://github.com/pawelb/mcpal"
@@ -10,7 +11,9 @@ class Mcpal < Formula
   depends_on "rust" => :build
 
   def install
-    system "cargo", "install", *std_cargo_args(path: "crates/mcpal-cli")
+    cd "crates/mcpal-cli" do
+      system "cargo", "install", *std_cargo_args(path: ".")
+    end
   end
 
   test do
