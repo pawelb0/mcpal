@@ -79,7 +79,8 @@ pub async fn login(reference: &str, server_url: &str, open_browser: bool) -> Res
 
     let mut am = AuthorizationManager::new(server_url).await.context("init AuthorizationManager")?;
     am.set_credential_store(KeyringCredentialStore::new(reference));
-    am.discover_metadata().await.context("discover metadata")?;
+    let md = am.discover_metadata().await.context("discover metadata")?;
+    am.set_metadata(md);
     am.register_client("mcpal", &redirect_uri, &[]).await.context("register client")?;
     let url = am.get_authorization_url(&[]).await.context("authorization url")?;
 

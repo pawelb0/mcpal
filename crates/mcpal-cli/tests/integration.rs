@@ -10,6 +10,12 @@ fn integration_script() {
         eprintln!("skipping: integration tests need `npx` and `bash` on PATH");
         return;
     }
+    // Build the oauth_mock example so the OAuth section can find it next to
+    // the mcpal binary. Skips that section if the build fails (e.g. offline).
+    let _ = Command::new(env!("CARGO"))
+        .args(["build", "--quiet", "--example", "oauth_mock"])
+        .status();
+
     let bin = assert_cmd::cargo::cargo_bin("mcpal");
     let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")

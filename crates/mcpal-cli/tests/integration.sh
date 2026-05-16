@@ -270,6 +270,73 @@ else
     fail=$((fail + 1))
 fi
 
+# ---------- OAuth flow (mocked) ----------
+section 'OAuth flow'
+OAUTH_REF="mcpal-oauth-test-$$"
+MOCK_BIN="$(dirname "$BIN")/examples/oauth_mock"
+[ -x "$MOCK_BIN" ] || MOCK_BIN="$(dirname "$BIN")/../examples/oauth_mock"
+if [ ! -x "$MOCK_BIN" ]; then
+    printf '  skip OAuth (oauth_mock binary not built at %s)\n' "$MOCK_BIN"
+else
+    MOCK_LOG="$(mktemp -t mcpal-mock.XXXXXX)"
+    "$MOCK_BIN" 0 >"$MOCK_LOG" 2>&1 &
+    MOCK_PID=$!
+    # Wait for the mock to bind and print its port.
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        PORT="$(grep -oE 'port=[0-9]+' "$MOCK_LOG" | head -1 | cut -d= -f2 || true)"
+        [ -n "$PORT" ] && break
+        sleep 0.1
+    done
+    if [ -z "${PORT:-}" ]; then
+        printf '  FAIL OAuth (mock never bound)\n'
+        fail=$((fail + 1))
+        kill "$MOCK_PID" 2>/dev/null
+    else
+        MOCK_URL="http://127.0.0.1:$PORT"
+        # Run login in background; capture authorize URL from stderr.
+        LOGIN_LOG="$(mktemp -t mcpal-login.XXXXXX)"
+        "$BIN" --config "$CFG" auth login --oauth "$OAUTH_REF" \
+            --url "$MOCK_URL" --no-browser >"$LOGIN_LOG" 2>&1 &
+        LOGIN_PID=$!
+        # Wait for the authorize URL line.
+        AUTH_URL=""
+        for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+            AUTH_URL="$(grep -oE 'http://127.0.0.1:[0-9]+/authorize[^ ]*' "$LOGIN_LOG" | head -1 || true)"
+            [ -n "$AUTH_URL" ] && break
+            sleep 0.2
+        done
+        if [ -z "$AUTH_URL" ]; then
+            printf '  FAIL OAuth (mcpal never printed authorize URL)\n'
+            sed 's/^/      | /' "$LOGIN_LOG" >&2
+            fail=$((fail + 1))
+            kill "$LOGIN_PID" 2>/dev/null
+        else
+            # Drive the consent step: curl follows the mock's redirect to mcpal's
+            # loopback callback. mcpal then exchanges the code for tokens.
+            curl -sSL "$AUTH_URL" >/dev/null 2>&1 || true
+            wait "$LOGIN_PID"
+            login_rc=$?
+            if [ "$login_rc" -eq 0 ]; then
+                printf '  ok   auth login --oauth (full flow)\n'
+                pass=$((pass + 1))
+            else
+                printf '  FAIL auth login exited %d\n' "$login_rc"
+                sed 's/^/      | /' "$LOGIN_LOG" >&2
+                fail=$((fail + 1))
+            fi
+            it_grep 'auth status shows oauth: true' 'oauth: true' \
+                    mc auth status "$OAUTH_REF"
+            it       'auth refresh' \
+                     mc auth refresh "$OAUTH_REF" --url "$MOCK_URL"
+            it       'auth logout cleans up' mc auth logout "$OAUTH_REF"
+        fi
+        rm -f "$LOGIN_LOG"
+        kill "$MOCK_PID" 2>/dev/null
+        wait "$MOCK_PID" 2>/dev/null
+        rm -f "$MOCK_LOG"
+    fi
+fi
+
 # ---------- watch ----------
 section watch
 WATCH_OUT="$(mktemp -t mcpal-watch.XXXXXX)"
