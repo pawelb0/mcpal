@@ -154,6 +154,19 @@ pub fn classify(err: &anyhow::Error) -> Diagnostic {
             ],
         );
     }
+    if s.contains("schema validation failed") || s.contains("schema validation:") {
+        return Diagnostic::build(
+            2,
+            "E0012",
+            err.to_string(),
+            &[
+                "the arguments you passed didn't match the tool's `inputSchema`",
+                "`mcpal tool describe <ref> <name>` shows the schema",
+                "`mcpal tool template <ref> <name>` prints a starting body",
+                "pass `--skip-validation` to dispatch the call anyway",
+            ],
+        );
+    }
     if s.contains("parse json from") || s.contains("parse params as json") {
         return Diagnostic::build(
             2,
@@ -428,6 +441,23 @@ To fix:
         mcpal raw ev tools/call --params '{\"name\":\"echo\"}'
   - for files: `@/absolute/or/relative/path.json` (note the `@`)
   - `mcpal tool template <ref> <name>` prints a known-good skeleton
+\n"
+        }
+
+        "E0012" => {
+            "\
+E0012 — schema validation failed.
+
+mcpal validates the arguments you pass to `tool call` against the
+tool's `inputSchema` before sending the request. The validator found
+one or more violations (missing required fields, wrong types, values
+outside the allowed enum, etc.).
+
+To fix:
+  - `mcpal tool describe <ref> <name>` shows the full schema.
+  - `mcpal tool template <ref> <name>` prints a known-good skeleton.
+  - `--skip-validation` dispatches the call without checking (useful
+    if the server's schema is buggy or stricter than reality).
 \n"
         }
 

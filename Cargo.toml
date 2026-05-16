@@ -65,6 +65,7 @@ tempfile = "3"
 insta = { version = "1", features = ["json"] }
 serde_yaml = "0.9.34"
 json5 = "0.4"
+jsonschema = { version = "0.46", default-features = false }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -24,6 +24,7 @@ pub async fn run(action: ToolAction, ctx: &Ctx) -> Result<()> {
             name,
             cli_input_json,
             params,
+            skip_validation,
             args,
         } => {
             call(
@@ -31,6 +32,7 @@ pub async fn run(action: ToolAction, ctx: &Ctx) -> Result<()> {
                 &name,
                 cli_input_json.as_deref(),
                 params.as_deref(),
+                skip_validation,
                 &args,
                 ctx,
             )
@@ -126,11 +128,21 @@ async fn call(
     name: &str,
     cli_input_json: Option<&str>,
     params: Option<&str>,
+    skip_validation: bool,
     flag_args: &[String],
     ctx: &Ctx,
 ) -> Result<()> {
     let arguments = build_arguments(cli_input_json, params, flag_args)?;
     let (_, client) = ctx.open(reference).await?;
+
+    if !skip_validation && !arguments.is_empty() {
+        let tools = ctx.under_deadline(client.list_all_tools()).await??;
+        let tool = tools
+            .iter()
+            .find(|t| t.name == *name)
+            .ok_or_else(|| anyhow::anyhow!("no tool named '{name}' on {reference}"))?;
+        validate_args(&tool.input_schema, &arguments)?;
+    }
 
     let mut params = CallToolRequestParams::new(name.to_string());
     if !arguments.is_empty() {
@@ -141,6 +153,29 @@ async fn call(
         .await?
         .context("tools/call")?;
     ctx.render_one(&result)?;
+    Ok(())
+}
+
+/// Validate `arguments` against the tool's `inputSchema`. Errors carry
+/// the JSON pointer of the failing field so `exit::classify` can lift
+/// them to E0002.
+fn validate_args(schema: &Map<String, Value>, arguments: &Map<String, Value>) -> Result<()> {
+    let schema_v = Value::Object(schema.clone());
+    let args_v = Value::Object(arguments.clone());
+    let validator = jsonschema::validator_for(&schema_v).with_context(|| {
+        "schema validation: tool's inputSchema is not a valid JSON Schema".to_string()
+    })?;
+    let issues: Vec<String> = validator
+        .iter_errors(&args_v)
+        .map(|e| {
+            let path = e.instance_path().to_string();
+            let where_ = if path.is_empty() { "/".into() } else { path };
+            format!("{where_}: {e}")
+        })
+        .collect();
+    if !issues.is_empty() {
+        anyhow::bail!("schema validation failed:\n  - {}", issues.join("\n  - "));
+    }
     Ok(())
 }
 

@@ -15,6 +15,8 @@ Exit codes:
   7    server returned a JSON-RPC error
   8    request timed out (raise with `--timeout <SECS>`)
   130  interrupted by Ctrl-C
+
+Error codes E0000–E0012 — see `mcpal explain E####` for the long form.
 ";
 
 #[derive(Parser, Debug)]
@@ -441,6 +443,11 @@ pub enum ToolAction {
         /// stdin. Mutually exclusive with `--cli-input-json`.
         #[arg(long, value_name = "JSON|@PATH|-", conflicts_with = "cli_input_json")]
         params: Option<String>,
+        /// Skip client-side validation of arguments against the tool's
+        /// `inputSchema`. By default mcpal fetches the schema and checks
+        /// the assembled arguments before calling the tool.
+        #[arg(long)]
+        skip_validation: bool,
         /// Remaining tokens are interpreted as `--key value` pairs.
         #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 0..)]
         args: Vec<String>,

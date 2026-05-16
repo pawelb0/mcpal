@@ -168,6 +168,22 @@ Fixes:
 
 Exit code **2**.
 
+## E0012 — schema validation failed
+
+mcpal validates the arguments you pass to `tool call` against the
+tool's `inputSchema` before sending the request. A schema check turned
+up one or more violations (missing required field, wrong type, value
+outside the allowed enum, unknown property when the schema is strict).
+
+Fixes:
+
+- `mcpal tool describe <ref> <name>` shows the full schema.
+- `mcpal tool template <ref> <name>` prints a known-good skeleton.
+- Pass `--skip-validation` to dispatch the call without checking
+  (useful if the server's schema is buggy or stricter than reality).
+
+Exit code **2**.
+
 ## E0011 — interrupted by Ctrl-C
 
 You pressed Ctrl-C while mcpal was waiting on a response from the
