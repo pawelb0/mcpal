@@ -159,13 +159,16 @@ mcpal prompt list <ref>
 mcpal prompt get <ref> some-prompt --city Dallas --state Texas
 ```
 
-## Diff two servers' tool lists
+## Diff two servers' capabilities
 
 ```bash
-diff \
-  <(mcpal --output json tool list <ref-a> | jq -S) \
-  <(mcpal --output json tool list <ref-b> | jq -S)
+mcpal diff <ref-a> <ref-b>
+mcpal diff <ref-a> <ref-b> --only tools
 ```
+
+Reports `added`, `removed`, and `changed` entries per category
+(`tools`, `resources`, `prompts`). A tool counts as `changed` when its
+`inputSchema` differs between the two servers.
 
 ## Shell completions
 
