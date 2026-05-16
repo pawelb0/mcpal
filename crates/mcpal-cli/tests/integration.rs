@@ -1,11 +1,16 @@
 //! Integration test runner. Delegates every operation assertion to
-//! `tests/integration.sh` (a bash script). Skipped if `npx` or `bash`
-//! aren't on PATH.
+//! `tests/integration.sh` (a bash script). Gated behind
+//! `MCPAL_INTEGRATION_TESTS=1` so default CI runs the unit suite only;
+//! local + nightly integration jobs opt in.
 
 use std::process::Command;
 
 #[test]
 fn integration_script() {
+    if std::env::var_os("MCPAL_INTEGRATION_TESTS").is_none() {
+        eprintln!("skipping: set MCPAL_INTEGRATION_TESTS=1 to run");
+        return;
+    }
     if which::which("npx").is_err() || which::which("bash").is_err() {
         eprintln!("skipping: integration tests need `npx` and `bash` on PATH");
         return;

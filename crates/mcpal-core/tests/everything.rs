@@ -9,6 +9,10 @@ use mcpal_core::{Handler, ServerSpec, connect};
 
 #[tokio::test]
 async fn list_tools_against_everything_server() {
+    if std::env::var_os("MCPAL_INTEGRATION_TESTS").is_none() {
+        eprintln!("skipping: set MCPAL_INTEGRATION_TESTS=1 to run");
+        return;
+    }
     if which::which("npx").is_err() {
         eprintln!("skipping: npx not on PATH");
         return;
