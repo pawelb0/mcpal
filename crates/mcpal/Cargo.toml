@@ -39,6 +39,16 @@ reqwest.workspace = true
 jsonschema.workspace = true
 serde_yaml.workspace = true
 jmespath.workspace = true
+futures.workspace = true
+
+ratatui = { workspace = true, optional = true }
+crossterm = { workspace = true, features = ["event-stream"], optional = true }
+tui-input = { workspace = true, optional = true }
+tui-textarea = { workspace = true, optional = true }
+
+[features]
+default = ["tui"]
+tui = ["dep:ratatui", "dep:crossterm", "dep:tui-input", "dep:tui-textarea"]
 
 [dev-dependencies]
 assert_cmd.workspace = true
