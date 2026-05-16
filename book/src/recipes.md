@@ -4,6 +4,156 @@ Short, problem-driven snippets. Each section answers one question.
 Replace `<ref>` with any server reference — see
 [Concepts → Server reference](./concepts.md#server-reference-ref).
 
+## Real-server cookbook
+
+Concrete examples against publicly known MCP servers. Tokens go to
+the OS keyring (`mcpal auth login`); none of the commands write
+secrets to disk.
+
+### Filesystem (local sandbox, stdio)
+
+A scoped read/write surface over a directory tree. Useful for any
+command that wants file access without giving the LLM the whole
+machine.
+
+```bash
+mcpal server add fs -- \
+  npx -y @modelcontextprotocol/server-filesystem $HOME/projects
+
+mcpal tool list fs --names-only
+mcpal tool call fs read_file --path README.md
+mcpal tool call fs list_directory --path .
+mcpal tool call fs search_files --pattern '*.toml' --path .
+mcpal --query 'content[0].text' tool call fs read_file --path Cargo.toml
+```
+
+The sandbox is the path passed at spawn time; you can pass multiple
+paths after the package name.
+
+### Fetch (HTTP client, stdio)
+
+A bounded HTTP fetcher for one-off requests:
+
+```bash
+mcpal server add fetch -- npx -y @modelcontextprotocol/server-fetch
+mcpal tool call fetch fetch --url https://httpbin.org/json
+```
+
+### Time
+
+```bash
+mcpal server add time -- npx -y @modelcontextprotocol/server-time
+mcpal tool call time get_current_time --timezone Europe/Warsaw
+```
+
+### GitHub (HTTP, bearer)
+
+The hosted GitHub MCP at `api.githubcopilot.com/mcp/` accepts a
+personal access token (classic or fine-grained) as a bearer:
+
+```bash
+mcpal server add gh --http https://api.githubcopilot.com/mcp/
+mcpal auth login gh --bearer ghp_xxx          # or use $GITHUB_TOKEN
+mcpal tool list gh --names-only | head
+
+mcpal --query '[].name' \
+  tool call gh list_repositories_for_user --username anthropics
+
+mcpal --output json \
+  tool call gh search_issues --q 'repo:anthropics/claude-code is:open label:bug' \
+  | jq '.[].title'
+```
+
+For CI, put the token in an env var and reference it from `config.toml`:
+
+```toml
+[server.gh]
+transport = "http"
+url = "https://api.githubcopilot.com/mcp/"
+auth = { type = "bearer_env", env = "GITHUB_TOKEN" }
+```
+
+### Linear (HTTP, OAuth)
+
+Linear's MCP authenticates users via OAuth 2.1. mcpal runs the full
+PKCE + DCR flow for you; no developer-console step:
+
+```bash
+mcpal server add linear --http https://mcp.linear.app/mcp
+mcpal auth login linear --oauth        # browser → consent → done
+mcpal --query '[].name' tool list linear
+
+# Find issues assigned to me, in progress:
+mcpal --query 'content[0].text' \
+  tool call linear list_my_issues --state in_progress
+
+# Comment on one:
+mcpal tool call linear create_comment \
+  --issueId ENG-123 --body 'updated branch is up'
+```
+
+`mcpal auth refresh linear` rotates the access token when it expires;
+mcpal also refreshes eagerly within 30 s of expiry. See the
+[OAuth walk-through](./auth.md#oauth-21--pkce--dcr) for what each
+step does on the wire.
+
+### Notion (HTTP, OAuth)
+
+```bash
+mcpal server add notion --http https://mcp.notion.com/v1
+mcpal auth login notion --oauth
+mcpal tool list notion --names-only
+
+mcpal --query 'content[0].text' \
+  tool call notion search --query 'meeting notes 2026 Q2'
+
+mcpal tool call notion append_block \
+  --pageId 8a7…b21 \
+  --blocks '[{"type":"paragraph","text":"shipped v0.1"}]'
+```
+
+### Context7 (HTTP, anonymous)
+
+A free hosted docs-search MCP — no auth, useful as a sanity check:
+
+```bash
+mcpal server add ctx7 --http https://mcp.context7.com/mcp
+mcpal tool call ctx7 search --query 'rmcp ServiceExt'
+```
+
+### Postgres (stdio, env-injected creds)
+
+```bash
+mcpal server add db -- \
+  npx -y @modelcontextprotocol/server-postgres \
+  postgres://user:pass@localhost:5432/app
+
+mcpal tool list db
+mcpal tool call db query --sql 'select count(*) from users'
+```
+
+Put the connection string in an env var and `--env` it through:
+
+```bash
+mcpal server add db \
+  --env DATABASE_URL="$DATABASE_URL" \
+  -- npx -y @modelcontextprotocol/server-postgres '$DATABASE_URL'
+```
+
+### opencode's already-configured servers
+
+If you run opencode, every server in `~/.config/opencode/opencode.json`
+is callable directly:
+
+```bash
+mcpal server discover --source opencode
+mcpal tool list opencode:tavily
+mcpal tool call opencode:tavily search --query 'Rust async runtimes'
+```
+
+Same pattern for `cursor:`, `claude-code:`, `zed:`, etc. See
+[Concepts → Discovery](./concepts.md#discovery) for the source list.
+
 ## Install a server from the MCP Registry
 
 ```bash
