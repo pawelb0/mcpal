@@ -161,8 +161,90 @@ section auth
 it          'auth status of an unknown ref'  mc auth status nope
 it          'auth logout (idempotent)'       mc auth logout nope
 
+# ---------- tool input variants ----------
+section 'tool input variants'
+ARGS_JSON="$(mktemp -t mcpal-args.XXXXXX).json"
+printf '{"message":"file"}' >"$ARGS_JSON"
+it_grep     'tool call --cli-input-json @path'  'Echo: file' \
+            mc --query 'content[0].text' tool call "$REF" echo --cli-input-json "@$ARGS_JSON"
+it_grep     'tool call --cli-input-json bare path' 'Echo: file' \
+            mc --query 'content[0].text' tool call "$REF" echo --cli-input-json "$ARGS_JSON"
+it_grep_stdin 'tool call --cli-input-json -' 'Echo: from-stdin' \
+              '{"message":"from-stdin"}' \
+              mc --query 'content[0].text' tool call "$REF" echo --cli-input-json -
+it_exit     'tool call missing required arg → E0012 exit 2' 2 mc tool call "$REF" echo
+it_exit     'tool call bad --params JSON → E0010 exit 2'    2 \
+            mc tool call "$REF" echo --params '{bad json'
+
+# ---------- resources extended ----------
+section 'resources extended'
+it_grep     'resource read returns contents' 'contents' \
+            mc resource read "$REF" demo://resource/static/document/extension.md
+
+# ---------- prompts extended ----------
+section 'prompts extended'
+it_grep     'prompt complete returns values' 'values' \
+            mc prompt complete "$REF" completable-prompt --arg fruit=a
+
+# ---------- diff alt categories ----------
+section 'diff alt categories'
+it          'diff --only resources' mc diff "$REF" "$REF" --only resources
+it          'diff --only prompts'   mc diff "$REF" "$REF" --only prompts
+
+# ---------- pipelines: error codes ----------
+section 'error codes'
+it_exit     'bad --query → E0009 exit 2'    2 mc --query 'not[valid' tool list "$REF"
+
+# ---------- completion scripts ----------
+section 'shell completions'
+it_grep     'completion zsh non-empty'  'compdef'  mc completion zsh
+it_grep     'completion bash non-empty' 'complete' mc completion bash
+it_grep     'completion fish non-empty' 'complete' mc completion fish
+
+# ---------- doctor JSON schema ----------
+section 'doctor JSON'
+it_grep     'doctor --output json has ok'      '"ok"'      mc --output json debug doctor
+it_grep     'doctor --output json has servers' '"servers"' mc --output json debug doctor
+
+# ---------- discovery filter ----------
+section 'discover filter'
+it          'discover --source unknown returns empty' \
+            mc server discover --source not-a-real-source
+
+# ---------- roots flag ----------
+section roots
+it_grep     'tool list with --root flag works' 'echo' \
+            mc --root /tmp tool list "$REF"
+
+# ---------- mcp-json overlay ----------
+section 'mcp-json overlay'
+MCPJ="$(mktemp -t mcpal-mcp.XXXXXX).json"
+printf '%s' '{"mcpServers":{"ovr":{"command":"npx","args":["-y","@modelcontextprotocol/server-everything"]}}}' >"$MCPJ"
+it_grep     '--mcp-json overlays a server' 'echo' \
+            mc --mcp-json "$MCPJ" tool list ovr
+
+# ---------- http alias lifecycle ----------
+section 'http alias'
+it          'server add --http registers' \
+            mc server add fake-http --http https://example.invalid/mcp
+it_grep     'server show fake-http → http' 'http' mc server show fake-http
+it          'server remove fake-http' mc server remove fake-http
+
+# ---------- bearer env one-shot ----------
+section 'MCPAL_BEARER env'
+MCPAL_BEARER=ignored "$BIN" --config "$CFG" server ping "$REF" >"$OUT" 2>"$ERR"
+if [ $? -eq 0 ]; then
+    printf '  ok   MCPAL_BEARER set is a no-op for stdio\n'
+    pass=$((pass + 1))
+else
+    printf '  FAIL MCPAL_BEARER set is a no-op for stdio\n'
+    sed 's/^/      | /' "$ERR" >&2
+    fail=$((fail + 1))
+fi
+
 # ---------- cleanup ----------
 section cleanup
+rm -f "$ARGS_JSON" "$MCPJ"
 it          'server remove'                  mc server remove "$REF"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

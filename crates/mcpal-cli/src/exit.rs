@@ -22,6 +22,7 @@ fn d(code: i32, ec: &'static str, title: impl Into<String>) -> Diagnostic {
 /// matched against the lowercased anyhow chain.
 const ANYHOW_PATTERNS: &[(&str, i32, &str)] = &[
     ("interrupted by ctrl-c", 130, "E0011"),
+    ("iserror: true", 7, "E0006"),
     ("schema validation", 2, "E0012"),
     ("timed out", 8, "E0007"),
     ("timeout", 8, "E0007"),

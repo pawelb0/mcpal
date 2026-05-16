@@ -131,7 +131,7 @@ async fn call(
     let arguments = build_arguments(cli_input_json, params, flag_args)?;
     let (_, client) = ctx.open(reference).await?;
 
-    if !skip_validation && !arguments.is_empty() {
+    if !skip_validation {
         let tools = ctx.under_deadline(client.list_all_tools()).await??;
         let schema: Arc<_> = tools
             .iter()
@@ -151,6 +151,9 @@ async fn call(
         .await?
         .context("tools/call")?;
     ctx.render_one(&result)?;
+    if result.is_error.unwrap_or(false) {
+        anyhow::bail!("server returned tools/call result with isError: true");
+    }
     Ok(())
 }
 
