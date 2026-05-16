@@ -5,14 +5,14 @@
 #
 # Usage:
 #   curl --proto '=https' --tlsv1.2 -fsSL \
-#     https://raw.githubusercontent.com/pawelb/mcpal/main/dist/install.sh | sh
+#     https://raw.githubusercontent.com/pawelb0/mcpal/main/dist/install.sh | sh
 #
 # Env:
 #   MCPAL_VERSION=v0.1.0          pin a release; default is the latest tag
 #   MCPAL_INSTALL_DIR=$HOME/bin   override install directory
 set -euo pipefail
 
-repo="pawelb/mcpal"
+repo="pawelb0/mcpal"
 version="${MCPAL_VERSION:-}"
 install_dir="${MCPAL_INSTALL_DIR:-$HOME/.local/bin}"
 

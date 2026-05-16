@@ -9,8 +9,8 @@ src = "src"
 [output.html]
 default-theme = "navy"
 preferred-dark-theme = "ayu"
-git-repository-url = "https://github.com/pawelb/mcpal"
-edit-url-template = "https://github.com/pawelb/mcpal/edit/main/book/{path}"
+git-repository-url = "https://github.com/pawelb0/mcpal"
+edit-url-template = "https://github.com/pawelb0/mcpal/edit/main/book/{path}"
 
 [output.html.print]
 enable = true

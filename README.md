@@ -41,7 +41,7 @@ From a tagged release (after the first `v0.x.0`):
 
 ```
 curl --proto '=https' --tlsv1.2 -fsSL \
-  https://raw.githubusercontent.com/pawelb/mcpal/main/dist/install.sh | sh
+  https://raw.githubusercontent.com/pawelb0/mcpal/main/dist/install.sh | sh
 ```
 
 The script downloads the matching `mcpal-<tag>-<target>.tar.gz`
@@ -53,7 +53,7 @@ The release workflow at `.github/workflows/release.yml` builds macOS
 `[workspace.metadata.dist]` in `Cargo.toml` is the cargo-dist config
 that adds Linux musl + a curl installer once `dist init` runs. A
 Homebrew formula template lives at `dist/Formula/mcpal.rb` for the
-eventual `pawelb/homebrew-tap`.
+eventual `pawelb0/homebrew-tap`.
 
 ## 60-second tour
 

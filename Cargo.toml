@@ -8,7 +8,7 @@ edition = "2024"
 rust-version = "1.95"
 authors = ["Paweł B. <pawelb@fastmail.com>"]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/pawelb/mcpal"
+repository = "https://github.com/pawelb0/mcpal"
 
 [workspace.dependencies]
 rmcp = { version = "1.6", default-features = false, features = [
@@ -93,7 +93,7 @@ targets = [
 pr-run-mode = "plan"
 install-updater = false
 # To enable Homebrew publishing, create the tap repo (e.g.
-# `pawelb/homebrew-tap`), then add:
+# `pawelb0/homebrew-tap`), then add:
 #   installers = ["shell", "homebrew"]
-#   tap = "pawelb/homebrew-tap"
+#   tap = "pawelb0/homebrew-tap"
 #   publish-jobs = ["homebrew"]
