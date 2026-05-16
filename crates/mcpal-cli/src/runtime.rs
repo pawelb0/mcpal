@@ -101,17 +101,15 @@ impl Ctx {
     }
 }
 
-/// Resolve credentials for an HTTP spec. Skips stdio. If `auth` is already
-/// `AuthSpec::Oauth` we replace it with the stored access token (refreshing
-/// it first if it's within 30s of expiry); any other explicit `auth` is left
-/// alone. With no explicit auth: oauth blob → keyring bearer → `MCPAL_BEARER`.
+/// For HTTP specs: replace `AuthSpec::Oauth` with the stored access token
+/// (auto-refresh if near expiry); leave any other explicit `auth` alone;
+/// otherwise fall through oauth → keyring → `MCPAL_BEARER`.
 async fn attach_bearer(spec: &mut ServerSpec, reference: &str, display: &str) {
     let ServerSpec::Http { url, auth, .. } = spec else {
         return;
     };
-    let server_url = url.clone();
-    if let Some(AuthSpec::Oauth) = auth {
-        match oauth::access_token_refreshing(reference, &server_url).await {
+    if matches!(auth, Some(AuthSpec::Oauth)) {
+        match oauth::access_token_refreshing(reference, url).await {
             Some(token) => *auth = Some(AuthSpec::Bearer { token }),
             None => eprintln!(
                 "warning: '{display}' is configured for OAuth but no token is stored; \
@@ -123,15 +121,11 @@ async fn attach_bearer(spec: &mut ServerSpec, reference: &str, display: &str) {
     if auth.is_some() {
         return;
     }
-    if let Some(token) = oauth::access_token_refreshing(reference, &server_url).await {
-        *auth = Some(AuthSpec::Bearer { token });
-        return;
-    }
-    if let Some(token) = keyring::get(reference, Kind::Bearer) {
-        *auth = Some(AuthSpec::Bearer { token });
-        return;
-    }
-    if let Ok(token) = std::env::var("MCPAL_BEARER") {
+    let token = oauth::access_token_refreshing(reference, url)
+        .await
+        .or_else(|| keyring::get(reference, Kind::Bearer))
+        .or_else(|| std::env::var("MCPAL_BEARER").ok());
+    if let Some(token) = token {
         *auth = Some(AuthSpec::Bearer { token });
     }
 }

@@ -21,10 +21,16 @@ pub async fn run(action: ServerAction, ctx: &Ctx) -> Result<()> {
         ServerAction::Add(args) => add(args, ctx),
         ServerAction::Remove { alias } => remove(&alias, ctx),
         ServerAction::Import(args) => import(args, ctx),
-        ServerAction::Info { reference } => info(&reference, ctx).await,
-        ServerAction::Protocol { reference } => protocol(&reference, ctx).await,
-        ServerAction::Capabilities { reference } => capabilities(&reference, ctx).await,
-        ServerAction::Instructions { reference } => instructions(&reference, ctx).await,
+        ServerAction::Info { reference } => peer_field(&reference, "/serverInfo", ctx).await,
+        ServerAction::Protocol { reference } => {
+            peer_field(&reference, "/protocolVersion", ctx).await
+        }
+        ServerAction::Capabilities { reference } => {
+            peer_field(&reference, "/capabilities", ctx).await
+        }
+        ServerAction::Instructions { reference } => {
+            peer_field(&reference, "/instructions", ctx).await
+        }
         ServerAction::Ping { reference } => ping(&reference, ctx).await,
         ServerAction::Search { keywords, limit } => search(&keywords, limit, ctx).await,
         ServerAction::Install(args) => install(args, ctx).await,
@@ -204,30 +210,13 @@ fn default_alias(name: &str) -> &str {
     name.rsplit_once('/').map(|(_, t)| t).unwrap_or(name)
 }
 
-async fn info(reference: &str, ctx: &Ctx) -> Result<()> {
+async fn peer_field(reference: &str, pointer: &str, ctx: &Ctx) -> Result<()> {
     let (_, client) = ctx.open(reference).await?;
-    let v = peer_field(&client, "/serverInfo").unwrap_or(json!(null));
-    ctx.render_one(&v)?;
-    Ok(())
-}
-
-async fn protocol(reference: &str, ctx: &Ctx) -> Result<()> {
-    let (_, client) = ctx.open(reference).await?;
-    let v = peer_field(&client, "/protocolVersion").unwrap_or(json!(null));
-    ctx.render_one(&v)?;
-    Ok(())
-}
-
-async fn capabilities(reference: &str, ctx: &Ctx) -> Result<()> {
-    let (_, client) = ctx.open(reference).await?;
-    let v = peer_field(&client, "/capabilities").unwrap_or(json!(null));
-    ctx.render_one(&v)?;
-    Ok(())
-}
-
-async fn instructions(reference: &str, ctx: &Ctx) -> Result<()> {
-    let (_, client) = ctx.open(reference).await?;
-    let v = peer_field(&client, "/instructions").unwrap_or(json!(null));
+    let v = client
+        .peer_info()
+        .and_then(|i| serde_json::to_value(i).ok())
+        .and_then(|v| v.pointer(pointer).cloned())
+        .unwrap_or(json!(null));
     ctx.render_one(&v)?;
     Ok(())
 }
@@ -236,10 +225,4 @@ async fn ping(reference: &str, ctx: &Ctx) -> Result<()> {
     let (r, _) = ctx.open(reference).await?;
     ctx.render_one(&json!({ "ref": r.display, "ok": true }))?;
     Ok(())
-}
-
-fn peer_field(client: &mcpal_core::Client, pointer: &str) -> Option<serde_json::Value> {
-    let info = client.peer_info()?;
-    let v = serde_json::to_value(info).ok()?;
-    v.pointer(pointer).cloned()
 }
