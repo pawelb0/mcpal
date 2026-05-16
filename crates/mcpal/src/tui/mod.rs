@@ -1,4 +1,5 @@
 mod app;
+mod sidebar;
 
 use std::io;
 
@@ -13,11 +14,11 @@ use ratatui::backend::CrosstermBackend;
 
 use crate::runtime::Ctx;
 
-pub async fn run(_ctx: &Ctx) -> Result<()> {
+pub async fn run(ctx: &Ctx) -> Result<()> {
     let _guard = TerminalGuard::enter()?;
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend)?;
-    app::App::default().run(&mut terminal).await
+    app::App::new(ctx)?.run(&mut terminal).await
 }
 
 struct TerminalGuard;

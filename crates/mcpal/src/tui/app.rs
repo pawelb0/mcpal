@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use anyhow::Result;
-use crossterm::event::{Event, EventStream, KeyCode, KeyModifiers};
+use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyModifiers};
 use futures::StreamExt;
 use ratatui::Frame;
 use ratatui::Terminal;
@@ -11,9 +11,11 @@ use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, Borders};
 use tokio::time::interval;
 
-#[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
+use crate::runtime::Ctx;
+use crate::tui::sidebar::Sidebar;
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum Focus {
-    #[default]
     Sidebar,
     Detail,
     Output,
@@ -36,13 +38,21 @@ impl Focus {
     }
 }
 
-#[derive(Default)]
 pub struct App {
     focus: Focus,
     quit: bool,
+    sidebar: Sidebar,
 }
 
 impl App {
+    pub fn new(ctx: &Ctx) -> Result<Self> {
+        Ok(Self {
+            focus: Focus::Sidebar,
+            quit: false,
+            sidebar: Sidebar::from_ctx(ctx)?,
+        })
+    }
+
     pub async fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()> {
         let mut events = EventStream::new();
         let mut ticker = interval(Duration::from_millis(250));
@@ -58,17 +68,36 @@ impl App {
 
     fn on_event(&mut self, ev: Event) {
         let Event::Key(key) = ev else { return };
-        match (key.modifiers, key.code) {
-            (KeyModifiers::CONTROL, KeyCode::Char('c')) | (_, KeyCode::Char('q')) => {
-                self.quit = true;
+        if self.on_global(key) {
+            return;
+        }
+        match self.focus {
+            Focus::Sidebar => {
+                self.sidebar.on_key(key);
             }
-            (_, KeyCode::Tab) => self.focus = self.focus.next(),
-            (_, KeyCode::BackTab) => self.focus = self.focus.prev(),
-            _ => {}
+            Focus::Detail | Focus::Output => {}
         }
     }
 
-    fn render(&self, f: &mut Frame) {
+    fn on_global(&mut self, key: KeyEvent) -> bool {
+        match (key.modifiers, key.code) {
+            (KeyModifiers::CONTROL, KeyCode::Char('c')) | (_, KeyCode::Char('q')) => {
+                self.quit = true;
+                true
+            }
+            (_, KeyCode::Tab) => {
+                self.focus = self.focus.next();
+                true
+            }
+            (_, KeyCode::BackTab) => {
+                self.focus = self.focus.prev();
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn render(&mut self, f: &mut Frame) {
         let outer = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Min(0), Constraint::Length(7)])
@@ -77,20 +106,21 @@ impl App {
             .direction(Direction::Horizontal)
             .constraints([Constraint::Length(28), Constraint::Min(0)])
             .split(outer[0]);
-        f.render_widget(self.pane_block("Servers", Focus::Sidebar), top[0]);
-        f.render_widget(self.pane_block("Detail", Focus::Detail), top[1]);
-        f.render_widget(self.pane_block("Output", Focus::Output), outer[1]);
+        self.sidebar
+            .render(f, top[0], self.focus == Focus::Sidebar);
+        f.render_widget(plain("Detail", self.focus == Focus::Detail), top[1]);
+        f.render_widget(plain("Output", self.focus == Focus::Output), outer[1]);
     }
+}
 
-    fn pane_block<'a>(&self, title: &'a str, pane: Focus) -> Block<'a> {
-        let style = if self.focus == pane {
-            Style::default().fg(Color::Cyan)
-        } else {
-            Style::default()
-        };
-        Block::default()
-            .title(title)
-            .borders(Borders::ALL)
-            .border_style(style)
-    }
+fn plain(title: &str, focused: bool) -> Block<'_> {
+    let style = if focused {
+        Style::default().fg(Color::Cyan)
+    } else {
+        Style::default()
+    };
+    Block::default()
+        .title(title)
+        .borders(Borders::ALL)
+        .border_style(style)
 }
