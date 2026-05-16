@@ -181,35 +181,6 @@ for q in rust go python; do
 done
 ```
 
-### Exit codes + error system
-
-| Code | Meaning | Common fix |
-|---|---|---|
-| 0 | success | — |
-| 1 | generic | check stderr |
-| 2 | usage | `mcpal <cmd> --help` |
-| 3 | server ref not found | `mcpal server discover` |
-| 4 | auth required | `mcpal auth login <ref>` |
-| 5 | auth expired | `mcpal auth refresh <ref>` |
-| 6 | transport | network or stdio failure |
-| 7 | server error | check args vs `tool describe` |
-| 8 | timed out | retry; with `--timeout`, raise the value |
-| 130 | interrupted (Ctrl-C) | — |
-
-Each error renders with a stable `E####` code:
-
-```
-error[E0001]: server 'foo' not found (owned, URL, path, or discovered)
-help: run `mcpal server discover` to scan installed MCP clients for servers
-help: or `mcpal server list --all` to see what's already configured
-help: or add one: `mcpal server add <alias> --stdio <command>`
-
-For more information about this error, try `mcpal debug explain E0001`.
-```
-
-Codes E0000–E0011 today. `mcpal debug explain <code>` prints the long-form
-prose for each.
-
 ### Sanity check
 
 ```bash
