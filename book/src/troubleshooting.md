@@ -1,4 +1,9 @@
-# Troubleshooting
+# Troubleshoot
+
+How to diagnose a failed call. Start with `mcpal debug doctor`, then
+look up the failing `E####` code below. Each section maps to one
+exit-code class. The full prose for each code is in
+[Error codes](./error-codes.md).
 
 ## `mcpal debug doctor`
 

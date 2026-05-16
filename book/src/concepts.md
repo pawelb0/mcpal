@@ -1,5 +1,10 @@
 # Concepts
 
+The model behind mcpal. Read once. The four moving parts are
+references, transports, auth modes, and output. Each is explained
+below; the how-to pages link back here whenever they refer to one of
+them.
+
 ## Server reference (`<ref>`)
 
 Every command that talks to an MCP server takes a `<ref>` positional. It

@@ -1,12 +1,15 @@
-# Scripting & exit codes
+# Script around mcpal
 
-mcpal is meant for pipelines:
+How to drive mcpal from scripts, shells, and CI. Covers exit codes,
+machine output, JMESPath filtering, the `raw` escape hatch, env
+vars, and a sample GitHub Actions step.
+
+Contract:
 
 - stdout is data. Informational output goes to stderr.
 - Exit codes are stable per failure class; the wording around them is
   not.
-- `--output json` and `--query <jmespath>` handle most pipelines without
-  `jq`.
+- `--output json` and `--query <jmespath>` remove most uses of `jq`.
 
 ## Exit codes
 

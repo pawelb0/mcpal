@@ -1,7 +1,8 @@
 # Recipes
 
-Replace `<ref>` with any server reference (see
-[Concepts](./concepts.md#server-reference-ref)).
+Short, problem-driven snippets. Each section answers one question.
+Replace `<ref>` with any server reference — see
+[Concepts → Server reference](./concepts.md#server-reference-ref).
 
 ## Install a server from the MCP Registry
 

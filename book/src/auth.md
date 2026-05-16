@@ -1,4 +1,8 @@
-# Auth deep dive
+# Authenticate to an HTTP server
+
+How to attach credentials to a remote MCP server, by mode. Stdio
+servers inherit the parent shell's env and don't take credentials;
+this page is HTTP only.
 
 Auth modes: inline bearer, `BearerEnv`, OAuth 2.1, plus the
 `MCPAL_BEARER` env override. Tokens live in the OS keyring.

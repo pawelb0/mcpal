@@ -1,6 +1,8 @@
 # Protocol compliance matrix
 
-Unmarked rows are wired. `pending` rows are not.
+Every MCP method, server-initiated request, transport, and auth mode,
+and the mcpal verb (or flag) that drives it. Unmarked rows are wired
+in. `pending` rows are not.
 
 ## Methods
 

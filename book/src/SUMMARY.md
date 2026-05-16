@@ -2,16 +2,22 @@
 
 [Introduction](./intro.md)
 
-# User guide
+# Tutorial
 
-- [Concepts](./concepts.md)
-- [Getting started](./getting-started.md)
+- [Your first MCP call](./getting-started.md)
+
+# How-to guides
+
 - [Recipes](./recipes.md)
-- [Auth deep dive](./auth.md)
-- [Scripting & exit codes](./scripting.md)
-- [Troubleshooting](./troubleshooting.md)
+- [Authenticate to an HTTP server](./auth.md)
+- [Script around mcpal](./scripting.md)
+- [Troubleshoot](./troubleshooting.md)
 
 # Reference
 
 - [Protocol compliance matrix](./protocol-matrix.md)
 - [Error codes](./error-codes.md)
+
+# Explanation
+
+- [Concepts](./concepts.md)
