@@ -1,4 +1,5 @@
 mod app;
+mod detail;
 mod sidebar;
 
 use std::io;

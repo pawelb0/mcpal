@@ -37,6 +37,7 @@ impl Kind {
 pub struct Entry {
     pub display: String,
     pub kind: Kind,
+    pub spec: ServerSpec,
 }
 
 pub struct Sidebar {
@@ -55,12 +56,14 @@ impl Sidebar {
             .map(|(alias, spec)| Entry {
                 display: alias.clone(),
                 kind: Kind::from_spec(spec),
+                spec: spec.clone(),
             })
             .collect();
         for s in ctx.discovered()? {
             entries.push(Entry {
                 display: format!("{}:{}", s.source, s.name),
                 kind: Kind::from_spec(&s.spec),
+                spec: s.spec.clone(),
             });
         }
         let mut state = ListState::default();
@@ -84,6 +87,11 @@ impl Sidebar {
                 .filter(|e| e.display.contains(&self.filter))
                 .collect()
         }
+    }
+
+    pub fn selected(&self) -> Option<&Entry> {
+        let i = self.state.selected()?;
+        self.visible().into_iter().nth(i)
     }
 
     fn clamp_selection(&mut self, len: usize) {

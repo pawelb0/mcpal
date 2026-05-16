@@ -103,7 +103,7 @@ impl Ctx {
 /// For HTTP specs: replace `AuthSpec::Oauth` with the stored access token
 /// (auto-refresh if near expiry); leave any other explicit `auth` alone;
 /// otherwise fall through oauth → keyring → `MCPAL_BEARER`.
-async fn attach_bearer(spec: &mut ServerSpec, reference: &str, display: &str) {
+pub async fn attach_bearer(spec: &mut ServerSpec, reference: &str, display: &str) {
     let ServerSpec::Http { url, auth, .. } = spec else {
         return;
     };
