@@ -18,61 +18,51 @@ pub struct ServerWrapper {
     pub server: Server,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
+#[serde(default)]
 pub struct Server {
     pub name: String,
-    #[serde(default)]
     pub description: Option<String>,
-    #[serde(default)]
     pub version: Option<String>,
-    #[serde(default)]
     pub packages: Vec<Package>,
-    #[serde(default)]
     pub remotes: Vec<Remote>,
 }
 
-#[derive(Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
+#[derive(Deserialize, Clone, Default)]
+#[serde(default, rename_all = "camelCase")]
 pub struct Package {
     pub registry_type: String,
     pub identifier: String,
-    #[serde(default)]
     pub version: Option<String>,
-    #[serde(default)]
     pub transport: Option<Transport>,
-    #[serde(default)]
     pub environment_variables: Vec<EnvVar>,
-    #[serde(default)]
     pub package_arguments: Vec<Argument>,
-    #[serde(default)]
     pub runtime_arguments: Vec<Argument>,
 }
 
 #[derive(Deserialize, Clone, Default)]
+#[serde(default)]
 pub struct Transport {
-    #[serde(default)]
     pub r#type: String,
 }
 
-#[derive(Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
+#[derive(Deserialize, Clone, Default)]
+#[serde(default, rename_all = "camelCase")]
 pub struct EnvVar {
     pub name: String,
-    #[serde(default)]
     pub is_required: bool,
-    #[serde(default)]
     pub default: Option<String>,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Default)]
+#[serde(default)]
 pub struct Argument {
-    #[serde(default)]
     pub value: Option<String>,
-    #[serde(default)]
     pub default: Option<String>,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Default)]
+#[serde(default)]
 pub struct Remote {
     pub r#type: String,
     pub url: String,

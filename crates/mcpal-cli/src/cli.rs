@@ -193,12 +193,8 @@ pub enum AuthAction {
         #[arg(long)]
         no_browser: bool,
     },
-    Logout {
-        reference: String,
-    },
-    Status {
-        reference: Option<String>,
-    },
+    Logout { reference: String },
+    Status { reference: Option<String> },
     /// Mint a new access token from the refresh token.
     Refresh {
         reference: String,
@@ -222,34 +218,20 @@ pub enum ConfigAction {
 #[derive(Subcommand, Debug)]
 pub enum ServerAction {
     List(ServerListArgs),
-    Show {
-        reference: String,
-    },
+    Show { reference: String },
     Add(ServerAddArgs),
-    Remove {
-        alias: String,
-    },
+    Remove { alias: String },
     Import(ServerImportArgs),
     /// `serverInfo`.
-    Info {
-        reference: String,
-    },
+    Info { reference: String },
     /// `protocolVersion`.
-    Protocol {
-        reference: String,
-    },
+    Protocol { reference: String },
     /// Capability matrix.
-    Capabilities {
-        reference: String,
-    },
+    Capabilities { reference: String },
     /// `instructions` (or null).
-    Instructions {
-        reference: String,
-    },
+    Instructions { reference: String },
     /// Liveness check.
-    Ping {
-        reference: String,
-    },
+    Ping { reference: String },
     /// Search the MCP Registry.
     Search {
         /// Named `keywords` to avoid collision with global `--query`.
@@ -323,15 +305,9 @@ pub enum ToolAction {
         names_only: bool,
     },
     /// Full tool schema.
-    Describe {
-        reference: String,
-        name: String,
-    },
+    Describe { reference: String, name: String },
     /// Example JSON body from `inputSchema`.
-    Template {
-        reference: String,
-        name: String,
-    },
+    Template { reference: String, name: String },
     /// `tools/call` with `--key value` flags.
     Call {
         reference: String,
@@ -358,18 +334,9 @@ pub enum ResourceAction {
         #[arg(long)]
         names_only: bool,
     },
-    Read {
-        reference: String,
-        uri: String,
-    },
-    Subscribe {
-        reference: String,
-        uri: String,
-    },
-    Unsubscribe {
-        reference: String,
-        uri: String,
-    },
+    Read { reference: String, uri: String },
+    Subscribe { reference: String, uri: String },
+    Unsubscribe { reference: String, uri: String },
     Template {
         #[command(subcommand)]
         action: ResourceTemplateAction,

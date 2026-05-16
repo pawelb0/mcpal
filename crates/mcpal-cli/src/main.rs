@@ -18,7 +18,6 @@ use crate::output::Format;
 use tracing_subscriber::EnvFilter;
 
 use cli::{Cli, Command};
-use config::Config;
 use runtime::Ctx;
 
 fn main() {
@@ -55,7 +54,7 @@ fn run(cli: Cli) -> Result<()> {
 
 async fn dispatch(cli: Cli) -> Result<()> {
     let path = cli.config.unwrap_or_else(config::default_path);
-    let mut cfg = Config::load(&path)?;
+    let mut cfg = config::Config::load(&path)?;
     if let Some(mcp_json) = cli.mcp_json.as_deref() {
         let extra = mcp_json::load(mcp_json)?;
         cfg.server.extend(extra);
@@ -73,34 +72,27 @@ async fn dispatch(cli: Cli) -> Result<()> {
     };
     let ctx = Ctx::new(cfg, format, cli.query, cli.timeout, path, handler);
 
+    use Command::*;
     match cli.command {
-        Command::Config { action } => commands::config::run(action, &ctx.config_path),
-        Command::Server { action } => commands::server::run(action, &ctx).await,
-        Command::Tool { action } => commands::tool::run(action, &ctx).await,
-        Command::Resource { action } => commands::resource::run(action, &ctx).await,
-        Command::Prompt { action } => commands::prompt::run(action, &ctx).await,
-        Command::Raw {
-            reference,
-            method,
-            params,
-        } => commands::raw::run(&reference, &method, params.as_deref(), &ctx).await,
-        Command::Completion { shell } => commands::completion::run(shell),
-        Command::Auth { action } => commands::auth::run(action, &ctx).await,
-        Command::Logging { action } => commands::logging::run(action, &ctx).await,
-        Command::Watch { reference } => commands::watch::run(&reference, &ctx).await,
-        Command::Debug { action } => match action {
-            cli::DebugAction::Doctor => commands::doctor::run(&ctx),
-            cli::DebugAction::Explain { code } => match exit::explain(&code) {
-                Some(text) => {
-                    print!("{text}");
-                    Ok(())
-                }
-                None => anyhow::bail!("no documentation for error code '{code}'"),
-            },
-        },
-        Command::Diff { ref_a, ref_b, only } => {
-            commands::diff::run(&ref_a, &ref_b, only, &ctx).await
+        Config { action } => commands::config::run(action, &ctx.config_path),
+        Server { action } => commands::server::run(action, &ctx).await,
+        Tool { action } => commands::tool::run(action, &ctx).await,
+        Resource { action } => commands::resource::run(action, &ctx).await,
+        Prompt { action } => commands::prompt::run(action, &ctx).await,
+        Raw { reference, method, params } => {
+            commands::raw::run(&reference, &method, params.as_deref(), &ctx).await
         }
+        Completion { shell } => commands::completion::run(shell),
+        Auth { action } => commands::auth::run(action, &ctx).await,
+        Logging { action } => commands::logging::run(action, &ctx).await,
+        Watch { reference } => commands::watch::run(&reference, &ctx).await,
+        Debug { action } => match action {
+            cli::DebugAction::Doctor => commands::doctor::run(&ctx),
+            cli::DebugAction::Explain { code } => exit::explain(&code)
+                .map(|t| print!("{t}"))
+                .ok_or_else(|| anyhow::anyhow!("no documentation for error code '{code}'")),
+        },
+        Diff { ref_a, ref_b, only } => commands::diff::run(&ref_a, &ref_b, only, &ctx).await,
     }
 }
 

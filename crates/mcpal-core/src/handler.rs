@@ -125,11 +125,7 @@ impl ClientHandler for Handler {
     async fn on_progress(&self, p: ProgressNotificationParam, _: NotificationContext<RoleClient>) {
         self.tag("progress", p);
     }
-    async fn on_resource_updated(
-        &self,
-        p: ResourceUpdatedNotificationParam,
-        _: NotificationContext<RoleClient>,
-    ) {
+    async fn on_resource_updated(&self, p: ResourceUpdatedNotificationParam, _: NotificationContext<RoleClient>) {
         self.tag("resource_updated", p);
     }
     async fn on_resource_list_changed(&self, _: NotificationContext<RoleClient>) {
@@ -141,11 +137,7 @@ impl ClientHandler for Handler {
     async fn on_prompt_list_changed(&self, _: NotificationContext<RoleClient>) {
         self.emit(json!({"kind": "prompt_list_changed"}));
     }
-    async fn on_cancelled(
-        &self,
-        p: CancelledNotificationParam,
-        _: NotificationContext<RoleClient>,
-    ) {
+    async fn on_cancelled(&self, p: CancelledNotificationParam, _: NotificationContext<RoleClient>) {
         self.tag("cancelled", p);
     }
 }
