@@ -76,3 +76,20 @@ semicolon_if_nothing_returned = "warn"
 [profile.release]
 lto = "thin"
 strip = "symbols"
+
+[workspace.metadata.dist]
+cargo-dist-version = "0.31.0"
+ci = "github"
+installers = ["shell", "homebrew"]
+hosting = ["github"]
+tap = "pawelb/homebrew-tap"
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-unknown-linux-gnu",
+    "x86_64-unknown-linux-musl",
+    "x86_64-pc-windows-msvc",
+]
+publish-jobs = ["homebrew"]
+pr-run-mode = "plan"
+install-updater = false

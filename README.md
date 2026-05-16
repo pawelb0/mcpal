@@ -31,13 +31,29 @@ $ mcpal --query 'content[0].text' tool call ev echo --message hi
 
 ## Install
 
+From source:
+
 ```
 cargo install --path crates/mcpal-cli
 ```
 
-Prebuilt binaries: pending first tag. The release workflow at
-`.github/workflows/release.yml` builds macOS (arm64 + x86_64), Linux
-(x86_64 GNU), and Windows binaries.
+From a tagged release (after the first `v0.x.0`):
+
+```
+curl --proto '=https' --tlsv1.2 -fsSL \
+  https://raw.githubusercontent.com/pawelb/mcpal/main/dist/install.sh | sh
+```
+
+The script downloads the matching `mcpal-<tag>-<target>.tar.gz`
+artifact from GitHub Releases and drops `mcpal` into
+`$HOME/.local/bin` (override with `MCPAL_INSTALL_DIR`).
+
+A Homebrew formula template lives at `dist/Formula/mcpal.rb`; once a
+tap exists (`pawelb/homebrew-tap`), `brew install mcpal` will work.
+The release workflow at `.github/workflows/release.yml` builds macOS
+(arm64 + x86_64), Linux (x86_64 GNU), and Windows binaries today.
+Running `dist init --yes` regenerates the workflow against the
+`[workspace.metadata.dist]` config (musl + tap + auto-publish).
 
 ## 60-second tour
 
