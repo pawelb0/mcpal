@@ -178,12 +178,26 @@ mcpal completion zsh > ~/.zfunc/_mcpal
 ### Completing tool / resource / prompt names
 
 `tool list`, `resource list`, and `prompt list` accept `--names-only`,
-which prints one name (or URI) per line. Use it to feed dynamic
-completion in your shell — for zsh:
+which prints one name (or URI) per line on stdout. Wire it into your
+shell's completion. For zsh, with the cursor after `mcpal tool call ev `:
 
 ```zsh
-_mcpal_tools() { compadd -- $(mcpal tool list "$words[2]" --names-only 2>/dev/null) }
+_mcpal_tools() {
+  # $words: (mcpal tool call <ref> …); the ref is words[-2] from CURRENT.
+  local ref=${words[-2]}
+  compadd -- $(mcpal tool list "$ref" --names-only 2>/dev/null)
+}
 compdef _mcpal_tools 'mcpal tool call'
 ```
 
-Bash equivalent uses `compgen -W "$(mcpal tool list "$ref" --names-only)" "$cur"`.
+Bash equivalent (inside your `complete -F` function, with `$prev` already
+set to the ref token):
+
+```bash
+COMPREPLY=( $(compgen -W "$(mcpal tool list "$prev" --names-only 2>/dev/null)" -- "$cur") )
+```
+
+stdio servers may leak their own stderr (`Starting default (STDIO)
+server...` and similar) during completion. The `2>/dev/null` above
+suppresses it. Setting `MCPAL_CHILD_STDERR=inherit` un-silences it
+again.
