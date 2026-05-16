@@ -317,7 +317,9 @@ pub enum ServerAction {
     },
     /// Search the MCP Registry (registry.modelcontextprotocol.io).
     Search {
-        /// Free-text search string.
+        /// Free-text search string. Field is named `keywords` (not
+        /// `query`) so clap's derive doesn't collide with the global
+        /// `--query <jmespath>` flag.
         #[arg(value_name = "QUERY")]
         keywords: String,
         /// Max results to return.

@@ -1,10 +1,4 @@
-//! Client for the MCP Registry (https://registry.modelcontextprotocol.io).
-//!
-//! The registry exposes `GET /v0/servers` (with `?search=`, `?limit=`,
-//! `?cursor=`) and returns an envelope of `{servers: [{server, _meta}],
-//! metadata: {nextCursor, count}}`. Each `server` has either a
-//! `packages[]` (stdio runners — npm, pypi, oci, ...) or a `remotes[]`
-//! (hosted Streamable HTTP / SSE endpoints).
+//! MCP Registry client (registry.modelcontextprotocol.io).
 
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -168,7 +162,7 @@ fn pick_stdio_package(server: &Server) -> Option<&Package> {
     server.packages.iter().find(|p| {
         p.transport
             .as_ref()
-            .map(|t| t.r#type == "stdio" || t.r#type.is_empty())
+            .map(|t| t.r#type == "stdio")
             .unwrap_or(true)
     })
 }
