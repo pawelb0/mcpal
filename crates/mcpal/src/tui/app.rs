@@ -68,28 +68,31 @@ impl App {
 
     fn on_event(&mut self, ev: Event) {
         let Event::Key(key) = ev else { return };
-        if self.on_global(key) {
+        // Ctrl-C always quits, even mid-typing.
+        if key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('c') {
+            self.quit = true;
             return;
         }
-        match self.focus {
-            Focus::Sidebar => {
-                self.sidebar.on_key(key);
-            }
-            Focus::Detail | Focus::Output => {}
+        let typing = self.focus == Focus::Sidebar && self.sidebar.filter_active;
+        if !typing && self.on_global(key) {
+            return;
+        }
+        if self.focus == Focus::Sidebar {
+            self.sidebar.on_key(key);
         }
     }
 
     fn on_global(&mut self, key: KeyEvent) -> bool {
-        match (key.modifiers, key.code) {
-            (KeyModifiers::CONTROL, KeyCode::Char('c')) | (_, KeyCode::Char('q')) => {
+        match key.code {
+            KeyCode::Char('q') => {
                 self.quit = true;
                 true
             }
-            (_, KeyCode::Tab) => {
+            KeyCode::Tab => {
                 self.focus = self.focus.next();
                 true
             }
-            (_, KeyCode::BackTab) => {
+            KeyCode::BackTab => {
                 self.focus = self.focus.prev();
                 true
             }

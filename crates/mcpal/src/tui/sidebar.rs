@@ -2,9 +2,9 @@ use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent};
 use mcpal_core::{AuthSpec, ServerSpec};
 use ratatui::Frame;
-use ratatui::layout::Rect;
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
-use ratatui::widgets::{Block, Borders, List, ListItem, ListState};
+use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 
 use crate::runtime::Ctx;
 
@@ -42,6 +42,8 @@ pub struct Entry {
 pub struct Sidebar {
     entries: Vec<Entry>,
     state: ListState,
+    filter: String,
+    pub filter_active: bool,
 }
 
 impl Sidebar {
@@ -65,16 +67,47 @@ impl Sidebar {
         if !entries.is_empty() {
             state.select(Some(0));
         }
-        Ok(Self { entries, state })
+        Ok(Self {
+            entries,
+            state,
+            filter: String::new(),
+            filter_active: false,
+        })
+    }
+
+    fn visible(&self) -> Vec<&Entry> {
+        if self.filter.is_empty() {
+            self.entries.iter().collect()
+        } else {
+            self.entries
+                .iter()
+                .filter(|e| e.display.contains(&self.filter))
+                .collect()
+        }
+    }
+
+    fn clamp_selection(&mut self, len: usize) {
+        if len == 0 {
+            self.state.select(None);
+        } else if self.state.selected().is_none_or(|i| i >= len) {
+            self.state.select(Some(len - 1));
+        }
     }
 
     pub fn on_key(&mut self, key: KeyEvent) -> bool {
-        let len = self.entries.len();
-        if len == 0 {
+        if self.filter_active {
+            return self.on_filter_key(key);
+        }
+        let len = self.visible().len();
+        if len == 0 && key.code != KeyCode::Char('/') {
             return false;
         }
         let cur = self.state.selected().unwrap_or(0);
         match key.code {
+            KeyCode::Char('/') => {
+                self.filter_active = true;
+                true
+            }
             KeyCode::Char('j') | KeyCode::Down if cur + 1 < len => {
                 self.state.select(Some(cur + 1));
                 true
@@ -95,9 +128,37 @@ impl Sidebar {
         }
     }
 
+    fn on_filter_key(&mut self, key: KeyEvent) -> bool {
+        match key.code {
+            KeyCode::Esc => {
+                self.filter.clear();
+                self.filter_active = false;
+            }
+            KeyCode::Enter => self.filter_active = false,
+            KeyCode::Backspace => {
+                self.filter.pop();
+            }
+            KeyCode::Char(c) => self.filter.push(c),
+            _ => return false,
+        }
+        let len = self.visible().len();
+        self.clamp_selection(len);
+        true
+    }
+
     pub fn render(&mut self, f: &mut Frame, area: Rect, focused: bool) {
-        let items: Vec<ListItem> = self
-            .entries
+        let show_filter = focused && (self.filter_active || !self.filter.is_empty());
+        let (list_area, filter_area) = if show_filter {
+            let v = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(0), Constraint::Length(3)])
+                .split(area);
+            (v[0], Some(v[1]))
+        } else {
+            (area, None)
+        };
+        let visible = self.visible();
+        let items: Vec<ListItem> = visible
             .iter()
             .map(|e| ListItem::new(format!("{} {}", e.kind.icon(), e.display)))
             .collect();
@@ -109,11 +170,22 @@ impl Sidebar {
         let list = List::new(items)
             .block(
                 Block::default()
-                    .title(format!("Servers ({})", self.entries.len()))
+                    .title(format!("Servers ({}/{})", visible.len(), self.entries.len()))
                     .borders(Borders::ALL)
                     .border_style(border),
             )
             .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
-        f.render_stateful_widget(list, area, &mut self.state);
+        f.render_stateful_widget(list, list_area, &mut self.state);
+        if let Some(rect) = filter_area {
+            let prefix = if self.filter_active { "/" } else { " " };
+            let cursor = if self.filter_active { "▌" } else { "" };
+            let p = Paragraph::new(format!("{prefix}{}{cursor}", self.filter)).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::DarkGray))
+                    .title("filter"),
+            );
+            f.render_widget(p, rect);
+        }
     }
 }
