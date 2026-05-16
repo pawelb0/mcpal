@@ -127,6 +127,9 @@ pub enum Command {
         #[command(subcommand)]
         action: DebugAction,
     },
+    /// Launch the interactive TUI.
+    #[cfg(feature = "tui")]
+    Tui,
 }
 
 #[derive(Subcommand, Debug)]

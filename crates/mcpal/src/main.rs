@@ -10,6 +10,8 @@ mod output;
 mod registry;
 mod resolver;
 mod runtime;
+#[cfg(feature = "tui")]
+mod tui;
 
 use crate::output::Format;
 use anyhow::Result;
@@ -95,6 +97,8 @@ async fn dispatch(cli: Cli) -> Result<()> {
                 .ok_or_else(|| anyhow::anyhow!("no documentation for error code '{code}'")),
         },
         Diff { ref_a, ref_b, only } => commands::diff::run(&ref_a, &ref_b, only, &ctx).await,
+        #[cfg(feature = "tui")]
+        Tui => tui::run(&ctx).await,
     }
 }
 
