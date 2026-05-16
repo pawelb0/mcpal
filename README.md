@@ -26,7 +26,7 @@ $ mcpal --query 'content[0].text' tool call ev echo --message hi
 3. **Works in pipelines.** Stable exit codes per failure class,
    `--output json|yaml`, AWS-CLI-compatible `--query <jmespath>`,
    rustc-style error blocks with stable `E####` codes,
-   `mcpal explain E####` for the long-form prose, `--timeout SECS` and
+   `mcpal debug explain E####` for the long-form prose, `--timeout SECS` and
    Ctrl-C cancellation.
 
 ## Install
@@ -137,8 +137,8 @@ mcpal raw ev some/method --params -
 ### Discover servers from other clients
 
 ```bash
-mcpal discover                           # full dump
-mcpal discover --source cursor           # one client
+mcpal server discover                           # full dump
+mcpal server discover --source cursor           # one client
 mcpal server list --all                  # mcpal-owned + discovered
 mcpal tool list opencode:tavily          # call directly
 mcpal --mcp-json ./mcp.json tool list x  # use a Claude/Cursor config inline
@@ -164,7 +164,7 @@ done
 | 0 | success | — |
 | 1 | generic | check stderr |
 | 2 | usage | `mcpal <cmd> --help` |
-| 3 | server ref not found | `mcpal discover` |
+| 3 | server ref not found | `mcpal server discover` |
 | 4 | auth required | `mcpal auth login <ref>` |
 | 5 | auth expired | `mcpal auth refresh <ref>` |
 | 6 | transport | network or stdio failure |
@@ -176,20 +176,20 @@ Each error renders with a stable `E####` code:
 
 ```
 error[E0001]: server 'foo' not found (owned, URL, path, or discovered)
-help: run `mcpal discover` to scan installed MCP clients for servers
+help: run `mcpal server discover` to scan installed MCP clients for servers
 help: or `mcpal server list --all` to see what's already configured
 help: or add one: `mcpal server add <alias> --stdio <command>`
 
-For more information about this error, try `mcpal explain E0001`.
+For more information about this error, try `mcpal debug explain E0001`.
 ```
 
-Codes E0000–E0011 today. `mcpal explain <code>` prints the long-form
+Codes E0000–E0011 today. `mcpal debug explain <code>` prints the long-form
 prose for each.
 
 ### Sanity check
 
 ```bash
-mcpal doctor
+mcpal debug doctor
 ```
 
 Checks: config readable, keyring round-trip, auth state per server,

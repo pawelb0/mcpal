@@ -1,9 +1,9 @@
 # Troubleshooting
 
-## `mcpal doctor`
+## `mcpal debug doctor`
 
 ```bash
-mcpal doctor
+mcpal debug doctor
 ```
 
 Checks: config readable, keyring round-trip, auth state per server,
@@ -13,15 +13,15 @@ discovery counts. YAML default; `--output json` for bug reports.
 
 ```
 error[E0001]: server 'foo' not found (owned, URL, path, or discovered)
-help: run `mcpal discover` to scan installed MCP clients for servers
+help: run `mcpal server discover` to scan installed MCP clients for servers
 help: or `mcpal server list --all` to see what's already configured
 help: or add one: `mcpal server add <alias> --stdio <command>`
 ```
 
-- `mcpal discover` lists every client config mcpal scans.
+- `mcpal server discover` lists every client config mcpal scans.
 - If you copied a config from Cursor or Claude Desktop, try
   `mcpal --mcp-json ./mcp.json tool list <name>` and skip registration.
-- `mcpal explain E0001` for the resolver order.
+- `mcpal debug explain E0001` for the resolver order.
 
 ## E0003 / E0004 — auth
 
@@ -105,7 +105,7 @@ MCPAL_CHILD_STDERR=inherit mcpal tool call <ref> …
 
 ## Keyring failures on Linux
 
-If `mcpal doctor` reports `keyring round-trip failed`, the session has
+If `mcpal debug doctor` reports `keyring round-trip failed`, the session has
 no running Secret Service daemon. Install `gnome-keyring` or `kwallet`.
 In CI or containers, skip the keyring entirely with `MCPAL_BEARER=…`.
 

@@ -15,7 +15,7 @@ mcpal is meant for pipelines:
 | 0 | success | — | — |
 | 1 | generic error | E0000 | check stderr |
 | 2 | usage / invalid arguments | E0002, E0009, E0010 | `mcpal <subcommand> --help` |
-| 3 | server reference not found | E0001 | `mcpal discover` |
+| 3 | server reference not found | E0001 | `mcpal server discover` |
 | 4 | auth required | E0003 | `mcpal auth login <ref>` |
 | 5 | auth expired | E0004 | `mcpal auth refresh <ref>` |
 | 6 | transport / not yet supported | E0005, E0008 | network unreachable or `mcpal raw` |
@@ -23,7 +23,7 @@ mcpal is meant for pipelines:
 | 8 | request timed out | E0007 | retry; with `--timeout`, raise the value |
 | 130 | interrupted (Ctrl-C) | E0011 | — |
 
-Each error prints `error[E####]:` plus hints. `mcpal explain E####`
+Each error prints `error[E####]:` plus hints. `mcpal debug explain E####`
 shows the long form.
 
 ## `--output json`
@@ -102,7 +102,7 @@ list-changed). Run alongside another terminal that drives requests.
 - run: cargo install --path crates/mcpal-cli
 - run: |
     mcpal server add api --http $MCP_URL
-    mcpal doctor --output json
+    mcpal debug doctor --output json
     mcpal --output json tool list api > tools.json
   env:
     MCPAL_BEARER: ${{ secrets.MCP_TOKEN }}

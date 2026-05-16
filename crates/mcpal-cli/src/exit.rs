@@ -92,7 +92,7 @@ pub fn classify(err: &anyhow::Error) -> Diagnostic {
                 "E0001",
                 format!("not found: {msg}"),
                 &[
-                    "run `mcpal discover` to scan installed MCP clients for servers",
+                    "run `mcpal server discover` to scan installed MCP clients for servers",
                     "or `mcpal server list --all` to see what's already configured",
                 ],
             ),
@@ -137,7 +137,7 @@ pub fn classify(err: &anyhow::Error) -> Diagnostic {
             "E0001",
             err.to_string(),
             &[
-                "run `mcpal discover` to scan installed MCP clients for servers",
+                "run `mcpal server discover` to scan installed MCP clients for servers",
                 "or `mcpal server list --all` to see what's already configured",
                 "or add one: `mcpal server add <alias> --stdio <command>`",
             ],
@@ -244,9 +244,9 @@ fn first_line(s: &str) -> &str {
 
 /// Format a diagnostic in the rustc-style block:
 ///   error[E0001]: not found: server 'foo' …
-///   help: run `mcpal discover`
+///   help: run `mcpal server discover`
 ///   help: …
-///   For more information about this error, try `mcpal explain E0001`.
+///   For more information about this error, try `mcpal debug explain E0001`.
 pub fn render(d: &Diagnostic) -> String {
     use std::fmt::Write;
     let mut out = String::new();
@@ -257,7 +257,7 @@ pub fn render(d: &Diagnostic) -> String {
     if d.error_code != "E0000" {
         write!(
             out,
-            "\nFor more information about this error, try `mcpal explain {}`.",
+            "\nFor more information about this error, try `mcpal debug explain {}`.",
             d.error_code
         )
         .ok();
@@ -293,7 +293,7 @@ order:
   5. a bare `<name>` if it's unambiguous across discovered sources
 
 To fix:
-  - `mcpal discover` — list everything installed clients already configured
+  - `mcpal server discover` — list everything installed clients already configured
   - `mcpal server list --all` — see mcpal-owned + discovered together
   - `mcpal server add <alias> --stdio <command>` — register a stdio server
   - `mcpal server add <alias> --http <url>` — register an HTTP server

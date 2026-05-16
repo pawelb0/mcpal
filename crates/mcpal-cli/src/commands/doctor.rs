@@ -1,4 +1,4 @@
-//! `mcpal doctor` — sanity check the local environment. Inspired by
+//! `mcpal debug doctor` — sanity check the local environment. Inspired by
 //! `fly doctor`. Verifies: config readable, keyring round-trips, every
 //! known server resolves, OAuth tokens present where expected, discovery
 //! sources reachable.

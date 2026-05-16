@@ -3,28 +3,11 @@ use std::path::PathBuf;
 use clap::{ArgAction, Parser, Subcommand, ValueEnum};
 use mcpal_output::Format;
 
-pub const EXIT_CODES_HELP: &str = "\
-Exit codes:
-  0    success
-  1    generic error
-  2    usage / invalid arguments
-  3    server reference not found (try `mcpal discover` or `mcpal server list`)
-  4    auth required (run `mcpal auth login <ref>` or `--oauth`)
-  5    auth expired (run `mcpal auth refresh <ref>`)
-  6    transport error / not yet supported
-  7    server returned a JSON-RPC error
-  8    request timed out (raise with `--timeout <SECS>`)
-  130  interrupted by Ctrl-C
-
-Error codes E0000–E0012 — see `mcpal explain E####` for the long form.
-";
-
 #[derive(Parser, Debug)]
 #[command(
     name = "mcpal",
     version,
     about = "Scriptable command-line client for the Model Context Protocol",
-    after_help = EXIT_CODES_HELP,
     long_about = "\
 mcpal is a scriptable command-line client for the Model Context Protocol.
 
@@ -121,15 +104,7 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    /// Create an empty mcpal config file at the default path.
-    ///
-    /// Optional — `mcpal server add …` and the auth commands will create
-    /// the file lazily. Run `init` if you want the file to exist (e.g. to
-    /// open it in your editor via `mcpal config edit`) before adding any
-    /// servers.
-    Init,
-
-    /// Inspect or edit the mcpal config file (path, contents, $EDITOR).
+    /// Inspect or edit the mcpal config file (init, path, contents, $EDITOR).
     Config {
         #[command(subcommand)]
         action: ConfigAction,
@@ -186,15 +161,6 @@ pub enum Command {
         shell: Shell,
     },
 
-    /// Scan installed MCP clients (Claude, Cursor, opencode, …) for servers
-    /// they already configured. Servers found this way are usable directly
-    /// as `<source>:<name>` without copying into mcpal config.
-    Discover {
-        /// Filter to a single source id (claude-code, cursor, …).
-        #[arg(long)]
-        source: Option<String>,
-    },
-
     /// Store bearer tokens or run an OAuth 2.1 flow; tokens persist in the
     /// OS keyring (Keychain / Secret Service / Credential Manager).
     Auth {
@@ -213,14 +179,23 @@ pub enum Command {
     /// documents until Ctrl-C.
     Watch { reference: String },
 
-    /// Explain an error code in long form (like `rustc --explain`).
-    /// Example: `mcpal explain E0001`.
-    Explain { code: String },
+    /// Diagnostics: `debug doctor` checks the local environment;
+    /// `debug explain E####` prints the long-form prose for one error.
+    Debug {
+        #[command(subcommand)]
+        action: DebugAction,
+    },
+}
 
+#[derive(Subcommand, Debug)]
+pub enum DebugAction {
     /// Sanity-check mcpal's local environment: config, keyring, stored
     /// credentials per server, discovery sources. Pastable into a bug
     /// report (use `--output json`).
     Doctor,
+    /// Explain an error code in long form (like `rustc --explain`).
+    /// Example: `mcpal debug explain E0001`.
+    Explain { code: String },
 }
 
 #[derive(Subcommand, Debug)]
@@ -297,6 +272,9 @@ pub enum AuthAction {
 
 #[derive(Subcommand, Debug)]
 pub enum ConfigAction {
+    /// Create an empty mcpal config file at the default path. Optional:
+    /// `server add` and the auth commands will create the file lazily.
+    Init,
     /// Print the active config file path (honors $MCPAL_CONFIG / --config).
     Path,
     /// Print the parsed config as TOML.
@@ -344,6 +322,15 @@ pub enum ServerAction {
     /// streamable-http remote into a `ServerSpec` and writes it to
     /// the mcpal config.
     Install(ServerInstallArgs),
+    /// Scan installed MCP clients (Claude, Cursor, opencode, …) for
+    /// servers they already configured. Servers found this way are
+    /// usable directly as `<source>:<name>` without copying into
+    /// mcpal config.
+    Discover {
+        /// Filter to a single source id (claude-code, cursor, …).
+        #[arg(long)]
+        source: Option<String>,
+    },
 }
 
 #[derive(clap::Args, Debug)]

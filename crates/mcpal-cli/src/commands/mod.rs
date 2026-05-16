@@ -4,7 +4,6 @@ pub mod config;
 pub mod diff;
 pub mod discover;
 pub mod doctor;
-pub mod init;
 pub mod logging;
 pub mod prompt;
 pub mod raw;

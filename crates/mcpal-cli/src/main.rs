@@ -72,7 +72,6 @@ async fn dispatch(cli: Cli) -> Result<()> {
     let ctx = Ctx::new(cfg, format, cli.query, cli.timeout, path, handler_opts);
 
     match cli.command {
-        Command::Init => commands::init::run(&ctx.config_path),
         Command::Config { action } => commands::config::run(action, &ctx.config_path),
         Command::Server { action } => commands::server::run(action, &ctx).await,
         Command::Tool { action } => commands::tool::run(action, &ctx).await,
@@ -84,18 +83,19 @@ async fn dispatch(cli: Cli) -> Result<()> {
             params,
         } => commands::raw::run(&reference, &method, params.as_deref(), &ctx).await,
         Command::Completion { shell } => commands::completion::run(shell),
-        Command::Discover { source } => commands::discover::run(source.as_deref(), &ctx),
         Command::Auth { action } => commands::auth::run(action, &ctx).await,
         Command::Logging { action } => commands::logging::run(action, &ctx).await,
         Command::Watch { reference } => commands::watch::run(&reference, &ctx).await,
-        Command::Explain { code } => match exit::explain(&code) {
-            Some(text) => {
-                print!("{text}");
-                Ok(())
-            }
-            None => anyhow::bail!("no documentation for error code '{code}'"),
+        Command::Debug { action } => match action {
+            cli::DebugAction::Doctor => commands::doctor::run(&ctx),
+            cli::DebugAction::Explain { code } => match exit::explain(&code) {
+                Some(text) => {
+                    print!("{text}");
+                    Ok(())
+                }
+                None => anyhow::bail!("no documentation for error code '{code}'"),
+            },
         },
-        Command::Doctor => commands::doctor::run(&ctx),
         Command::Diff { ref_a, ref_b, only } => {
             commands::diff::run(&ref_a, &ref_b, only, &ctx).await
         }

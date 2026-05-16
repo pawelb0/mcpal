@@ -26,7 +26,7 @@ mcpal --query 'content[0].text' tool call ev echo --message hi
 3. **Works in pipelines.** Stable exit codes per failure class,
    `--output json|yaml`, AWS-CLI-compatible `--query <jmespath>`,
    rustc-style error blocks with stable `E####` codes,
-   `mcpal explain E####` for the long-form prose, `--timeout SECS` and
+   `mcpal debug explain E####` for the long-form prose, `--timeout SECS` and
    Ctrl-C cancellation.
 
 Read [Concepts](./concepts.md) next.

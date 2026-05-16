@@ -8,6 +8,14 @@ use crate::config::Config;
 
 pub fn run(action: ConfigAction, path: &Path) -> Result<()> {
     match action {
+        ConfigAction::Init => {
+            if path.exists() {
+                bail!("config already exists at {}", path.display());
+            }
+            Config::default().save(path)?;
+            println!("wrote {}", path.display());
+            Ok(())
+        }
         ConfigAction::Path => {
             println!("{}", path.display());
             Ok(())

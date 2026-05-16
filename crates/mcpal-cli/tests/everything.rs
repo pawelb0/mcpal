@@ -24,7 +24,7 @@ fn m1_smoke() {
     let dir = tempfile::tempdir().unwrap();
     let cfg = dir.path().join("mcpal.toml");
 
-    mcpal(&cfg).args(["init"]).assert().success();
+    mcpal(&cfg).args(["config", "init"]).assert().success();
 
     mcpal(&cfg)
         .args([

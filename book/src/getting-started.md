@@ -51,7 +51,7 @@ content:
 ## Discover
 
 ```bash
-mcpal discover
+mcpal server discover
 mcpal server list --all
 ```
 
@@ -97,16 +97,16 @@ Tokens go to the OS keyring, not the TOML config.
 ## Health check
 
 ```bash
-mcpal doctor
+mcpal debug doctor
 ```
 
 Errors render in rustc style:
 
 ```
 error[E0001]: server 'foo' not found …
-help: run `mcpal discover` …
+help: run `mcpal server discover` …
 
-For more information about this error, try `mcpal explain E0001`.
+For more information about this error, try `mcpal debug explain E0001`.
 ```
 
 Recipes are in [Recipes](./recipes.md).

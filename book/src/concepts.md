@@ -45,7 +45,7 @@ mcpal reads other clients' MCP config files:
 | Windsurf | `~/.codeium/windsurf/mcp_config.json` | same | same |
 | Cline | VS Code `globalStorage` | same | same |
 
-`mcpal discover` lists everything found. `mcpal server list --all` shows
+`mcpal server discover` lists everything found. `mcpal server list --all` shows
 owned and discovered together. Discovered servers are addressable as
 `<source>:<name>` without copying their config.
 

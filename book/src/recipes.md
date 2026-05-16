@@ -20,7 +20,7 @@ Required env vars without defaults must be supplied via `--env K=V`.
 ## List servers already on the machine
 
 ```bash
-mcpal discover
+mcpal server discover
 ```
 
 ## Use an `mcp.json` without registering it

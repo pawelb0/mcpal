@@ -92,7 +92,7 @@ All entries are under keyring service `mcpal`.
 | `oauth:<ref>` | JSON `StoredCredentials` (rmcp) |
 | `client:<ref>` | DCR `{client_id, client_secret?}` |
 
-`mcpal doctor` round-trips a canary entry to verify the keyring is
+`mcpal debug doctor` round-trips a canary entry to verify the keyring is
 accessible. On Linux, mcpal uses `linux-native-sync-persistent`, which
 talks to `org.freedesktop.secrets`; if no Secret Service daemon is
 running the round-trip fails.

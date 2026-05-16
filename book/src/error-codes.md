@@ -1,7 +1,7 @@
 # Error codes
 
 Every error has a stable `E####` code. At the CLI you see a rustc-style
-block; this page is the long form. `mcpal explain E####` prints the
+block; this page is the long form. `mcpal debug explain E####` prints the
 same text.
 
 ## E0000 — generic
@@ -24,7 +24,7 @@ mcpal didn't recognise the `<ref>`. References resolve in this order:
 
 Fixes:
 
-- `mcpal discover` — list everything installed clients already
+- `mcpal server discover` — list everything installed clients already
   configured.
 - `mcpal server list --all` — owned + discovered.
 - `mcpal server add <alias> --stdio <command>` — register a stdio
