@@ -230,6 +230,34 @@ it          'server add --http registers' \
 it_grep     'server show fake-http → http' 'http' mc server show fake-http
 it          'server remove fake-http' mc server remove fake-http
 
+# ---------- typed arg parsing ----------
+section 'typed args'
+it_grep     'integer typed correctly' '42' \
+            mc --query 'content[0].text' tool call "$REF" get-sum --a 40 --b 2
+it_exit     'string where number expected → E0012 exit 2' 2 \
+            mc tool call "$REF" get-sum --a 40 --b notanumber
+
+# ---------- output shapes ----------
+section 'output shapes'
+it_grep     'tool list JSON has [].name'   '"name"'        mc --output json tool list "$REF"
+it_grep     'tool list JSON has required'  '"required"'    mc --output json tool list "$REF"
+it_grep     'server list JSON has source'  '"source"'      mc --output json server list
+it_grep     'doctor reports mcpal version' '"version"'     mc --output json debug doctor
+
+# ---------- config edge cases ----------
+section 'config edge cases'
+BAD_CFG="$(mktemp -t mcpal-bad.XXXXXX)"
+printf 'this is not toml = =\n' >"$BAD_CFG"
+it_exit     'malformed TOML → exit 1 not panic' 1 \
+            "$BIN" --config "$BAD_CFG" server list
+rm -f "$BAD_CFG"
+
+NOEXIST_CFG="$(mktemp -u -t mcpal-nonexist.XXXXXX)"
+it          'missing config: server list works (empty)' \
+            "$BIN" --config "$NOEXIST_CFG" server list
+
+it_exit     'config init twice fails' 1 mc config init
+
 # ---------- bearer env one-shot ----------
 section 'MCPAL_BEARER env'
 MCPAL_BEARER=ignored "$BIN" --config "$CFG" server ping "$REF" >"$OUT" 2>"$ERR"
@@ -241,6 +269,26 @@ else
     sed 's/^/      | /' "$ERR" >&2
     fail=$((fail + 1))
 fi
+
+# ---------- watch ----------
+section watch
+WATCH_OUT="$(mktemp -t mcpal-watch.XXXXXX)"
+"$BIN" --config "$CFG" watch "$REF" >"$WATCH_OUT" 2>/dev/null &
+WATCH_PID=$!
+sleep 2
+mc tool call "$REF" toggle-simulated-logging --enable true >/dev/null 2>&1 || true
+sleep 2
+kill "$WATCH_PID" 2>/dev/null
+wait "$WATCH_PID" 2>/dev/null
+if grep -qE 'kind:' "$WATCH_OUT"; then
+    printf '  ok   watch emits at least one kind: notification\n'
+    pass=$((pass + 1))
+else
+    printf '  FAIL watch emitted no notifications\n'
+    sed 's/^/      | /' "$WATCH_OUT" >&2
+    fail=$((fail + 1))
+fi
+rm -f "$WATCH_OUT"
 
 # ---------- cleanup ----------
 section cleanup
