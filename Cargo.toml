@@ -9,6 +9,7 @@ rust-version = "1.95"
 authors = ["Paweł B. <pawelb@fastmail.com>"]
 license = "MIT"
 repository = "https://github.com/pawelb0/mcpal"
+homepage = "https://pawelb0.github.io/mcpal/"
 
 [workspace.dependencies]
 rmcp = { version = "1.6", default-features = false, features = [
@@ -81,19 +82,17 @@ strip = "symbols"
 [workspace.metadata.dist]
 cargo-dist-version = "0.31.0"
 ci = "github"
-installers = ["shell"]
+installers = ["shell", "homebrew", "powershell"]
 hosting = ["github"]
+tap = "pawelb0/homebrew-tap"
+publish-jobs = ["homebrew"]
 targets = [
     "aarch64-apple-darwin",
     "x86_64-apple-darwin",
+    "aarch64-unknown-linux-gnu",
     "x86_64-unknown-linux-gnu",
     "x86_64-unknown-linux-musl",
     "x86_64-pc-windows-msvc",
 ]
 pr-run-mode = "plan"
 install-updater = false
-# To enable Homebrew publishing, create the tap repo (e.g.
-# `pawelb0/homebrew-tap`), then add:
-#   installers = ["shell", "homebrew"]
-#   tap = "pawelb0/homebrew-tap"
-#   publish-jobs = ["homebrew"]
