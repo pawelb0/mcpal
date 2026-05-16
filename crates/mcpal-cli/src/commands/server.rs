@@ -49,9 +49,7 @@ pub async fn run(action: ServerAction, ctx: &Ctx) -> Result<()> {
         }
         ServerAction::Search { keywords, limit } => search(&keywords, limit, ctx).await,
         ServerAction::Install(args) => install(args, ctx).await,
-        ServerAction::Discover { source } => {
-            crate::commands::discover::run(source.as_deref(), ctx)
-        }
+        ServerAction::Discover { source } => crate::commands::discover::run(source.as_deref(), ctx),
     }
 }
 

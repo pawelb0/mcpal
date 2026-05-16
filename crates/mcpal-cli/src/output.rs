@@ -37,7 +37,9 @@ pub fn apply_query(value: Value, query: Option<&str>) -> Result<Value, Error> {
     let compiled = jmespath::compile(expr).map_err(|e| Error::Query(format!("compile: {e}")))?;
     let v =
         jmespath::Variable::from_serializable(&value).map_err(|e| Error::Query(e.to_string()))?;
-    let r = compiled.search(v).map_err(|e| Error::Query(format!("search: {e}")))?;
+    let r = compiled
+        .search(v)
+        .map_err(|e| Error::Query(format!("search: {e}")))?;
     let s = serde_json::to_string(&*r).map_err(|e| Error::Query(e.to_string()))?;
     serde_json::from_str(&s).map_err(|e| Error::Query(e.to_string()))
 }

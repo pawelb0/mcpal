@@ -23,9 +23,9 @@ use axum::{
     response::{IntoResponse, Redirect},
     routing::{get, post},
 };
-use std::sync::Arc;
 use serde::Deserialize;
 use serde_json::{Value, json};
+use std::sync::Arc;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -87,7 +87,11 @@ struct AuthorizeQuery {
 }
 
 async fn authorize(Query(q): Query<AuthorizeQuery>) -> impl IntoResponse {
-    let sep = if q.redirect_uri.contains('?') { '&' } else { '?' };
+    let sep = if q.redirect_uri.contains('?') {
+        '&'
+    } else {
+        '?'
+    };
     let url = format!("{}{sep}code=mock-code&state={}", q.redirect_uri, q.state);
     Redirect::to(&url)
 }

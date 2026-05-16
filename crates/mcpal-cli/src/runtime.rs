@@ -3,10 +3,10 @@ use std::future::Future;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use crate::output::{Format, emit_list, emit_one};
 use anyhow::{Result, anyhow};
 use mcpal_core::{AuthSpec, Client, Handler, ServerSpec, connect};
 use mcpal_discovery::{DiscoveredServer, DiscoveryCtx, discover};
-use crate::output::{Format, emit_list, emit_one};
 use serde::Serialize;
 
 use crate::config::Config;
@@ -128,4 +128,3 @@ async fn attach_bearer(spec: &mut ServerSpec, reference: &str, display: &str) {
         *auth = Some(AuthSpec::Bearer { token });
     }
 }
-

@@ -15,7 +15,10 @@ pub async fn run(ref_a: &str, ref_b: &str, only: Option<DiffCategory>, ctx: &Ctx
         out.insert("tools".into(), to_value(diff(&a.tools, &b.tools))?);
     }
     if pick(DiffCategory::Resources) {
-        out.insert("resources".into(), to_value(diff(&a.resources, &b.resources))?);
+        out.insert(
+            "resources".into(),
+            to_value(diff(&a.resources, &b.resources))?,
+        );
     }
     if pick(DiffCategory::Prompts) {
         out.insert("prompts".into(), to_value(diff(&a.prompts, &b.prompts))?);

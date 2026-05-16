@@ -96,7 +96,9 @@ async fn list(reference: &str, names_only: bool, ctx: &Ctx) -> Result<()> {
 
 async fn templates(reference: &str, ctx: &Ctx) -> Result<()> {
     let (_, client) = ctx.open(reference).await?;
-    let templates = ctx.under_deadline(client.list_all_resource_templates()).await??;
+    let templates = ctx
+        .under_deadline(client.list_all_resource_templates())
+        .await??;
     let summaries: Vec<TemplateSummary<'_>> = templates
         .iter()
         .map(|t| TemplateSummary {

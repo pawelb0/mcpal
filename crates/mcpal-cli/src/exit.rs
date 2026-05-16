@@ -1,8 +1,8 @@
 //! Classify an `anyhow::Error` into a stable exit code + `E####` block.
 //! Long-form prose lives in the `EXPLAIN` table below (mirrored in the book).
 
-use mcpal_core::Error as CoreError;
 use crate::output::Error as OutputError;
+use mcpal_core::Error as CoreError;
 
 pub struct Diagnostic {
     pub code: i32,
@@ -99,36 +99,75 @@ pub fn render(d: &Diagnostic) -> String {
 
 /// Long-form prose per error code. Mirrors `rustc --explain Exxxx`.
 const EXPLAIN: &[(&str, &str)] = &[
-    ("E0000", "Generic error — mcpal couldn't classify it. Open an issue with the command \
-        and `-v` trace.\n"),
-    ("E0001", "Server reference not found. A `<ref>` resolves as: owned alias → URL → \
+    (
+        "E0000",
+        "Generic error — mcpal couldn't classify it. Open an issue with the command \
+        and `-v` trace.\n",
+    ),
+    (
+        "E0001",
+        "Server reference not found. A `<ref>` resolves as: owned alias → URL → \
         JSON file → `<source>:<name>` discovered → bare name (unambiguous). Fix with \
-        `mcpal server discover`, `server list --all`, or `server add`.\n"),
-    ("E0002", "Bad arguments. Use AWS-CLI style `--key value`; for nested JSON pass \
+        `mcpal server discover`, `server list --all`, or `server add`.\n",
+    ),
+    (
+        "E0002",
+        "Bad arguments. Use AWS-CLI style `--key value`; for nested JSON pass \
         `--cli-input-json @args.json` or `--params '{…}'`. `tool template <ref> <name>` \
-        prints a skeleton.\n"),
-    ("E0003", "Auth required. `mcpal auth login <ref> --bearer <TOKEN>` or `--oauth`. \
-        `MCPAL_BEARER=…` works as a one-shot. Tokens live in the OS keyring.\n"),
-    ("E0004", "Auth expired. `mcpal auth refresh <ref>`, or a full `mcpal auth login \
-        <ref> --oauth` if refresh also fails. `mcpal auth status <ref>` shows state.\n"),
-    ("E0005", "Transport error. Verify the URL with `curl -I`, confirm a stdio command \
+        prints a skeleton.\n",
+    ),
+    (
+        "E0003",
+        "Auth required. `mcpal auth login <ref> --bearer <TOKEN>` or `--oauth`. \
+        `MCPAL_BEARER=…` works as a one-shot. Tokens live in the OS keyring.\n",
+    ),
+    (
+        "E0004",
+        "Auth expired. `mcpal auth refresh <ref>`, or a full `mcpal auth login \
+        <ref> --oauth` if refresh also fails. `mcpal auth status <ref>` shows state.\n",
+    ),
+    (
+        "E0005",
+        "Transport error. Verify the URL with `curl -I`, confirm a stdio command \
         runs standalone, and re-run with `-v`/`-vv`. `mcpal server ping <ref>` is the \
-        smallest reproducer.\n"),
-    ("E0006", "Server returned a JSON-RPC error. Check the tool name and arguments with \
-        `tool describe` / `tool template`; re-run with `-v` to see the raw frame.\n"),
-    ("E0007", "Request timed out. Retry (cold `npx -y` cache is ~30s). Raise the budget \
-        with `--timeout <SECS>` (default: unlimited).\n"),
-    ("E0008", "Not yet supported in mcpal. Use `mcpal raw <ref> <method> --params <…>` \
-        as an escape hatch.\n"),
-    ("E0009", "Bad JMESPath query. Run the command without `--query` to see the shape. \
-        Tutorial: https://jmespath.org/tutorial.html.\n"),
-    ("E0010", "JSON didn't parse. Quote inline JSON for your shell, use `@path` for \
+        smallest reproducer.\n",
+    ),
+    (
+        "E0006",
+        "Server returned a JSON-RPC error. Check the tool name and arguments with \
+        `tool describe` / `tool template`; re-run with `-v` to see the raw frame.\n",
+    ),
+    (
+        "E0007",
+        "Request timed out. Retry (cold `npx -y` cache is ~30s). Raise the budget \
+        with `--timeout <SECS>` (default: unlimited).\n",
+    ),
+    (
+        "E0008",
+        "Not yet supported in mcpal. Use `mcpal raw <ref> <method> --params <…>` \
+        as an escape hatch.\n",
+    ),
+    (
+        "E0009",
+        "Bad JMESPath query. Run the command without `--query` to see the shape. \
+        Tutorial: https://jmespath.org/tutorial.html.\n",
+    ),
+    (
+        "E0010",
+        "JSON didn't parse. Quote inline JSON for your shell, use `@path` for \
         files, or `-` for stdin. `tool template <ref> <name>` prints a known-good \
-        skeleton.\n"),
-    ("E0011", "Interrupted by Ctrl-C. mcpal dropped the in-flight request (exit 130). \
-        The server may still complete it. For a hard deadline use `--timeout <SECS>`.\n"),
-    ("E0012", "Schema validation failed. `tool describe <ref> <name>` shows the schema; \
-        `tool template` prints a skeleton. `--skip-validation` bypasses the check.\n"),
+        skeleton.\n",
+    ),
+    (
+        "E0011",
+        "Interrupted by Ctrl-C. mcpal dropped the in-flight request (exit 130). \
+        The server may still complete it. For a hard deadline use `--timeout <SECS>`.\n",
+    ),
+    (
+        "E0012",
+        "Schema validation failed. `tool describe <ref> <name>` shows the schema; \
+        `tool template` prints a skeleton. `--skip-validation` bypasses the check.\n",
+    ),
 ];
 
 pub fn explain(code: &str) -> Option<&'static str> {

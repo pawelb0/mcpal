@@ -129,7 +129,11 @@ pub fn to_spec(server: &Server, extra_env: &BTreeMap<String, String>) -> Result<
     {
         return stdio_from_package(pkg, extra_env);
     }
-    if let Some(r) = server.remotes.iter().find(|r| r.r#type == "streamable-http") {
+    if let Some(r) = server
+        .remotes
+        .iter()
+        .find(|r| r.r#type == "streamable-http")
+    {
         return Ok(ServerSpec::Http {
             url: r.url.clone(),
             headers: BTreeMap::new(),
@@ -213,7 +217,10 @@ mod tests {
                 "name":"x/y","remotes":[{"type":"streamable-http","url":"https://a/mcp"}]}}]}"#,
         );
         assert_eq!(classify(&s), "http");
-        assert!(matches!(to_spec(&s, &BTreeMap::new()).unwrap(), ServerSpec::Http { .. }));
+        assert!(matches!(
+            to_spec(&s, &BTreeMap::new()).unwrap(),
+            ServerSpec::Http { .. }
+        ));
     }
 
     #[test]
@@ -241,6 +248,11 @@ mod tests {
                 "registryType":"npm","identifier":"@mcp/foo",
                 "environmentVariables":[{"name":"NEEDED","isRequired":true}]}]}}]}"#,
         );
-        assert!(to_spec(&s, &BTreeMap::new()).unwrap_err().to_string().contains("NEEDED"));
+        assert!(
+            to_spec(&s, &BTreeMap::new())
+                .unwrap_err()
+                .to_string()
+                .contains("NEEDED")
+        );
     }
 }

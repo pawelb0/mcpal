@@ -79,7 +79,11 @@ async fn list(reference: &str, names_only: bool, ctx: &Ctx) -> Result<()> {
                 .input_schema
                 .get("required")
                 .and_then(Value::as_array)
-                .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
                 .unwrap_or_default(),
         })
         .collect();
@@ -106,7 +110,11 @@ fn schema_example(s: &Value) -> Value {
         "object" => Value::Object(
             s.get("properties")
                 .and_then(Value::as_object)
-                .map(|p| p.iter().map(|(k, v)| (k.clone(), schema_example(v))).collect())
+                .map(|p| {
+                    p.iter()
+                        .map(|(k, v)| (k.clone(), schema_example(v)))
+                        .collect()
+                })
                 .unwrap_or_default(),
         ),
         "array" => Value::Array(vec![
@@ -198,11 +206,16 @@ enum BareIs {
 fn read_spec(spec: &str, bare: BareIs) -> Result<(String, String)> {
     if spec == "-" {
         let mut buf = String::new();
-        std::io::stdin().read_to_string(&mut buf).context("read stdin")?;
+        std::io::stdin()
+            .read_to_string(&mut buf)
+            .context("read stdin")?;
         return Ok((buf, "stdin".into()));
     }
     if let Some(path) = spec.strip_prefix('@') {
-        return Ok((fs::read_to_string(path).with_context(|| format!("read {path}"))?, path.into()));
+        return Ok((
+            fs::read_to_string(path).with_context(|| format!("read {path}"))?,
+            path.into(),
+        ));
     }
     match bare {
         BareIs::Path => Ok((

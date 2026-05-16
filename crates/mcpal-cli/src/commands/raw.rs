@@ -14,10 +14,12 @@ pub async fn run(reference: &str, method: &str, params: Option<&str>, ctx: &Ctx)
     let params = parse_params(params)?;
     let (_, client) = ctx.open(reference).await?;
     let result = ctx
-        .under_deadline(client.send_request(ClientRequest::CustomRequest(CustomRequest::new(
-            method.to_string(),
-            params,
-        ))))
+        .under_deadline(
+            client.send_request(ClientRequest::CustomRequest(CustomRequest::new(
+                method.to_string(),
+                params,
+            ))),
+        )
         .await?
         .with_context(|| format!("raw {method}"))?;
     let v = serde_json::to_value(&result)?;

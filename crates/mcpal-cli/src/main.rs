@@ -11,10 +11,10 @@ mod registry;
 mod resolver;
 mod runtime;
 
+use crate::output::Format;
 use anyhow::Result;
 use clap::Parser;
 use mcpal_core::Handler;
-use crate::output::Format;
 use tracing_subscriber::EnvFilter;
 
 use cli::{Cli, Command};
@@ -79,9 +79,11 @@ async fn dispatch(cli: Cli) -> Result<()> {
         Tool { action } => commands::tool::run(action, &ctx).await,
         Resource { action } => commands::resource::run(action, &ctx).await,
         Prompt { action } => commands::prompt::run(action, &ctx).await,
-        Raw { reference, method, params } => {
-            commands::raw::run(&reference, &method, params.as_deref(), &ctx).await
-        }
+        Raw {
+            reference,
+            method,
+            params,
+        } => commands::raw::run(&reference, &method, params.as_deref(), &ctx).await,
         Completion { shell } => commands::completion::run(shell),
         Auth { action } => commands::auth::run(action, &ctx).await,
         Logging { action } => commands::logging::run(action, &ctx).await,

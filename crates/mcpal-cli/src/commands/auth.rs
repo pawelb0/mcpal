@@ -18,7 +18,17 @@ pub async fn run(action: AuthAction, ctx: &Ctx) -> Result<()> {
             oauth,
             url,
             no_browser,
-        } => login(&reference, bearer.as_deref(), oauth, url.as_deref(), no_browser, ctx).await,
+        } => {
+            login(
+                &reference,
+                bearer.as_deref(),
+                oauth,
+                url.as_deref(),
+                no_browser,
+                ctx,
+            )
+            .await
+        }
         AuthAction::Logout { reference } => {
             keyring::delete(&reference, Kind::Bearer)?;
             keyring::delete(&reference, Kind::Oauth)?;
@@ -84,7 +94,9 @@ fn http_url(reference: &str, override_url: Option<&str>, ctx: &Ctx) -> Result<St
 
 fn read_stdin() -> Result<String> {
     let mut buf = String::new();
-    std::io::stdin().read_to_string(&mut buf).context("read stdin")?;
+    std::io::stdin()
+        .read_to_string(&mut buf)
+        .context("read stdin")?;
     Ok(buf.trim().into())
 }
 
