@@ -34,7 +34,7 @@ case "$uname_s-$uname_m" in
     Linux-x86_64)    target="x86_64-unknown-linux-gnu" ;;
     *)
         echo "install.sh: no prebuilt binary for $uname_s-$uname_m" >&2
-        echo "install.sh: cargo install --git https://github.com/$repo --path crates/mcpal-cli" >&2
+        echo "install.sh: cargo install --git https://github.com/$repo --path crates/mcpal" >&2
         exit 1
         ;;
 esac

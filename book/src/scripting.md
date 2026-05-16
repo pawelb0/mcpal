@@ -102,7 +102,7 @@ list-changed). Run alongside another terminal that drives requests.
 ## GitHub Actions
 
 ```yaml
-- run: cargo install --path crates/mcpal-cli
+- run: cargo install --path crates/mcpal
 - run: |
     mcpal server add api --http $MCP_URL
     mcpal debug doctor --output json

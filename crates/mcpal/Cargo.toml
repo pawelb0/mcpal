@@ -1,5 +1,5 @@
 [package]
-name = "mcpal-cli"
+name = "mcpal"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,10 +11,6 @@ description = "mcpal — CLI for the Model Context Protocol."
 readme = "../../README.md"
 keywords = ["mcp", "cli", "ai", "oauth", "discovery"]
 categories = ["command-line-utilities", "development-tools"]
-
-[[bin]]
-name = "mcpal"
-path = "src/main.rs"
 
 [lints]
 workspace = true

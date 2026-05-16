@@ -11,14 +11,14 @@ You will need: a shell, `cargo`, and `npx` (Node.js 18+).
 ## 1. Install
 
 ```bash
-cargo install --path crates/mcpal-cli
+cargo install --path crates/mcpal
 mcpal --version
 ```
 
 Output:
 
 ```
-mcpal 0.1.0
+mcpal 0.1.1
 ```
 
 Prebuilt binaries: GitHub Releases (planned).

@@ -15,11 +15,11 @@ mcpal --query 'content[0].text' tool call ev echo --message hi
 ## Install
 
     brew tap pawelb0/tap
-    brew install --HEAD pawelb0/tap/mcpal
+    brew install pawelb0/tap/mcpal
 
 From source:
 
-    cargo install --git https://github.com/pawelb0/mcpal --path crates/mcpal-cli
+    cargo install --git https://github.com/pawelb0/mcpal --path crates/mcpal
 
 Once a release is tagged, the `curl | sh` installer drops a prebuilt
 binary in `$HOME/.local/bin`:
