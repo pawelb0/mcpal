@@ -1,8 +1,13 @@
 # mcpal
 
-A scriptable command-line client for the
-[Model Context Protocol](https://modelcontextprotocol.io). Single static
-Rust binary. No browser, no LLM, no Node or Python runtime.
+`mcpal` is a command-line tool for **interacting with MCP servers** —
+the JSON-RPC servers spoken to by Claude Desktop, Claude Code, Cursor,
+Zed, opencode, LM Studio, Windsurf, Cline, and any other client of the
+[Model Context Protocol](https://modelcontextprotocol.io).
+
+MCP servers expose tools, resources, and prompts that an LLM client can
+call. mcpal lets you call them too — from a shell, a CI job, or a
+Makefile — without writing any client code.
 
 ```
 $ mcpal server list --all
@@ -11,23 +16,37 @@ $ mcpal auth login notion --oauth
 $ mcpal --query 'content[0].text' tool call ev echo --message hi
 ```
 
-## What it does
+Single static Rust binary. No browser, no LLM, no Node or Python
+runtime.
 
-1. **Reuses servers already configured by other clients.** Claude Code,
-   Claude Desktop, Cursor, Zed, opencode, LM Studio, Windsurf, and
-   Cline all store their MCP server configs on disk. mcpal reads every
-   one of them, so `mcpal tool list cursor:linear` works the moment
-   Cursor knows about `linear`.
-2. **Speaks the full protocol.** Tools, resources, resource templates,
-   prompts, subscriptions, logging set-level, server-initiated requests
-   (`roots/list`, `elicitation/create`, `sampling/createMessage`), and
-   a `raw` passthrough for any JSON-RPC method that doesn't yet have a
-   first-party verb.
-3. **Works in pipelines.** Stable exit codes per failure class,
-   `--output json|yaml`, AWS-CLI-compatible `--query <jmespath>`,
-   rustc-style error blocks with stable `E####` codes,
-   `mcpal debug explain E####` for the long-form prose, `--timeout SECS` and
-   Ctrl-C cancellation.
+## What you can do with it
+
+- **Reuse servers that other clients already configured.** Claude Code,
+  Claude Desktop, Cursor, Zed, opencode, LM Studio, Windsurf, and Cline
+  all write their MCP server lists to disk. mcpal reads every one of
+  them, so `mcpal tool list cursor:linear` works the moment Cursor
+  knows about `linear` — no re-entry.
+- **Call any part of the protocol.** Tools (`tool call`), resources
+  (`resource read`), resource templates, prompts (`prompt get`),
+  subscriptions, `logging/setLevel`, server-initiated requests
+  (`roots/list`, `elicitation/create`, `sampling/createMessage`), and a
+  `raw` escape hatch for any JSON-RPC method without a first-party verb.
+- **Authenticate.** Bearer tokens (env or keyring) and full OAuth 2.1 +
+  PKCE + Dynamic Client Registration against HTTP MCP servers; tokens
+  live in your OS keyring, never on disk.
+- **Drive pipelines.** Stable exit codes per failure class,
+  `--output json|yaml`, AWS-CLI-compatible `--query <jmespath>`,
+  rustc-style error blocks with stable `E####` codes,
+  `mcpal debug explain E####` for the long form, `--timeout SECS`, and
+  Ctrl-C cancellation.
+
+## What's "MCP"?
+
+The [Model Context Protocol](https://modelcontextprotocol.io) is a
+JSON-RPC contract between an LLM-aware client (Claude Desktop, Cursor,
+…) and a server that exposes tools, resources, and prompts. mcpal
+plays the client role of that contract from outside any specific LLM
+app.
 
 ## Install
 
