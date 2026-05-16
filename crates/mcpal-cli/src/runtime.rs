@@ -8,7 +8,6 @@ use mcpal_core::{AuthSpec, Client, Handler, HandlerOptions, ServerSpec, connect}
 use mcpal_discovery::{DiscoveredServer, DiscoveryCtx, discover};
 use mcpal_output::{Format, emit_list, emit_one};
 use serde::Serialize;
-use serde_json::Value;
 
 use crate::config::Config;
 use crate::keyring::{self, Kind};
@@ -137,29 +136,3 @@ async fn attach_bearer(spec: &mut ServerSpec, reference: &str, display: &str) {
     }
 }
 
-pub struct Probe {
-    pub name: String,
-    pub version: String,
-    pub info: Option<Value>,
-}
-
-/// MCP `serverInfo` uses camelCase — JSON pointers must match.
-pub fn probe(client: &Client) -> Probe {
-    let info = client
-        .peer_info()
-        .and_then(|i| serde_json::to_value(i).ok());
-    let pick = |k: &str| {
-        info.as_ref()
-            .and_then(|v| {
-                v.pointer(&format!("/serverInfo/{k}"))
-                    .and_then(Value::as_str)
-            })
-            .unwrap_or(if k == "name" { "unknown" } else { "?" })
-            .to_string()
-    };
-    Probe {
-        name: pick("name"),
-        version: pick("version"),
-        info,
-    }
-}

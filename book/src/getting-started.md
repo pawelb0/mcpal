@@ -16,7 +16,7 @@ tagged release.
 
 ```bash
 mcpal server add ev -- npx -y @modelcontextprotocol/server-everything
-mcpal server test ev
+mcpal server ping ev
 ```
 
 Tokens after `--` are the command and its args.

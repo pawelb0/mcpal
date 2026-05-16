@@ -51,7 +51,7 @@ pub fn classify(err: &anyhow::Error) -> Diagnostic {
                 format!("transport: {e}"),
                 &[
                     "check the URL is reachable, or the stdio command is on $PATH",
-                    "run `mcpal server test <ref>` to retry just the handshake",
+                    "run `mcpal server ping <ref>` to retry just the handshake",
                 ],
             ),
             CoreError::Auth(msg) => Diagnostic::build(
@@ -81,7 +81,7 @@ pub fn classify(err: &anyhow::Error) -> Diagnostic {
                         "E0006",
                         format!("server error: {msg}"),
                         &[
-                            "check `mcpal --query 'serverInfo' server test <ref>`",
+                            "check `mcpal --query 'serverInfo' server ping <ref>`",
                             "try with `-v` for tracing output",
                         ],
                     )
@@ -357,7 +357,7 @@ To fix:
     network error)
   - for stdio: confirm the command is on $PATH and runs standalone
   - re-run with `-v` (or `-vv`) to see the underlying request
-  - `mcpal server test <ref>` is the smallest reproducer
+  - `mcpal server ping <ref>` is the smallest reproducer
 \n"
         }
 

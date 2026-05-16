@@ -12,7 +12,7 @@ use crate::commands::discover::describe_spec;
 use crate::config::Config;
 use crate::registry;
 use crate::resolver::resolve;
-use crate::runtime::{Ctx, probe};
+use crate::runtime::Ctx;
 
 pub async fn run(action: ServerAction, ctx: &Ctx) -> Result<()> {
     match action {
@@ -21,7 +21,11 @@ pub async fn run(action: ServerAction, ctx: &Ctx) -> Result<()> {
         ServerAction::Add(args) => add(args, ctx),
         ServerAction::Remove { alias } => remove(&alias, ctx),
         ServerAction::Import(args) => import(args, ctx),
-        ServerAction::Test { reference, full } => test(&reference, full, ctx).await,
+        ServerAction::Info { reference } => info(&reference, ctx).await,
+        ServerAction::Protocol { reference } => protocol(&reference, ctx).await,
+        ServerAction::Capabilities { reference } => capabilities(&reference, ctx).await,
+        ServerAction::Instructions { reference } => instructions(&reference, ctx).await,
+        ServerAction::Ping { reference } => ping(&reference, ctx).await,
         ServerAction::Search { keywords, limit } => search(&keywords, limit, ctx).await,
         ServerAction::Install(args) => install(args, ctx).await,
         ServerAction::Discover { source } => crate::commands::discover::run(source.as_deref(), ctx),
@@ -200,25 +204,42 @@ fn default_alias(name: &str) -> &str {
     name.rsplit_once('/').map(|(_, t)| t).unwrap_or(name)
 }
 
-async fn test(reference: &str, full: bool, ctx: &Ctx) -> Result<()> {
-    let (r, client) = ctx.open(reference).await?;
-    let p = probe(&client);
-    let mut out = json!({
-        "ref": r.display,
-        "ok": true,
-        "server": { "name": p.name, "version": p.version },
-        "peerInfo": p.info,
-    });
-    if full {
-        let tools = ctx.under_deadline(client.list_all_tools()).await?.ok();
-        let resources = ctx.under_deadline(client.list_all_resources()).await?.ok();
-        let prompts = ctx.under_deadline(client.list_all_prompts()).await?.ok();
-        out["capabilities"] = json!({
-            "tools": tools.as_ref().map(Vec::len).unwrap_or(0),
-            "resources": resources.as_ref().map(Vec::len).unwrap_or(0),
-            "prompts": prompts.as_ref().map(Vec::len).unwrap_or(0),
-        });
-    }
-    ctx.render_one(&out)?;
+async fn info(reference: &str, ctx: &Ctx) -> Result<()> {
+    let (_, client) = ctx.open(reference).await?;
+    let v = peer_field(&client, "/serverInfo").unwrap_or(json!(null));
+    ctx.render_one(&v)?;
     Ok(())
+}
+
+async fn protocol(reference: &str, ctx: &Ctx) -> Result<()> {
+    let (_, client) = ctx.open(reference).await?;
+    let v = peer_field(&client, "/protocolVersion").unwrap_or(json!(null));
+    ctx.render_one(&v)?;
+    Ok(())
+}
+
+async fn capabilities(reference: &str, ctx: &Ctx) -> Result<()> {
+    let (_, client) = ctx.open(reference).await?;
+    let v = peer_field(&client, "/capabilities").unwrap_or(json!(null));
+    ctx.render_one(&v)?;
+    Ok(())
+}
+
+async fn instructions(reference: &str, ctx: &Ctx) -> Result<()> {
+    let (_, client) = ctx.open(reference).await?;
+    let v = peer_field(&client, "/instructions").unwrap_or(json!(null));
+    ctx.render_one(&v)?;
+    Ok(())
+}
+
+async fn ping(reference: &str, ctx: &Ctx) -> Result<()> {
+    let (r, _) = ctx.open(reference).await?;
+    ctx.render_one(&json!({ "ref": r.display, "ok": true }))?;
+    Ok(())
+}
+
+fn peer_field(client: &mcpal_core::Client, pointer: &str) -> Option<serde_json::Value> {
+    let info = client.peer_info()?;
+    let v = serde_json::to_value(info).ok()?;
+    v.pointer(pointer).cloned()
 }

@@ -30,7 +30,7 @@ shows the long form.
 
 ```bash
 mcpal --output json tool list <ref> | jq -r '.[].name'
-mcpal --output json server test <ref> | jq -r '.peerInfo.serverInfo.version'
+mcpal --output json server ping <ref> | jq -r '.peerInfo.serverInfo.version'
 ```
 
 YAML is the default for human reading. Set `--output json` in pipelines.
@@ -42,7 +42,7 @@ For one-liners:
 ```bash
 mcpal --query 'content[0].text' tool call ev echo --message hi
 mcpal --query '[].name' tool list ev
-mcpal --query 'peerInfo.serverInfo.{name:name,version:version}' server test ev
+mcpal --query 'peerInfo.serverInfo.{name:name,version:version}' server ping ev
 ```
 
 Same syntax as AWS-CLI `--query`.

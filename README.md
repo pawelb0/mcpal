@@ -69,8 +69,8 @@ Replace `<ref>` with any of:
 
 ```bash
 mcpal server add ev -- npx -y @modelcontextprotocol/server-everything
-mcpal server test ev
-mcpal server test ev --full          # also enumerates capabilities
+mcpal server ping ev
+mcpal server capabilities ev          # also enumerates capabilities
 ```
 
 Tokens after `--` are the command and its args. The older `--stdio
@@ -80,7 +80,7 @@ Tokens after `--` are the command and its args. The older `--stdio
 
 ```bash
 mcpal server add ctx7 --http https://mcp.context7.com/mcp
-mcpal server test ctx7
+mcpal server ping ctx7
 
 mcpal server add github --http https://api.githubcopilot.com/mcp/
 mcpal auth login github --bearer ghp_xxx     # token → OS keyring

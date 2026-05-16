@@ -24,10 +24,12 @@ What it does:
      `--timeout SECS`, Ctrl-C cancellation.
 
 Common workflows:
-  mcpal discover                        scan all clients for configured servers
+  mcpal server discover                 scan all clients for configured servers
   mcpal server list --all               mcpal-owned + discovered together
   mcpal server add <alias> -- <cmd>     register a stdio server
-  mcpal server test <ref> [--full]      handshake + optional capability dump
+  mcpal server ping <ref>               liveness check (initialize handshake)
+  mcpal server info <ref>               serverInfo (name, version, title)
+  mcpal server capabilities <ref>       advertised capability matrix
   mcpal tool list <ref>                 compact list of tools on a server
   mcpal tool describe <ref> <name>      full schema for one tool
   mcpal tool call <ref> <name> [--key value ...]
@@ -110,7 +112,8 @@ pub enum Command {
         action: ConfigAction,
     },
 
-    /// Add, list, show, remove, import, or smoke-test server entries.
+    /// Manage server entries (list, add, install, discover) and read
+    /// server properties (info, protocol, capabilities, instructions, ping).
     Server {
         #[command(subcommand)]
         action: ServerAction,
@@ -295,17 +298,17 @@ pub enum ServerAction {
     Remove { alias: String },
     /// Copy a discovered server into mcpal config so you can override env/auth/alias.
     Import(ServerImportArgs),
-    /// Open + initialize a connection and print serverInfo. Acts as a
-    /// liveness check (the MCP handshake fails if the server is broken).
-    /// Pass `--full` to also list tool / resource / prompt counts and
-    /// advertised capabilities.
-    Test {
-        reference: String,
-        /// Enumerate tools, resources, prompts and report counts +
-        /// advertised capabilities.
-        #[arg(long)]
-        full: bool,
-    },
+    /// Print `serverInfo` (name, version, title).
+    Info { reference: String },
+    /// Print the negotiated MCP `protocolVersion`.
+    Protocol { reference: String },
+    /// Print the server's advertised capability matrix.
+    Capabilities { reference: String },
+    /// Print the server's free-form `instructions` string (or `null`).
+    Instructions { reference: String },
+    /// Liveness check — opens a connection and exits 0 on a successful
+    /// MCP handshake. The cheapest "is the server up?" command.
+    Ping { reference: String },
     /// Search the MCP Registry (registry.modelcontextprotocol.io).
     Search {
         /// Free-text search string. Field is named `keywords` (not

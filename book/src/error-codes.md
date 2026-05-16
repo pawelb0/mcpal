@@ -88,7 +88,7 @@ Fixes:
   a network error).
 - For stdio: confirm the command is on `$PATH` and runs standalone.
 - Re-run with `-v` (or `-vv`) to see the underlying request.
-- `mcpal server test <ref>` is the smallest reproducer.
+- `mcpal server ping <ref>` is the smallest reproducer.
 
 Exit code **6**.
 

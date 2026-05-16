@@ -48,7 +48,13 @@ fn m1_smoke() {
         .stdout(str::contains("everything"));
 
     mcpal(&cfg)
-        .args(["server", "test", "everything"])
+        .args(["server", "ping", "everything"])
+        .timeout(std::time::Duration::from_secs(60))
+        .assert()
+        .success();
+
+    mcpal(&cfg)
+        .args(["server", "info", "everything"])
         .timeout(std::time::Duration::from_secs(60))
         .assert()
         .success()

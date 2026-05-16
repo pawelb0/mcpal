@@ -7,7 +7,7 @@ Unmarked rows are wired. `pending` rows are not.
 | Method | mcpal verb | Status |
 |---|---|---|
 | `initialize` | every command (handshake) | implicit |
-| `ping` | `server test <ref>` | via initialize handshake |
+| `ping` | `server ping <ref>` | via initialize handshake |
 | `tools/list` | `tool list <ref>` |  |
 | `tools/call` | `tool call <ref> <name> --key value` |  |
 | `resources/list` | `resource list <ref>` |  |
