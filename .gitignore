@@ -7,3 +7,5 @@
 .claude/*.lock
 .claude/scheduled_tasks*
 .agents/
+.claude/
+skills-lock.json
