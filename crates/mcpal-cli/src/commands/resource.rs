@@ -11,7 +11,10 @@ use crate::runtime::Ctx;
 
 pub async fn run(action: ResourceAction, ctx: &Ctx) -> Result<()> {
     match action {
-        ResourceAction::List { reference } => list(&reference, ctx).await,
+        ResourceAction::List {
+            reference,
+            names_only,
+        } => list(&reference, names_only, ctx).await,
         ResourceAction::Read { reference, uri } => read(&reference, &uri, ctx).await,
         ResourceAction::Subscribe { reference, uri } => subscribe(&reference, &uri, ctx).await,
         ResourceAction::Unsubscribe { reference, uri } => unsubscribe(&reference, &uri, ctx).await,
@@ -37,9 +40,15 @@ struct TemplateSummary<'a> {
     mime: Option<&'a str>,
 }
 
-async fn list(reference: &str, ctx: &Ctx) -> Result<()> {
+async fn list(reference: &str, names_only: bool, ctx: &Ctx) -> Result<()> {
     let (_, client) = ctx.open(reference).await?;
     let resources = ctx.under_deadline(client.list_all_resources()).await??;
+    if names_only {
+        for r in &resources {
+            println!("{}", r.uri);
+        }
+        return Ok(());
+    }
     let summaries: Vec<ResourceSummary<'_>> = resources
         .iter()
         .map(|r| ResourceSummary {

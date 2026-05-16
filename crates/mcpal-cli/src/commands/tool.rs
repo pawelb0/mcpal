@@ -13,7 +13,10 @@ use crate::runtime::Ctx;
 
 pub async fn run(action: ToolAction, ctx: &Ctx) -> Result<()> {
     match action {
-        ToolAction::List { reference } => list(&reference, ctx).await,
+        ToolAction::List {
+            reference,
+            names_only,
+        } => list(&reference, names_only, ctx).await,
         ToolAction::Describe { reference, name } => describe(&reference, &name, ctx).await,
         ToolAction::Template { reference, name } => template(&reference, &name, ctx).await,
         ToolAction::Call {
@@ -45,9 +48,15 @@ struct ToolSummary<'a> {
     required: Vec<String>,
 }
 
-async fn list(reference: &str, ctx: &Ctx) -> Result<()> {
+async fn list(reference: &str, names_only: bool, ctx: &Ctx) -> Result<()> {
     let (_, client) = ctx.open(reference).await?;
     let tools = ctx.under_deadline(client.list_all_tools()).await??;
+    if names_only {
+        for t in &tools {
+            println!("{}", t.name);
+        }
+        return Ok(());
+    }
     let summaries: Vec<ToolSummary<'_>> = tools
         .iter()
         .map(|t| ToolSummary {

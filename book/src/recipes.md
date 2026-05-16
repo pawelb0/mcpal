@@ -174,3 +174,16 @@ mcpal completion zsh > ~/.zfunc/_mcpal
 ```
 
 `bash` and `fish` work the same way.
+
+### Completing tool / resource / prompt names
+
+`tool list`, `resource list`, and `prompt list` accept `--names-only`,
+which prints one name (or URI) per line. Use it to feed dynamic
+completion in your shell — for zsh:
+
+```zsh
+_mcpal_tools() { compadd -- $(mcpal tool list "$words[2]" --names-only 2>/dev/null) }
+compdef _mcpal_tools 'mcpal tool call'
+```
+
+Bash equivalent uses `compgen -W "$(mcpal tool list "$ref" --names-only)" "$cur"`.

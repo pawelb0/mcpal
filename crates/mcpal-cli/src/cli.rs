@@ -410,7 +410,12 @@ pub struct ServerAddArgs {
 #[derive(Subcommand, Debug)]
 pub enum ToolAction {
     /// Compact list of tools on a server (name + description + required args).
-    List { reference: String },
+    List {
+        reference: String,
+        /// Print just the tool names, one per line. For shell completion.
+        #[arg(long)]
+        names_only: bool,
+    },
 
     /// Full schema for one tool (name, description, inputSchema, execution).
     Describe { reference: String, name: String },
@@ -445,7 +450,12 @@ pub enum ToolAction {
 #[derive(Subcommand, Debug)]
 pub enum ResourceAction {
     /// List resources.
-    List { reference: String },
+    List {
+        reference: String,
+        /// Print just the resource URIs, one per line. For shell completion.
+        #[arg(long)]
+        names_only: bool,
+    },
     /// Read a resource by URI.
     Read { reference: String, uri: String },
     /// Subscribe to updates for one resource. Use `mcpal watch` (lands next)
@@ -468,7 +478,12 @@ pub enum ResourceTemplateAction {
 #[derive(Subcommand, Debug)]
 pub enum PromptAction {
     /// List prompts.
-    List { reference: String },
+    List {
+        reference: String,
+        /// Print just the prompt names, one per line. For shell completion.
+        #[arg(long)]
+        names_only: bool,
+    },
     /// Get a prompt. Arguments use `--key value` pairs (AWS-CLI style).
     Get {
         reference: String,

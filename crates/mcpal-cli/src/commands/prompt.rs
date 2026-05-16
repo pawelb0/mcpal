@@ -9,7 +9,10 @@ use crate::runtime::Ctx;
 
 pub async fn run(action: PromptAction, ctx: &Ctx) -> Result<()> {
     match action {
-        PromptAction::List { reference } => list(&reference, ctx).await,
+        PromptAction::List {
+            reference,
+            names_only,
+        } => list(&reference, names_only, ctx).await,
         PromptAction::Get {
             reference,
             name,
@@ -27,9 +30,15 @@ struct PromptSummary<'a> {
     required: Vec<&'a str>,
 }
 
-async fn list(reference: &str, ctx: &Ctx) -> Result<()> {
+async fn list(reference: &str, names_only: bool, ctx: &Ctx) -> Result<()> {
     let (_, client) = ctx.open(reference).await?;
     let prompts = ctx.under_deadline(client.list_all_prompts()).await??;
+    if names_only {
+        for p in &prompts {
+            println!("{}", p.name);
+        }
+        return Ok(());
+    }
     let summaries: Vec<PromptSummary<'_>> = prompts
         .iter()
         .map(|p| PromptSummary {
