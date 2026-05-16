@@ -1,13 +1,9 @@
 # mcpal
 
-`mcpal` is a command-line tool for **interacting with MCP servers** —
-the JSON-RPC servers spoken to by Claude Desktop, Claude Code, Cursor,
-Zed, opencode, LM Studio, Windsurf, Cline, and any other client of the
-[Model Context Protocol](https://modelcontextprotocol.io).
-
-MCP servers expose tools, resources, and prompts an LLM client can
-call. mcpal calls them too — from a shell, a CI job, or a Makefile —
-without writing client code.
+mcpal is a command-line client for the
+[Model Context Protocol](https://modelcontextprotocol.io). It connects
+to MCP servers over stdio or HTTP and calls tools, reads resources,
+gets prompts, runs raw JSON-RPC, and streams notifications.
 
 ```bash
 mcpal server list --all
@@ -16,36 +12,22 @@ mcpal auth login notion --oauth
 mcpal --query 'content[0].text' tool call ev echo --message hi
 ```
 
-Single static Rust binary. No browser, no LLM, no Node or Python
-runtime.
+MCP is a JSON-RPC contract between LLM-aware clients and servers that
+expose tools, resources, and prompts. mcpal plays the client role from
+outside any specific LLM app.
 
-## What you can do with it
+## Chapters
 
-- **Reuse servers other clients already configured.** Claude Code,
-  Claude Desktop, Cursor, Zed, opencode, LM Studio, Windsurf, and
-  Cline write their MCP server lists to disk. mcpal reads every one of
-  them, so `mcpal tool list cursor:linear` works the moment Cursor
-  knows about `linear`.
-- **Call any part of the protocol.** Tools, resources, resource
-  templates, prompts, subscriptions, `logging/setLevel`,
-  server-initiated requests (`roots/list`, `elicitation/create`,
-  `sampling/createMessage`), and a `raw` escape hatch for any JSON-RPC
-  method without a first-party verb.
-- **Authenticate.** Bearer tokens (env or OS keyring) and full
-  OAuth 2.1 + PKCE + DCR against HTTP MCP servers.
-- **Drive pipelines.** `--output json|yaml`, AWS-CLI-compatible
-  `--query <jmespath>`, stable exit codes, `--timeout SECS`, Ctrl-C
-  cancellation.
-
-## What's "MCP"?
-
-The [Model Context Protocol](https://modelcontextprotocol.io) is a
-JSON-RPC contract between an LLM-aware client (Claude Desktop, Cursor,
-…) and a server that exposes tools, resources, and prompts. mcpal
-plays the client role of that contract from outside any specific LLM
-app.
-
-Read [Concepts](./concepts.md) next.
+- [Concepts](./concepts.md) — references, transports, auth, output.
+- [Getting started](./getting-started.md) — install and first commands.
+- [Recipes](./recipes.md) — short task-driven snippets.
+- [Auth](./auth.md) — bearer and OAuth 2.1.
+- [Scripting](./scripting.md) — exit codes, `--query`, JSON output.
+- [Troubleshooting](./troubleshooting.md) — `mcpal debug doctor`,
+  common errors.
+- [Protocol matrix](./protocol-matrix.md) — every MCP method and the
+  verb that calls it.
+- [Error codes](./error-codes.md) — every `E####` in long form.
 
 ## License
 

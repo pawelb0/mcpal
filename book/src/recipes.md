@@ -29,8 +29,7 @@ mcpal server discover
 mcpal --mcp-json ./mcp.json tool list <name>
 ```
 
-Global flag. Overlays servers for the session; nothing is written to
-disk.
+Global flag; overlays for the session and writes nothing to disk.
 
 ## Call a tool with a JSON arg body
 
@@ -115,8 +114,6 @@ case $? in
 esac
 ```
 
-Full code table in [Scripting & exit codes](./scripting.md).
-
 ## Disable interactive prompts (CI)
 
 ```bash
@@ -126,7 +123,7 @@ mcpal --no-interactive tool call <ref> …
 Elicitation requests auto-decline. Bearer tokens come from
 `MCPAL_BEARER` or `--bearer`, never a TTY prompt.
 
-## Plug an LLM into sampling/createMessage
+## External sampling handler
 
 ```bash
 mcpal --sampling-handler "claude --output json" \

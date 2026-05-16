@@ -88,7 +88,7 @@ Fixes:
   a network error).
 - For stdio: confirm the command is on `$PATH` and runs standalone.
 - Re-run with `-v` (or `-vv`) to see the underlying request.
-- `mcpal server ping <ref>` is the smallest reproducer.
+- Reproduce with `mcpal server ping <ref>`.
 
 Exit code **6**.
 
@@ -124,7 +124,7 @@ Exit code **8**.
 
 ## E0008 — not yet supported
 
-mcpal recognised the request but the plumbing isn't in place yet.
+mcpal recognised the request but it isn't wired up yet.
 
 Fixes:
 

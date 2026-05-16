@@ -21,12 +21,10 @@ mcpal tool list tavily
 
 ## Transports
 
-Two transports:
-
-- stdio: mcpal spawns a child and speaks JSON-RPC over its stdin/stdout.
-  Local servers like `@modelcontextprotocol/server-everything`.
-- Streamable HTTP: single endpoint, optional SSE stream. rustls (no
-  system OpenSSL).
+- stdio: mcpal spawns a child process and exchanges JSON-RPC over its
+  stdin/stdout.
+- Streamable HTTP: single endpoint, optional SSE stream. TLS via
+  rustls.
 
 The legacy 2024-11-05 SSE transport is not enabled.
 
@@ -41,13 +39,14 @@ mcpal reads other clients' MCP config files:
 | Cursor | `~/.cursor/mcp.json` | same | same |
 | Zed | `~/.config/zed/settings.json` | same | same |
 | opencode | `~/.config/opencode/opencode.json` | same | same |
-| LM Studio | `~/.lmstudio/mcp.json` | same | same |
-| Windsurf | `~/.codeium/windsurf/mcp_config.json` | same | same |
-| Cline | VS Code `globalStorage` | same | same |
 
-`mcpal server discover` lists everything found. `mcpal server list --all` shows
-owned and discovered together. Discovered servers are addressable as
-`<source>:<name>` without copying their config.
+Also: LM Studio (`~/.lmstudio/mcp.json`), Windsurf
+(`~/.codeium/windsurf/mcp_config.json`), Cline (VS Code
+`globalStorage`).
+
+`mcpal server discover` lists everything found. `mcpal server list
+--all` shows owned and discovered together. Discovered servers are
+addressable as `<source>:<name>` without copying their config.
 
 ## Auth
 
@@ -73,8 +72,7 @@ mcpal --output json tool list <ref>  # pretty JSON
 mcpal --query 'content[0].text' …    # JMESPath filter applied first
 ```
 
-YAML is the default (readable on a terminal, parseable by tools).
-`--output json` for `jq`. `--query` runs a JMESPath expression on the
-result before rendering.
+YAML is the default. Use `--output json` for `jq`. `--query` applies
+a JMESPath expression before rendering.
 
-Exit codes are stable. See [Scripting & exit codes](./scripting.md).
+Exit codes: see [Scripting & exit codes](./scripting.md).

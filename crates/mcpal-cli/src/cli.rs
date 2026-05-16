@@ -8,9 +8,9 @@ use mcpal_core::rmcp::model::LoggingLevel;
 #[command(
     name = "mcpal",
     version,
-    about = "Scriptable command-line client for the Model Context Protocol",
+    about = "Command-line client for the Model Context Protocol",
     long_about = "\
-Scriptable command-line client for the Model Context Protocol.
+mcpal is a command-line client for the Model Context Protocol.
 
   mcpal server discover                 scan installed clients for servers
   mcpal server add <alias> -- <cmd>     register a stdio server
@@ -65,27 +65,27 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    /// init / path / show / edit.
+    /// Read / write the active config file.
     Config {
         #[command(subcommand)]
         action: ConfigAction,
     },
-    /// Manage entries + read protocol properties.
+    /// Manage server entries and read protocol properties.
     Server {
         #[command(subcommand)]
         action: ServerAction,
     },
-    /// `tools/*` — list, describe, template, call.
+    /// Invoke and inspect tools.
     Tool {
         #[command(subcommand)]
         action: ToolAction,
     },
-    /// `resources/*` — list, read, templates, subscribe, complete.
+    /// Read and subscribe to resources.
     Resource {
         #[command(subcommand)]
         action: ResourceAction,
     },
-    /// `prompts/*` — list, get, complete.
+    /// Fetch prompts.
     Prompt {
         #[command(subcommand)]
         action: PromptAction,
@@ -115,14 +115,14 @@ pub enum Command {
         #[command(subcommand)]
         action: AuthAction,
     },
-    /// `logging/setLevel`.
+    /// Set the server's log level.
     Logging {
         #[command(subcommand)]
         action: LoggingAction,
     },
     /// Tail server notifications until Ctrl-C.
     Watch { reference: String },
-    /// `debug doctor` / `debug explain E####`.
+    /// Local checks and error-code explanations.
     Debug {
         #[command(subcommand)]
         action: DebugAction,
@@ -139,7 +139,7 @@ pub enum DebugAction {
 
 #[derive(Subcommand, Debug)]
 pub enum LoggingAction {
-    /// debug | info | notice | warning | error | critical | alert | emergency.
+    /// Set the server's emitted log level.
     SetLevel {
         reference: String,
         #[arg(value_enum)]
@@ -230,19 +230,19 @@ pub enum ServerAction {
         alias: String,
     },
     Import(ServerImportArgs),
-    /// `serverInfo`.
+    /// Print serverInfo.
     Info {
         reference: String,
     },
-    /// `protocolVersion`.
+    /// Print the negotiated protocolVersion.
     Protocol {
         reference: String,
     },
-    /// Capability matrix.
+    /// Print the advertised capability matrix.
     Capabilities {
         reference: String,
     },
-    /// `instructions` (or null).
+    /// Print initialize-time instructions (or null).
     Instructions {
         reference: String,
     },
@@ -320,18 +320,18 @@ pub struct ServerAddArgs {
 
 #[derive(Subcommand, Debug)]
 pub enum ToolAction {
-    /// name + description + required args.
+    /// List tools.
     List {
         reference: String,
         /// One name per line.
         #[arg(long)]
         names_only: bool,
     },
-    /// Full tool schema.
+    /// Print the full tool schema.
     Describe { reference: String, name: String },
-    /// Example JSON body from `inputSchema`.
+    /// Print an example JSON body for the tool.
     Template { reference: String, name: String },
-    /// `tools/call` with `--key value` flags.
+    /// Call a tool.
     Call {
         reference: String,
         name: String,

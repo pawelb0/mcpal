@@ -40,7 +40,7 @@ No response from the server.
 - stdio: confirm the command runs standalone. `npx -y` on a cold cache
   installs the package (10–60s); subsequent runs complete in <5s.
 - Re-run with `-v` (or `-vv`) for the request trace.
-- `mcpal server ping <ref>` is the smallest reproducer.
+- Reproduce with `mcpal server ping <ref>`.
 
 ## E0006 — server-returned error
 

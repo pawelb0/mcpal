@@ -1,8 +1,7 @@
 # Auth deep dive
 
-Three auth modes: inline bearer, `BearerEnv`, OAuth 2.1. Plus the
-`MCPAL_BEARER` env one-shot. Tokens live in the OS keyring, not in
-`config.toml`.
+Auth modes: inline bearer, `BearerEnv`, OAuth 2.1, plus the
+`MCPAL_BEARER` env override. Tokens live in the OS keyring.
 
 ## Bearer tokens
 
@@ -15,8 +14,7 @@ mcpal tool list github
 
 Lookups walk this precedence on each call:
 
-1. `AuthSpec::Bearer { token }` set explicitly on the config entry
-   (rare; tokens shouldn't be written to TOML).
+1. `AuthSpec::Bearer { token }` (rare; avoid).
 2. `AuthSpec::BearerEnv { env }` — reads the env var named.
 3. OAuth blob (see below).
 4. Bearer keyring entry under `bearer:<ref>`.
@@ -43,7 +41,7 @@ secret-tool get … | mcpal auth login github --bearer -
 
 ## OAuth 2.1 + PKCE + DCR
 
-For servers that authenticate end users. mcpal runs the flow itself.
+For servers that authenticate end users.
 
 ```bash
 mcpal server add notion --http https://mcp.notion.com/v1
@@ -99,6 +97,5 @@ running the round-trip fails.
 
 ## Bearer or OAuth?
 
-Bearer is one moving part fewer. OAuth is required when the server
-gates on user identity, and its refresh tokens save re-pasting on
-expiry. If the server supports OAuth, use it.
+Use OAuth when the server gates on user identity; otherwise bearer is
+fine.
