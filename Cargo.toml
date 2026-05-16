@@ -98,8 +98,13 @@ targets = [
     "x86_64-apple-darwin",
     "aarch64-unknown-linux-gnu",
     "x86_64-unknown-linux-gnu",
-    "x86_64-unknown-linux-musl",
     "x86_64-pc-windows-msvc",
 ]
 pr-run-mode = "plan"
 install-updater = false
+
+# The keyring crate's linux-native-sync-persistent feature links
+# against libdbus via libdbus-sys.
+[workspace.metadata.dist.dependencies.apt]
+libdbus-1-dev = "*"
+pkg-config = "*"
