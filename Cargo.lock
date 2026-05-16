@@ -1536,15 +1536,16 @@ dependencies = [
  "clap",
  "clap_complete",
  "directories",
+ "jmespath",
  "jsonschema",
  "keyring",
  "mcpal-core",
  "mcpal-discovery",
- "mcpal-output",
  "predicates",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "serde_yaml",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -1589,18 +1590,6 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tracing",
-]
-
-[[package]]
-name = "mcpal-output"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "jmespath",
- "serde",
- "serde_json",
- "serde_yaml",
- "thiserror 2.0.18",
 ]
 
 [[package]]

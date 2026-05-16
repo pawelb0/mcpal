@@ -6,7 +6,7 @@ use std::time::Duration;
 use anyhow::{Result, anyhow};
 use mcpal_core::{AuthSpec, Client, Handler, ServerSpec, connect};
 use mcpal_discovery::{DiscoveredServer, DiscoveryCtx, discover};
-use mcpal_output::{Format, emit_list, emit_one};
+use crate::output::{Format, emit_list, emit_one};
 use serde::Serialize;
 
 use crate::config::Config;
@@ -66,19 +66,19 @@ impl Ctx {
         }
     }
 
-    pub fn render_one<T: Serialize>(&self, value: &T) -> Result<(), mcpal_output::Error> {
+    pub fn render_one<T: Serialize>(&self, value: &T) -> Result<(), crate::output::Error> {
         if let Some(q) = self.query.as_deref() {
             let v = serde_json::to_value(value)?;
-            let filtered = mcpal_output::apply_query(v, Some(q))?;
+            let filtered = crate::output::apply_query(v, Some(q))?;
             return emit_one(self.format, &filtered);
         }
         emit_one(self.format, value)
     }
 
-    pub fn render_list<T: Serialize>(&self, items: &[T]) -> Result<(), mcpal_output::Error> {
+    pub fn render_list<T: Serialize>(&self, items: &[T]) -> Result<(), crate::output::Error> {
         if let Some(q) = self.query.as_deref() {
             let v = serde_json::to_value(items)?;
-            let filtered = mcpal_output::apply_query(v, Some(q))?;
+            let filtered = crate::output::apply_query(v, Some(q))?;
             return emit_one(self.format, &filtered);
         }
         emit_list(self.format, items)

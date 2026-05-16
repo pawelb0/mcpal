@@ -16,44 +16,29 @@ impl Format {
     }
 }
 
-pub fn emit_json<T: Serialize>(val: &T) -> Result<(), Error> {
-    let mut out = io::stdout().lock();
-    serde_json::to_writer_pretty(&mut out, val)?;
-    out.write_all(b"\n")?;
-    Ok(())
-}
-
-pub fn emit_yaml<T: Serialize>(val: &T) -> Result<(), Error> {
-    let mut out = io::stdout().lock();
-    serde_yaml::to_writer(&mut out, val)?;
-    Ok(())
-}
-
 pub fn emit_one<T: Serialize>(format: Format, value: &T) -> Result<(), Error> {
+    let mut out = io::stdout().lock();
     match format {
-        Format::Json => emit_json(value),
-        Format::Yaml => emit_yaml(value),
+        Format::Json => {
+            serde_json::to_writer_pretty(&mut out, value)?;
+            out.write_all(b"\n")?;
+        }
+        Format::Yaml => serde_yaml::to_writer(&mut out, value)?,
     }
+    Ok(())
 }
 
 pub fn emit_list<T: Serialize>(format: Format, items: &[T]) -> Result<(), Error> {
     emit_one(format, &items)
 }
 
-/// Filter a JSON value through a JMESPath expression. Used by callers that
-/// want AWS-CLI `--query` semantics; returns the unchanged value when
-/// `query` is `None`.
 pub fn apply_query(value: Value, query: Option<&str>) -> Result<Value, Error> {
-    let Some(expr) = query else {
-        return Ok(value);
-    };
+    let Some(expr) = query else { return Ok(value) };
     let compiled = jmespath::compile(expr).map_err(|e| Error::Query(format!("compile: {e}")))?;
     let v =
         jmespath::Variable::from_serializable(&value).map_err(|e| Error::Query(e.to_string()))?;
-    let result = compiled
-        .search(v)
-        .map_err(|e| Error::Query(format!("search: {e}")))?;
-    let s = serde_json::to_string(&*result).map_err(|e| Error::Query(e.to_string()))?;
+    let r = compiled.search(v).map_err(|e| Error::Query(format!("search: {e}")))?;
+    let s = serde_json::to_string(&*r).map_err(|e| Error::Query(e.to_string()))?;
     serde_json::from_str(&s).map_err(|e| Error::Query(e.to_string()))
 }
 

@@ -20,7 +20,7 @@ workspace = true
 
 [dependencies]
 mcpal-core = { path = "../mcpal-core", version = "0.1.0" }
-mcpal-output = { path = "../mcpal-output", version = "0.1.0" }
+
 mcpal-discovery = { path = "../mcpal-discovery", version = "0.1.0" }
 
 tokio.workspace = true
@@ -40,6 +40,8 @@ axum.workspace = true
 webbrowser.workspace = true
 reqwest.workspace = true
 jsonschema.workspace = true
+serde_yaml.workspace = true
+jmespath.workspace = true
 
 [dev-dependencies]
 assert_cmd.workspace = true

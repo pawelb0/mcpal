@@ -162,19 +162,14 @@ async fn run_sampling_handler(
         .stderr(std::process::Stdio::inherit())
         .spawn()
         .map_err(|e| format!("spawn {cmd}: {e}"))?;
-
-    let stdin_payload = serde_json::to_vec(params).map_err(|e| e.to_string())?;
+    let payload = serde_json::to_vec(params).map_err(|e| e.to_string())?;
     if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(&stdin_payload)
-            .await
-            .map_err(|e| e.to_string())?;
+        stdin.write_all(&payload).await.map_err(|e| e.to_string())?;
         stdin.shutdown().await.map_err(|e| e.to_string())?;
     }
-
-    let output = child.wait_with_output().await.map_err(|e| e.to_string())?;
-    if !output.status.success() {
-        return Err(format!("handler exited {:?}", output.status.code()));
+    let out = child.wait_with_output().await.map_err(|e| e.to_string())?;
+    if !out.status.success() {
+        return Err(format!("handler exited {:?}", out.status.code()));
     }
-    serde_json::from_slice(&output.stdout).map_err(|e| e.to_string())
+    serde_json::from_slice(&out.stdout).map_err(|e| e.to_string())
 }

@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
 use clap::{ArgAction, Parser, Subcommand, ValueEnum};
-use mcpal_output::Format;
+use mcpal_core::rmcp::model::LoggingLevel;
+use crate::output::Format;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -22,48 +23,34 @@ Default output is YAML; pass --output json for machine-readable JSON.\
 "
 )]
 pub struct Cli {
-    /// Per-profile setting (currently unused).
     #[arg(long, global = true, env = "MCPAL_PROFILE", default_value = "default")]
     pub profile: String,
-
     /// `yaml` (default) or `json`.
     #[arg(long, global = true, value_enum)]
     pub output: Option<OutputFormat>,
-
-    /// Config file path. Defaults to the OS config dir.
     #[arg(long, global = true, env = "MCPAL_CONFIG")]
     pub config: Option<PathBuf>,
-
-    /// `-v` info-level mcpal logs; `-vv` debug.
+    /// `-v` info; `-vv` debug.
     #[arg(short = 'v', long = "verbose", global = true, action = ArgAction::Count)]
     pub verbosity: u8,
-
-    /// (reserved) Disable ANSI; mcpal already emits none on non-TTY stdout.
     #[arg(long, global = true)]
     pub no_color: bool,
-
-    /// Decline interactive prompts (elicitation, etc.).
+    /// Decline elicitation prompts.
     #[arg(long, global = true)]
     pub no_interactive: bool,
-
-    /// Filesystem root exposed via `roots/list` (repeatable).
+    /// Filesystem root for `roots/list` (repeatable).
     #[arg(long = "root", value_name = "PATH", global = true, num_args = 1)]
     pub roots: Vec<String>,
-
-    /// Overlay a Claude/Cursor-style `mcp.json` into the session config.
+    /// Overlay a Claude/Cursor-style `mcp.json`.
     #[arg(long, value_name = "PATH", global = true)]
     pub mcp_json: Option<PathBuf>,
-
-    /// AWS-CLI-style JMESPath filter applied to the response before output.
+    /// AWS-CLI JMESPath filter.
     #[arg(long, global = true, value_name = "JMESPATH")]
     pub query: Option<String>,
-
-    /// Abort an in-flight request after N seconds (default: no deadline).
+    /// Abort after N seconds.
     #[arg(long, global = true, value_name = "SECS")]
     pub timeout: Option<u64>,
-
-    /// External program for `sampling/createMessage` (JSON in/out on
-    /// stdin/stdout).
+    /// External `sampling/createMessage` handler (JSON stdin/stdout).
     #[arg(
         long = "sampling-handler",
         value_name = "CMD",
@@ -72,19 +59,18 @@ pub struct Cli {
         allow_hyphen_values = true
     )]
     pub sampling_handler: Option<String>,
-
     #[command(subcommand)]
     pub command: Command,
 }
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    /// Inspect / edit mcpal's config (init, path, show, edit).
+    /// init / path / show / edit.
     Config {
         #[command(subcommand)]
         action: ConfigAction,
     },
-    /// Manage server entries and read server properties.
+    /// Manage entries + read protocol properties.
     Server {
         #[command(subcommand)]
         action: ServerAction,
@@ -108,11 +94,10 @@ pub enum Command {
     Diff {
         ref_a: String,
         ref_b: String,
-        /// Limit the diff to one category.
         #[arg(long, value_enum)]
         only: Option<DiffCategory>,
     },
-    /// Send arbitrary JSON-RPC. Escape hatch for unmapped methods.
+    /// Send arbitrary JSON-RPC.
     Raw {
         reference: String,
         method: String,
@@ -125,7 +110,7 @@ pub enum Command {
         #[arg(value_enum)]
         shell: Shell,
     },
-    /// Bearer / OAuth 2.1 credential management (keyring-backed).
+    /// Bearer / OAuth 2.1 credentials (keyring).
     Auth {
         #[command(subcommand)]
         action: AuthAction,
@@ -135,7 +120,7 @@ pub enum Command {
         #[command(subcommand)]
         action: LoggingAction,
     },
-    /// Tail server-initiated notifications until Ctrl-C.
+    /// Tail server notifications until Ctrl-C.
     Watch { reference: String },
     /// `debug doctor` / `debug explain E####`.
     Debug {
@@ -146,9 +131,9 @@ pub enum Command {
 
 #[derive(Subcommand, Debug)]
 pub enum DebugAction {
-    /// Check the local environment (config, keyring, auth, discovery).
+    /// Check local environment.
     Doctor,
-    /// Print the long-form prose for an `E####` code.
+    /// Print long-form prose for an `E####` code.
     Explain { code: String },
 }
 
@@ -174,45 +159,47 @@ pub enum LogLevel {
     Emergency,
 }
 
-impl From<LogLevel> for mcpal_core::rmcp::model::LoggingLevel {
+impl From<LogLevel> for LoggingLevel {
     fn from(l: LogLevel) -> Self {
-        use mcpal_core::rmcp::model::LoggingLevel as L;
-        match l {
-            LogLevel::Debug => L::Debug,
-            LogLevel::Info => L::Info,
-            LogLevel::Notice => L::Notice,
-            LogLevel::Warning => L::Warning,
-            LogLevel::Error => L::Error,
-            LogLevel::Critical => L::Critical,
-            LogLevel::Alert => L::Alert,
-            LogLevel::Emergency => L::Emergency,
-        }
+        // Variant order matches LogLevel.
+        [
+            Self::Debug,
+            Self::Info,
+            Self::Notice,
+            Self::Warning,
+            Self::Error,
+            Self::Critical,
+            Self::Alert,
+            Self::Emergency,
+        ][l as usize]
     }
 }
 
 #[derive(Subcommand, Debug)]
 pub enum AuthAction {
-    /// Store a bearer token or run the OAuth 2.1 flow.
+    /// Store a bearer or run the OAuth 2.1 flow.
     Login {
         reference: String,
         /// Bearer token; `-` reads stdin.
         #[arg(long, conflicts_with = "oauth")]
         bearer: Option<String>,
-        /// Run OAuth 2.1 authorization-code + PKCE.
+        /// Run OAuth 2.1 + PKCE.
         #[arg(long)]
         oauth: bool,
         /// Server URL (falls back to the resolved alias's URL).
         #[arg(long)]
         url: Option<String>,
-        /// Don't open a browser; print the URL.
+        /// Print the authorize URL instead of opening a browser.
         #[arg(long)]
         no_browser: bool,
     },
-    /// Forget stored credentials.
-    Logout { reference: String },
-    /// Show whether stored credentials exist.
-    Status { reference: Option<String> },
-    /// Use the refresh token to mint a new access token.
+    Logout {
+        reference: String,
+    },
+    Status {
+        reference: Option<String>,
+    },
+    /// Mint a new access token from the refresh token.
     Refresh {
         reference: String,
         #[arg(long)]
@@ -222,51 +209,59 @@ pub enum AuthAction {
 
 #[derive(Subcommand, Debug)]
 pub enum ConfigAction {
-    /// Create the config file at the default path.
+    /// Write the default config file.
     Init,
-    /// Print the active config file path.
+    /// Print the active config path.
     Path,
     /// Print the parsed config as TOML.
     Show,
-    /// Open the config in $VISUAL / $EDITOR (falls back to `vi`).
+    /// Open in $VISUAL / $EDITOR.
     Edit,
 }
 
 #[derive(Subcommand, Debug)]
 pub enum ServerAction {
-    /// List mcpal-owned servers; `--all` includes discovered ones.
     List(ServerListArgs),
-    /// Print the full spec for one server.
-    Show { reference: String },
-    /// Register a server in mcpal config.
+    Show {
+        reference: String,
+    },
     Add(ServerAddArgs),
-    /// Forget a mcpal-owned server.
-    Remove { alias: String },
-    /// Copy a discovered server into mcpal config.
+    Remove {
+        alias: String,
+    },
     Import(ServerImportArgs),
-    /// `serverInfo` (name, version, title).
-    Info { reference: String },
-    /// Negotiated MCP `protocolVersion`.
-    Protocol { reference: String },
-    /// Advertised capability matrix.
-    Capabilities { reference: String },
-    /// Free-form `instructions` string (or `null`).
-    Instructions { reference: String },
-    /// Liveness check (initialize handshake).
-    Ping { reference: String },
+    /// `serverInfo`.
+    Info {
+        reference: String,
+    },
+    /// `protocolVersion`.
+    Protocol {
+        reference: String,
+    },
+    /// Capability matrix.
+    Capabilities {
+        reference: String,
+    },
+    /// `instructions` (or null).
+    Instructions {
+        reference: String,
+    },
+    /// Liveness check.
+    Ping {
+        reference: String,
+    },
     /// Search the MCP Registry.
     Search {
-        /// Field is `keywords` (not `query`) to avoid collision with global `--query`.
+        /// Named `keywords` to avoid collision with global `--query`.
         #[arg(value_name = "QUERY")]
         keywords: String,
         #[arg(long, default_value_t = 10)]
         limit: u32,
     },
-    /// Install a server from the MCP Registry by name.
+    /// Install from the MCP Registry.
     Install(ServerInstallArgs),
     /// Scan installed MCP clients for already-configured servers.
     Discover {
-        /// Filter to one source id.
         #[arg(long)]
         source: Option<String>,
     },
@@ -274,13 +269,11 @@ pub enum ServerAction {
 
 #[derive(clap::Args, Debug)]
 pub struct ServerListArgs {
-    /// Discovered-only.
     #[arg(long, conflicts_with = "all")]
     pub discovered: bool,
     /// Owned + discovered.
     #[arg(long)]
     pub all: bool,
-    /// Filter discovered rows to one source id.
     #[arg(long)]
     pub source: Option<String>,
 }
@@ -300,7 +293,6 @@ pub struct ServerInstallArgs {
     pub name: String,
     #[arg(long = "as")]
     pub alias: Option<String>,
-    /// Required env var(s) per the package's `environmentVariables`.
     #[arg(long = "env", value_name = "K=V", num_args = 1)]
     pub env: Vec<String>,
 }
@@ -308,15 +300,12 @@ pub struct ServerInstallArgs {
 #[derive(clap::Args, Debug)]
 pub struct ServerAddArgs {
     pub alias: String,
-    /// Prefer the trailing `-- <cmd> <args…>` form.
     #[arg(long, conflicts_with = "http")]
     pub stdio: Option<String>,
-    /// Prefer the trailing `-- <cmd> <args…>` form.
     #[arg(long = "arg", value_name = "ARG", num_args = 1, allow_hyphen_values = true)]
     pub args: Vec<String>,
     #[arg(long = "env", value_name = "K=V", num_args = 1)]
     pub env: Vec<String>,
-    /// Mutually exclusive with --stdio / trailing command.
     #[arg(long)]
     pub http: Option<String>,
     /// `mcpal server add ev -- npx -y @mcp/server-everything`.
@@ -326,30 +315,34 @@ pub struct ServerAddArgs {
 
 #[derive(Subcommand, Debug)]
 pub enum ToolAction {
-    /// Compact list of tools on a server (name + description + required args).
+    /// name + description + required args.
     List {
         reference: String,
-        /// Print just the tool names, one per line. For shell completion.
+        /// One name per line.
         #[arg(long)]
         names_only: bool,
     },
-
-    /// Full schema for one tool (name, description, inputSchema, execution).
-    Describe { reference: String, name: String },
-
-    /// Example JSON body populated from `inputSchema`.
-    Template { reference: String, name: String },
-    /// Call a tool with `--key value` flags (typed JSON when parseable).
+    /// Full tool schema.
+    Describe {
+        reference: String,
+        name: String,
+    },
+    /// Example JSON body from `inputSchema`.
+    Template {
+        reference: String,
+        name: String,
+    },
+    /// `tools/call` with `--key value` flags.
     Call {
         reference: String,
         name: String,
-        /// Base argument object from a file or `-` (stdin).
+        /// Base body from a file or `-` (stdin).
         #[arg(long, value_name = "PATH|-")]
         cli_input_json: Option<String>,
-        /// Inline JSON, `@path`, or `-`. Conflicts with `--cli-input-json`.
+        /// Inline JSON, `@path`, or `-`.
         #[arg(long, value_name = "JSON|@PATH|-", conflicts_with = "cli_input_json")]
         params: Option<String>,
-        /// Skip pre-send validation against `inputSchema`.
+        /// Skip pre-send `inputSchema` check.
         #[arg(long)]
         skip_validation: bool,
         #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 0..)]
@@ -359,28 +352,31 @@ pub enum ToolAction {
 
 #[derive(Subcommand, Debug)]
 pub enum ResourceAction {
-    /// List resources.
     List {
         reference: String,
         /// One URI per line.
         #[arg(long)]
         names_only: bool,
     },
-    /// Read a resource by URI.
-    Read { reference: String, uri: String },
-    /// Subscribe to updates (combine with `mcpal watch`).
-    Subscribe { reference: String, uri: String },
-    /// Cancel a prior subscription.
-    Unsubscribe { reference: String, uri: String },
-    /// List resource templates.
+    Read {
+        reference: String,
+        uri: String,
+    },
+    Subscribe {
+        reference: String,
+        uri: String,
+    },
+    Unsubscribe {
+        reference: String,
+        uri: String,
+    },
     Template {
         #[command(subcommand)]
         action: ResourceTemplateAction,
     },
-    /// `completion/complete` for a resource URI template argument.
+    /// `completion/complete` for a URI template argument.
     Complete {
         reference: String,
-        /// URI template (e.g. `file:///{path}`).
         #[arg(long, value_name = "URI")]
         template: String,
         #[arg(long, value_name = "FIELD=PARTIAL")]
@@ -395,14 +391,12 @@ pub enum ResourceTemplateAction {
 
 #[derive(Subcommand, Debug)]
 pub enum PromptAction {
-    /// List prompts.
     List {
         reference: String,
-        /// One name per line.
         #[arg(long)]
         names_only: bool,
     },
-    /// Get a prompt with `--key value` arguments.
+    /// `--key value` pairs become prompt arguments.
     Get {
         reference: String,
         name: String,

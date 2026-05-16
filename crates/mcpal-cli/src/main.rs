@@ -6,6 +6,7 @@ mod keyring;
 mod kv;
 mod mcp_json;
 mod oauth;
+mod output;
 mod registry;
 mod resolver;
 mod runtime;
@@ -13,7 +14,7 @@ mod runtime;
 use anyhow::Result;
 use clap::Parser;
 use mcpal_core::Handler;
-use mcpal_output::Format;
+use crate::output::Format;
 use tracing_subscriber::EnvFilter;
 
 use cli::{Cli, Command};

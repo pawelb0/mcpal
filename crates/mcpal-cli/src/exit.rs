@@ -2,7 +2,7 @@
 //! Long-form prose lives in the `EXPLAIN` table below (mirrored in the book).
 
 use mcpal_core::Error as CoreError;
-use mcpal_output::Error as OutputError;
+use crate::output::Error as OutputError;
 
 pub struct Diagnostic {
     pub code: i32,
