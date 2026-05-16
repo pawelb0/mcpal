@@ -79,6 +79,13 @@ semicolon_if_nothing_returned = "warn"
 lto = "thin"
 strip = "symbols"
 
+# Used by cargo-dist's release builds; inherits release and turns
+# everything to 11.
+[profile.dist]
+inherits = "release"
+lto = "thin"
+debug = "line-tables-only"
+
 [workspace.metadata.dist]
 cargo-dist-version = "0.31.0"
 ci = "github"
