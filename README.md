@@ -31,29 +31,34 @@ $ mcpal --query 'content[0].text' tool call ev echo --message hi
 
 ## Install
 
+Homebrew (tracks `main` until the first tagged release):
+
+```
+brew tap pawelb0/tap
+brew install --HEAD pawelb0/tap/mcpal
+```
+
 From source:
 
 ```
-cargo install --path crates/mcpal-cli
+cargo install --git https://github.com/pawelb0/mcpal --path crates/mcpal-cli
 ```
 
-From a tagged release (after the first `v0.x.0`):
+After the first tagged release, the curl installer pulls a prebuilt
+binary into `$HOME/.local/bin` (override with `MCPAL_INSTALL_DIR`):
 
 ```
 curl --proto '=https' --tlsv1.2 -fsSL \
   https://raw.githubusercontent.com/pawelb0/mcpal/main/dist/install.sh | sh
 ```
 
-The script downloads the matching `mcpal-<tag>-<target>.tar.gz`
-artifact from GitHub Releases and drops `mcpal` into
-`$HOME/.local/bin` (override with `MCPAL_INSTALL_DIR`).
-
 The release workflow at `.github/workflows/release.yml` builds macOS
-(arm64 + x86_64), Linux (x86_64 GNU), and Windows binaries today.
-`[workspace.metadata.dist]` in `Cargo.toml` is the cargo-dist config
-that adds Linux musl + a curl installer once `dist init` runs. A
-Homebrew formula template lives at `dist/Formula/mcpal.rb` for the
-eventual `pawelb0/homebrew-tap`.
+(arm64 + x86_64), Linux (x86_64 GNU), and Windows binaries.
+
+## Documentation
+
+The user manual lives at <https://pawelb0.github.io/mcpal/> (built
+from `book/` via mdBook).
 
 ## 60-second tour
 
