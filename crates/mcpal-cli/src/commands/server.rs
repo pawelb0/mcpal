@@ -5,9 +5,12 @@ use mcpal_core::ServerSpec;
 use serde::Serialize;
 use serde_json::json;
 
-use crate::cli::{ServerAction, ServerAddArgs, ServerImportArgs, ServerListArgs};
+use crate::cli::{
+    ServerAction, ServerAddArgs, ServerImportArgs, ServerInstallArgs, ServerListArgs,
+};
 use crate::commands::discover::describe_spec;
 use crate::config::Config;
+use crate::registry;
 use crate::resolver::resolve;
 use crate::runtime::{Ctx, probe};
 
@@ -19,6 +22,8 @@ pub async fn run(action: ServerAction, ctx: &Ctx) -> Result<()> {
         ServerAction::Remove { alias } => remove(&alias, ctx),
         ServerAction::Import(args) => import(args, ctx),
         ServerAction::Test { reference, full } => test(&reference, full, ctx).await,
+        ServerAction::Search { keywords, limit } => search(&keywords, limit, ctx).await,
+        ServerAction::Install(args) => install(args, ctx).await,
     }
 }
 
@@ -146,6 +151,52 @@ fn import(args: ServerImportArgs, ctx: &Ctx) -> Result<()> {
     cfg.save(&ctx.config_path)?;
     eprintln!("imported {}:{} as '{alias}'", found.source, found.name);
     Ok(())
+}
+
+async fn search(keywords: &str, limit: u32, ctx: &Ctx) -> Result<()> {
+    let env = registry::search(keywords, limit).await?;
+    let hits: Vec<registry::Hit<'_>> = env
+        .servers
+        .iter()
+        .map(|w| registry::Hit {
+            name: &w.server.name,
+            version: w.server.version.as_deref(),
+            description: w.server.description.as_deref(),
+            kind: registry::classify(&w.server),
+        })
+        .collect();
+    ctx.render_list(&hits)?;
+    Ok(())
+}
+
+async fn install(args: ServerInstallArgs, ctx: &Ctx) -> Result<()> {
+    let server = registry::fetch(&args.name).await?;
+    let mut env_map = BTreeMap::new();
+    for kv in &args.env {
+        let (k, v) = kv
+            .split_once('=')
+            .ok_or_else(|| anyhow!("--env requires K=V: {kv}"))?;
+        env_map.insert(k.into(), v.into());
+    }
+    let spec = registry::to_spec(&server, &env_map)?;
+
+    let alias = args
+        .alias
+        .unwrap_or_else(|| default_alias(&server.name).to_string());
+    let mut cfg = Config::load(&ctx.config_path)?;
+    if cfg.server.contains_key(&alias) {
+        bail!("server '{alias}' already exists in mcpal config");
+    }
+    cfg.server.insert(alias.clone(), spec);
+    cfg.save(&ctx.config_path)?;
+    eprintln!("installed {} as '{alias}'", server.name);
+    Ok(())
+}
+
+/// `io.github.foo/bar` → `bar`; falls back to the whole name if there's
+/// no `/`.
+fn default_alias(name: &str) -> &str {
+    name.rsplit_once('/').map(|(_, t)| t).unwrap_or(name)
 }
 
 async fn test(reference: &str, full: bool, ctx: &Ctx) -> Result<()> {

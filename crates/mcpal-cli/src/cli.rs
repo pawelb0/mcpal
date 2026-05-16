@@ -315,6 +315,20 @@ pub enum ServerAction {
         #[arg(long)]
         full: bool,
     },
+    /// Search the MCP Registry (registry.modelcontextprotocol.io).
+    Search {
+        /// Free-text search string.
+        #[arg(value_name = "QUERY")]
+        keywords: String,
+        /// Max results to return.
+        #[arg(long, default_value_t = 10)]
+        limit: u32,
+    },
+    /// Install a server from the MCP Registry by name. Resolves the
+    /// registry entry's package (`npm`, `pypi`, `oci`) or
+    /// streamable-http remote into a `ServerSpec` and writes it to
+    /// the mcpal config.
+    Install(ServerInstallArgs),
 }
 
 #[derive(clap::Args, Debug)]
@@ -340,6 +354,21 @@ pub struct ServerImportArgs {
     /// Alias to register in mcpal config (defaults to the source name).
     #[arg(long = "as")]
     pub alias: Option<String>,
+}
+
+#[derive(clap::Args, Debug)]
+pub struct ServerInstallArgs {
+    /// Fully-qualified registry name (e.g. `io.github.owner/repo`).
+    pub name: String,
+    /// Local alias for the installed server (defaults to the last path
+    /// segment of `name`).
+    #[arg(long = "as")]
+    pub alias: Option<String>,
+    /// Environment variable in K=V form (repeatable). Required when the
+    /// package's `environmentVariables` lists `isRequired: true` entries
+    /// without defaults.
+    #[arg(long = "env", value_name = "K=V", num_args = 1)]
+    pub env: Vec<String>,
 }
 
 #[derive(clap::Args, Debug)]

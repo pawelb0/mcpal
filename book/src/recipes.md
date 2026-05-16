@@ -3,6 +3,20 @@
 Replace `<ref>` with any server reference (see
 [Concepts](./concepts.md#server-reference-ref)).
 
+## Install a server from the MCP Registry
+
+```bash
+mcpal server search filesystem --limit 5
+mcpal server install io.github.Oncorporation/filesystem-server --as fs
+mcpal server install io.github.foo/bar --env API_KEY=$KEY
+mcpal tool list fs
+```
+
+`server install` resolves the registry entry's package
+(npm → `npx`, pypi → `uvx`, oci → `docker run`) or its
+streamable-http remote into a `ServerSpec` and writes it to your config.
+Required env vars without defaults must be supplied via `--env K=V`.
+
 ## List servers already on the machine
 
 ```bash

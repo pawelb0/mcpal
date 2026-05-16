@@ -38,6 +38,7 @@ keyring.workspace = true
 async-trait.workspace = true
 axum.workspace = true
 webbrowser.workspace = true
+reqwest.workspace = true
 
 [dev-dependencies]
 assert_cmd.workspace = true

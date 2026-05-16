@@ -6,6 +6,7 @@ mod keyring;
 mod kv;
 mod mcp_json;
 mod oauth;
+mod registry;
 mod resolver;
 mod runtime;
 
