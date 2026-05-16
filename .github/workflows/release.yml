@@ -35,7 +35,7 @@ jobs:
           ARCHIVE="mcpal-${{ github.ref_name }}-${{ matrix.target }}.tar.gz"
           tar -czf "dist/$ARCHIVE" \
             -C "target/${{ matrix.target }}/release" mcpal \
-            -C "$GITHUB_WORKSPACE" README.md LICENSE-MIT LICENSE-APACHE
+            -C "$GITHUB_WORKSPACE" README.md LICENSE
           (cd dist && shasum -a 256 "$ARCHIVE" > "$ARCHIVE.sha256")
 
       - name: package (windows)
@@ -45,7 +45,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           $archive = "mcpal-${{ github.ref_name }}-${{ matrix.target }}.zip"
           $bin = "target/${{ matrix.target }}/release/mcpal.exe"
-          Compress-Archive -Path $bin, README.md, LICENSE-MIT, LICENSE-APACHE -DestinationPath "dist/$archive"
+          Compress-Archive -Path $bin, README.md, LICENSE -DestinationPath "dist/$archive"
           (Get-FileHash "dist/$archive" -Algorithm SHA256).Hash | Out-File "dist/$archive.sha256"
 
       - uses: actions/upload-artifact@v4

@@ -49,4 +49,4 @@ Read [Concepts](./concepts.md) next.
 
 ## License
 
-MIT OR Apache-2.0, at your option.
+MIT

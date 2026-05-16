@@ -4,7 +4,7 @@
 class Mcpal < Formula
   desc "Scriptable command-line client for the Model Context Protocol"
   homepage "https://github.com/pawelb0/mcpal"
-  license any_of: ["MIT", "Apache-2.0"]
+  license "MIT"
   head "https://github.com/pawelb0/mcpal.git", branch: "main"
 
   # Stub formula. cargo-dist (or a manual tap commit) replaces this with a

@@ -224,4 +224,4 @@ cargo-dist release artifacts.
 
 ## License
 
-MIT OR Apache-2.0, at your option.
+MIT
