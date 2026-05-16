@@ -159,6 +159,17 @@ pub enum Command {
         action: PromptAction,
     },
 
+    /// Compare two servers' capabilities (tools, resources, prompts).
+    /// Reports `added`, `removed`, and `changed` entries between
+    /// `<ref-a>` and `<ref-b>`.
+    Diff {
+        ref_a: String,
+        ref_b: String,
+        /// Limit the diff to one category.
+        #[arg(long, value_enum)]
+        only: Option<DiffCategory>,
+    },
+
     /// Send an arbitrary JSON-RPC request. Escape hatch for MCP methods
     /// without a dedicated subcommand.
     Raw {
@@ -498,6 +509,13 @@ pub enum PromptAction {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 0..)]
         args: Vec<String>,
     },
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum)]
+pub enum DiffCategory {
+    Tools,
+    Resources,
+    Prompts,
 }
 
 #[derive(Copy, Clone, Debug, ValueEnum)]

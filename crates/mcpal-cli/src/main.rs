@@ -96,6 +96,9 @@ async fn dispatch(cli: Cli) -> Result<()> {
             None => anyhow::bail!("no documentation for error code '{code}'"),
         },
         Command::Doctor => commands::doctor::run(&ctx),
+        Command::Diff { ref_a, ref_b, only } => {
+            commands::diff::run(&ref_a, &ref_b, only, &ctx).await
+        }
     }
 }
 

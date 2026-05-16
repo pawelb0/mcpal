@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod completion;
 pub mod config;
+pub mod diff;
 pub mod discover;
 pub mod doctor;
 pub mod init;
