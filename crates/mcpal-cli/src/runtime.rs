@@ -95,7 +95,7 @@ impl Ctx {
 
     pub async fn open(&self, reference: &str) -> Result<(ResolvedServer, Client)> {
         let mut resolved = resolve(reference, self)?;
-        attach_bearer(&mut resolved.spec, reference);
+        attach_bearer(&mut resolved.spec, reference, &resolved.display).await;
         let handler = Handler::new(self.handler_opts.clone());
         let client = connect(&resolved.spec, handler).await?;
         Ok((resolved, client))
@@ -103,19 +103,20 @@ impl Ctx {
 }
 
 /// Resolve credentials for an HTTP spec. Skips stdio. If `auth` is already
-/// `AuthSpec::Oauth` we replace it with the stored access token (or warn if
-/// missing); any other explicit `auth` is left alone. With no explicit auth,
-/// fall through: oauth blob → keyring bearer → `MCPAL_BEARER` env.
-fn attach_bearer(spec: &mut ServerSpec, reference: &str) {
-    let ServerSpec::Http { auth, .. } = spec else {
+/// `AuthSpec::Oauth` we replace it with the stored access token (refreshing
+/// it first if it's within 30s of expiry); any other explicit `auth` is left
+/// alone. With no explicit auth: oauth blob → keyring bearer → `MCPAL_BEARER`.
+async fn attach_bearer(spec: &mut ServerSpec, reference: &str, display: &str) {
+    let ServerSpec::Http { url, auth, .. } = spec else {
         return;
     };
+    let server_url = url.clone();
     if let Some(AuthSpec::Oauth) = auth {
-        match oauth::current_access_token(reference) {
+        match oauth::access_token_refreshing(reference, &server_url).await {
             Some(token) => *auth = Some(AuthSpec::Bearer { token }),
             None => eprintln!(
-                "warning: '{reference}' is configured for OAuth but no token is stored; \
-                 run `mcpal auth login --oauth {reference}`"
+                "warning: '{display}' is configured for OAuth but no token is stored; \
+                 run `mcpal auth login --oauth {display}`"
             ),
         }
         return;
@@ -123,7 +124,7 @@ fn attach_bearer(spec: &mut ServerSpec, reference: &str) {
     if auth.is_some() {
         return;
     }
-    if let Some(token) = oauth::current_access_token(reference) {
+    if let Some(token) = oauth::access_token_refreshing(reference, &server_url).await {
         *auth = Some(AuthSpec::Bearer { token });
         return;
     }
