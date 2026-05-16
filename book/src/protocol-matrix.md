@@ -17,7 +17,7 @@ Unmarked rows are wired. `pending` rows are not.
 | `resources/unsubscribe` | `resource unsubscribe <ref> <uri>` |  |
 | `prompts/list` | `prompt list <ref>` |  |
 | `prompts/get` | `prompt get <ref> <name> --key value` |  |
-| `completion/complete` | — | pending |
+| `completion/complete` | `prompt complete <ref> <name> --arg F=P` / `resource complete <ref> --template <uri> --arg F=P` |  |
 | `logging/setLevel` | `logging set-level <ref> <level>` |  |
 | any other / future method | `raw <ref> <method> --params …` | passthrough |
 

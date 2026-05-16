@@ -476,6 +476,18 @@ pub enum ResourceAction {
         #[command(subcommand)]
         action: ResourceTemplateAction,
     },
+    /// Get completion suggestions for a resource URI template argument
+    /// via the MCP `completion/complete` method.
+    Complete {
+        reference: String,
+        /// URI template (e.g. `file:///{path}`).
+        #[arg(long, value_name = "URI")]
+        template: String,
+        /// `FIELD=PARTIAL` — the template argument to complete and its
+        /// current partial value.
+        #[arg(long, value_name = "FIELD=PARTIAL")]
+        arg: String,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -498,6 +510,16 @@ pub enum PromptAction {
         name: String,
         #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 0..)]
         args: Vec<String>,
+    },
+    /// Get completion suggestions for a prompt argument via the MCP
+    /// `completion/complete` method.
+    Complete {
+        reference: String,
+        name: String,
+        /// `FIELD=PARTIAL` — the prompt argument to complete and its
+        /// current partial value.
+        #[arg(long, value_name = "FIELD=PARTIAL")]
+        arg: String,
     },
 }
 

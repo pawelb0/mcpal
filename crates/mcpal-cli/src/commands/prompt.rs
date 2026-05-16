@@ -18,6 +18,11 @@ pub async fn run(action: PromptAction, ctx: &Ctx) -> Result<()> {
             name,
             args,
         } => get(&reference, &name, &args, ctx).await,
+        PromptAction::Complete {
+            reference,
+            name,
+            arg,
+        } => complete(&reference, &name, &arg, ctx).await,
     }
 }
 
@@ -55,6 +60,18 @@ async fn list(reference: &str, names_only: bool, ctx: &Ctx) -> Result<()> {
         })
         .collect();
     ctx.render_list(&summaries)?;
+    Ok(())
+}
+
+async fn complete(reference: &str, name: &str, arg: &str, ctx: &Ctx) -> Result<()> {
+    let (field, value) = arg
+        .split_once('=')
+        .ok_or_else(|| anyhow::anyhow!("--arg expects FIELD=PARTIAL, got '{arg}'"))?;
+    let (_, client) = ctx.open(reference).await?;
+    let completion = ctx
+        .under_deadline(client.complete_prompt_argument(name, field, value, None))
+        .await??;
+    ctx.render_one(&completion)?;
     Ok(())
 }
 

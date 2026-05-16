@@ -21,6 +21,11 @@ pub async fn run(action: ResourceAction, ctx: &Ctx) -> Result<()> {
         ResourceAction::Template { action } => match action {
             ResourceTemplateAction::List { reference } => templates(&reference, ctx).await,
         },
+        ResourceAction::Complete {
+            reference,
+            template,
+            arg,
+        } => complete(&reference, &template, &arg, ctx).await,
     }
 }
 
@@ -83,6 +88,18 @@ async fn unsubscribe(reference: &str, uri: &str, ctx: &Ctx) -> Result<()> {
     ctx.under_deadline(client.unsubscribe(UnsubscribeRequestParams::new(uri)))
         .await??;
     ctx.render_one(&json!({"ok": true, "unsubscribed": uri}))?;
+    Ok(())
+}
+
+async fn complete(reference: &str, template: &str, arg: &str, ctx: &Ctx) -> Result<()> {
+    let (name, value) = arg
+        .split_once('=')
+        .ok_or_else(|| anyhow::anyhow!("--arg expects FIELD=PARTIAL, got '{arg}'"))?;
+    let (_, client) = ctx.open(reference).await?;
+    let completion = ctx
+        .under_deadline(client.complete_resource_argument(template, name, value, None))
+        .await??;
+    ctx.render_one(&completion)?;
     Ok(())
 }
 
