@@ -32,6 +32,18 @@ impl Handler {
             let _ = tx.send(value);
         }
     }
+
+    /// Serialize the param struct and tag it with a `kind` field.
+    fn tag(&self, kind: &str, params: impl serde::Serialize) {
+        if self.events.is_none() {
+            return;
+        }
+        let mut v = serde_json::to_value(&params).unwrap_or_else(|_| json!({}));
+        if let Value::Object(ref mut m) = v {
+            m.insert("kind".into(), Value::String(kind.into()));
+            self.emit(v);
+        }
+    }
 }
 
 impl ClientHandler for Handler {
@@ -48,31 +60,31 @@ impl ClientHandler for Handler {
         request: CreateElicitationRequestParams,
         _ctx: RequestContext<RoleClient>,
     ) -> Result<CreateElicitationResult, ErrorData> {
+        use CreateElicitationRequestParams::*;
         match request {
-            CreateElicitationRequestParams::FormElicitationParams { message, .. } => {
+            FormElicitationParams { message, .. } => {
                 if !self.interactive || !std::io::stdin().is_terminal() {
                     return Ok(CreateElicitationResult::new(ElicitationAction::Decline));
                 }
                 eprintln!("[server elicitation] {message}");
                 eprint!("> ");
                 std::io::stderr().flush().ok();
-                let line = tokio::task::spawn_blocking(|| {
-                    let mut buf = String::new();
-                    std::io::stdin().lock().read_line(&mut buf).map(|_| buf)
+                let buf = tokio::task::spawn_blocking(|| {
+                    let mut b = String::new();
+                    std::io::stdin().lock().read_line(&mut b).map(|_| b)
                 })
                 .await
-                .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
-                match line {
-                    Ok(buf) if !buf.is_empty() => {
-                        Ok(CreateElicitationResult::new(ElicitationAction::Accept)
-                            .with_content(json!({ "value": buf.trim() })))
-                    }
-                    _ => Ok(CreateElicitationResult::new(ElicitationAction::Cancel)),
-                }
+                .map_err(|e| ErrorData::internal_error(e.to_string(), None))?
+                .unwrap_or_default();
+                Ok(if buf.is_empty() {
+                    CreateElicitationResult::new(ElicitationAction::Cancel)
+                } else {
+                    CreateElicitationResult::new(ElicitationAction::Accept)
+                        .with_content(json!({"value": buf.trim()}))
+                })
             }
-            CreateElicitationRequestParams::UrlElicitationParams { url, message, .. } => {
-                eprintln!("[server elicitation] {message}");
-                eprintln!("  open: {url}");
+            UrlElicitationParams { url, message, .. } => {
+                eprintln!("[server elicitation] {message}\n  open: {url}");
                 Ok(CreateElicitationResult::new(ElicitationAction::Accept))
             }
         }
@@ -83,11 +95,9 @@ impl ClientHandler for Handler {
         params: CreateMessageRequestParams,
         _ctx: RequestContext<RoleClient>,
     ) -> Result<CreateMessageResult, ErrorData> {
-        let Some(argv) = self.sampling_handler.as_ref() else {
-            return Err(ErrorData::method_not_found::<
-                rmcp::model::CreateMessageRequestMethod,
-            >());
-        };
+        let argv = self.sampling_handler.as_ref().ok_or_else(|| {
+            ErrorData::method_not_found::<rmcp::model::CreateMessageRequestMethod>()
+        })?;
         run_sampling_handler(argv, &params)
             .await
             .map_err(|e| ErrorData::internal_error(format!("sampling handler: {e}"), None))
@@ -98,73 +108,45 @@ impl ClientHandler for Handler {
         params: LoggingMessageNotificationParam,
         _ctx: NotificationContext<RoleClient>,
     ) {
-        let logger = params.logger.as_deref().unwrap_or("server");
+        let logger = params.logger.as_deref().unwrap_or("server").to_string();
         let data = serde_json::to_string(&params.data).unwrap_or_default();
-        self.emit(json!({
-            "kind": "log",
-            "level": format!("{:?}", params.level).to_lowercase(),
-            "logger": logger,
-            "data": params.data,
-        }));
+        use LoggingLevel::*;
         match params.level {
-            LoggingLevel::Debug => tracing::debug!(target: "mcpal::server", logger, %data),
-            LoggingLevel::Info | LoggingLevel::Notice => {
-                tracing::info!(target: "mcpal::server", logger, %data);
-            }
-            LoggingLevel::Warning => tracing::warn!(target: "mcpal::server", logger, %data),
-            LoggingLevel::Error
-            | LoggingLevel::Critical
-            | LoggingLevel::Alert
-            | LoggingLevel::Emergency => {
+            Debug => tracing::debug!(target: "mcpal::server", logger, %data),
+            Info | Notice => tracing::info!(target: "mcpal::server", logger, %data),
+            Warning => tracing::warn!(target: "mcpal::server", logger, %data),
+            Error | Critical | Alert | Emergency => {
                 tracing::error!(target: "mcpal::server", logger, %data);
             }
         }
+        self.tag("log", params);
     }
 
-    async fn on_progress(
-        &self,
-        params: ProgressNotificationParam,
-        _ctx: NotificationContext<RoleClient>,
-    ) {
-        self.emit(json!({
-            "kind": "progress",
-            "token": params.progress_token,
-            "progress": params.progress,
-            "total": params.total,
-            "message": params.message,
-        }));
+    async fn on_progress(&self, p: ProgressNotificationParam, _: NotificationContext<RoleClient>) {
+        self.tag("progress", p);
     }
-
     async fn on_resource_updated(
         &self,
-        params: ResourceUpdatedNotificationParam,
-        _ctx: NotificationContext<RoleClient>,
+        p: ResourceUpdatedNotificationParam,
+        _: NotificationContext<RoleClient>,
     ) {
-        self.emit(json!({ "kind": "resource_updated", "uri": params.uri }));
+        self.tag("resource_updated", p);
     }
-
-    async fn on_resource_list_changed(&self, _ctx: NotificationContext<RoleClient>) {
-        self.emit(json!({ "kind": "resource_list_changed" }));
+    async fn on_resource_list_changed(&self, _: NotificationContext<RoleClient>) {
+        self.emit(json!({"kind": "resource_list_changed"}));
     }
-
-    async fn on_tool_list_changed(&self, _ctx: NotificationContext<RoleClient>) {
-        self.emit(json!({ "kind": "tool_list_changed" }));
+    async fn on_tool_list_changed(&self, _: NotificationContext<RoleClient>) {
+        self.emit(json!({"kind": "tool_list_changed"}));
     }
-
-    async fn on_prompt_list_changed(&self, _ctx: NotificationContext<RoleClient>) {
-        self.emit(json!({ "kind": "prompt_list_changed" }));
+    async fn on_prompt_list_changed(&self, _: NotificationContext<RoleClient>) {
+        self.emit(json!({"kind": "prompt_list_changed"}));
     }
-
     async fn on_cancelled(
         &self,
-        params: CancelledNotificationParam,
-        _ctx: NotificationContext<RoleClient>,
+        p: CancelledNotificationParam,
+        _: NotificationContext<RoleClient>,
     ) {
-        self.emit(json!({
-            "kind": "cancelled",
-            "requestId": params.request_id,
-            "reason": params.reason,
-        }));
+        self.tag("cancelled", p);
     }
 }
 

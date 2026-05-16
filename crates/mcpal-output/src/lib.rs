@@ -36,17 +36,8 @@ pub fn emit_one<T: Serialize>(format: Format, value: &T) -> Result<(), Error> {
     }
 }
 
-/// Render a list. `headers` and `row` are accepted for backward compatibility
-/// but ignored — both YAML and JSON output the typed list directly.
-pub fn emit_list<T, F>(format: Format, items: &[T], _headers: &[&str], _row: F) -> Result<(), Error>
-where
-    T: Serialize,
-    F: FnMut(&T) -> Vec<String>,
-{
-    match format {
-        Format::Json => emit_json(&items),
-        Format::Yaml => emit_yaml(&items),
-    }
+pub fn emit_list<T: Serialize>(format: Format, items: &[T]) -> Result<(), Error> {
+    emit_one(format, &items)
 }
 
 /// Filter a JSON value through a JMESPath expression. Used by callers that

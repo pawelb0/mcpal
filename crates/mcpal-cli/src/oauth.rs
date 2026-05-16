@@ -1,4 +1,4 @@
-//! OAuth 2.1 login flow: loopback callback + browser launch + token persistence.
+//! OAuth 2.1 login: loopback callback + browser launch + token persistence.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -14,8 +14,8 @@ use tokio::sync::{Mutex, oneshot};
 
 use crate::keyring::{self, Kind};
 
-const CALLBACK_HTML: &str = "<!doctype html><html><body><h2>mcpal: authorized.</h2>\
-<p>You can close this tab.</p></body></html>";
+const CALLBACK_HTML: &str =
+    "<!doctype html><html><body><h2>mcpal: authorized.</h2><p>Close this tab.</p></body></html>";
 
 pub(crate) struct KeyringCredentialStore {
     reference: String,
@@ -23,30 +23,7 @@ pub(crate) struct KeyringCredentialStore {
 
 impl KeyringCredentialStore {
     pub fn new(reference: &str) -> Self {
-        Self {
-            reference: reference.into(),
-        }
-    }
-}
-
-#[async_trait]
-impl CredentialStore for KeyringCredentialStore {
-    async fn load(&self) -> Result<Option<StoredCredentials>, AuthError> {
-        let Some(json) = keyring::get(&self.reference, Kind::Oauth) else {
-            return Ok(None);
-        };
-        serde_json::from_str(&json)
-            .map(Some)
-            .map_err(|e| internal("decode creds", e))
-    }
-
-    async fn save(&self, c: StoredCredentials) -> Result<(), AuthError> {
-        let json = serde_json::to_string(&c).map_err(|e| internal("encode creds", e))?;
-        keyring::put(&self.reference, Kind::Oauth, &json).map_err(|e| internal("store creds", e))
-    }
-
-    async fn clear(&self) -> Result<(), AuthError> {
-        keyring::delete(&self.reference, Kind::Oauth).map_err(|e| internal("delete creds", e))
+        Self { reference: reference.into() }
     }
 }
 
@@ -54,7 +31,24 @@ fn internal(ctx: &str, e: impl std::fmt::Display) -> AuthError {
     AuthError::InternalError(format!("{ctx}: {e}"))
 }
 
-#[derive(Debug, Deserialize)]
+#[async_trait]
+impl CredentialStore for KeyringCredentialStore {
+    async fn load(&self) -> Result<Option<StoredCredentials>, AuthError> {
+        match keyring::get(&self.reference, Kind::Oauth) {
+            Some(j) => serde_json::from_str(&j).map(Some).map_err(|e| internal("decode", e)),
+            None => Ok(None),
+        }
+    }
+    async fn save(&self, c: StoredCredentials) -> Result<(), AuthError> {
+        let j = serde_json::to_string(&c).map_err(|e| internal("encode", e))?;
+        keyring::put(&self.reference, Kind::Oauth, &j).map_err(|e| internal("store", e))
+    }
+    async fn clear(&self) -> Result<(), AuthError> {
+        keyring::delete(&self.reference, Kind::Oauth).map_err(|e| internal("delete", e))
+    }
+}
+
+#[derive(Deserialize)]
 struct CallbackParams {
     code: String,
     state: String,
@@ -63,55 +57,39 @@ struct CallbackParams {
 pub async fn login(reference: &str, server_url: &str, open_browser: bool) -> Result<()> {
     let (tx, rx) = oneshot::channel::<CallbackParams>();
     let sender = Arc::new(Mutex::new(Some(tx)));
-
     let app = Router::new().route(
         "/callback",
         get({
-            let sender = sender.clone();
+            let s = sender.clone();
             move |Query(p): Query<CallbackParams>| async move {
-                if let Some(s) = sender.lock().await.take() {
-                    let _ = s.send(p);
+                if let Some(tx) = s.lock().await.take() {
+                    let _ = tx.send(p);
                 }
                 Html(CALLBACK_HTML)
             }
         }),
     );
-
     let listener = tokio::net::TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))
         .await
         .context("bind callback listener")?;
-    let port = listener.local_addr()?.port();
-    let redirect_uri = format!("http://127.0.0.1:{port}/callback");
-
+    let redirect_uri = format!("http://127.0.0.1:{}/callback", listener.local_addr()?.port());
     let server = tokio::spawn(async move {
         let _ = axum::serve(listener, app).await;
     });
 
-    let mut am = AuthorizationManager::new(server_url)
-        .await
-        .context("init AuthorizationManager")?;
+    let mut am = AuthorizationManager::new(server_url).await.context("init AuthorizationManager")?;
     am.set_credential_store(KeyringCredentialStore::new(reference));
     am.discover_metadata().await.context("discover metadata")?;
-    am.register_client("mcpal", &redirect_uri, &[])
-        .await
-        .context("register client")?;
+    am.register_client("mcpal", &redirect_uri, &[]).await.context("register client")?;
+    let url = am.get_authorization_url(&[]).await.context("authorization url")?;
 
-    let url = am
-        .get_authorization_url(&[])
-        .await
-        .context("authorization url")?;
-
-    eprintln!("Open this URL to authorize {reference}:");
-    eprintln!("  {url}");
+    eprintln!("Open this URL to authorize {reference}:\n  {url}");
     if open_browser && let Err(e) = webbrowser::open(&url) {
         eprintln!("  (couldn't launch browser: {e}; open the URL manually)");
     }
 
-    let params = rx.await.context("waiting for callback")?;
-    am.exchange_code_for_token(&params.code, &params.state)
-        .await
-        .context("exchange code for token")?;
-
+    let p = rx.await.context("waiting for callback")?;
+    am.exchange_code_for_token(&p.code, &p.state).await.context("exchange code for token")?;
     server.abort();
     Ok(())
 }
@@ -119,17 +97,11 @@ pub async fn login(reference: &str, server_url: &str, open_browser: bool) -> Res
 pub async fn refresh(reference: &str, server_url: &str) -> Result<()> {
     let store = KeyringCredentialStore::new(reference);
     if store.load().await?.is_none() {
-        bail!("no oauth credentials stored for '{reference}'; run `mcpal auth login --oauth`");
+        bail!("no oauth credentials for '{reference}'; run `mcpal auth login --oauth`");
     }
-    let mut am = AuthorizationManager::new(server_url)
-        .await
-        .context("init AuthorizationManager")?;
+    let mut am = AuthorizationManager::new(server_url).await.context("init AuthorizationManager")?;
     am.set_credential_store(store);
-    let restored = am
-        .initialize_from_store()
-        .await
-        .context("restore creds from keyring")?;
-    if !restored {
+    if !am.initialize_from_store().await.context("restore creds")? {
         bail!("credentials present but could not be restored; re-run login");
     }
     am.refresh_token().await.context("refresh token")?;
@@ -147,8 +119,7 @@ pub(crate) fn current_access_token(reference: &str) -> Option<String> {
         .map(String::from)
 }
 
-/// `current_access_token`, but kicks off a refresh first when the stored
-/// token is within 30s of expiry. Silent on refresh failure.
+/// `current_access_token`, but eagerly refreshes when within 30s of expiry.
 pub(crate) async fn access_token_refreshing(reference: &str, server_url: &str) -> Option<String> {
     if expires_soon(reference)
         && let Err(e) = refresh(reference, server_url).await
@@ -160,11 +131,11 @@ pub(crate) async fn access_token_refreshing(reference: &str, server_url: &str) -
 
 fn expires_soon(reference: &str) -> bool {
     let Some(v) = token_blob(reference) else { return false };
-    let received = v.pointer("/token_received_at").and_then(|x| x.as_u64());
-    let ttl = v.pointer("/token_response/expires_in").and_then(|x| x.as_u64());
-    let (Some(received), Some(ttl)) = (received, ttl) else { return false };
+    let r = v.pointer("/token_received_at").and_then(|x| x.as_u64());
+    let t = v.pointer("/token_response/expires_in").and_then(|x| x.as_u64());
+    let (Some(r), Some(t)) = (r, t) else { return false };
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
-    now + 30 >= received + ttl
+    now + 30 >= r + t
 }

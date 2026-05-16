@@ -81,7 +81,7 @@ impl Ctx {
             let filtered = mcpal_output::apply_query(v, Some(q))?;
             return emit_one(self.format, &filtered);
         }
-        emit_list(self.format, items, &[], |_| Vec::new())
+        emit_list(self.format, items)
     }
 
     pub fn discovered(&self) -> Result<&[DiscoveredServer]> {
