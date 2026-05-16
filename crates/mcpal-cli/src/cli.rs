@@ -9,88 +9,61 @@ use mcpal_output::Format;
     version,
     about = "Scriptable command-line client for the Model Context Protocol",
     long_about = "\
-mcpal is a scriptable command-line client for the Model Context Protocol.
+Scriptable command-line client for the Model Context Protocol.
 
-What it does:
-  1. Reuses servers already configured by other clients. mcpal reads
-     the MCP configs on disk from Claude Code, Claude Desktop, Cursor,
-     Zed, opencode, LM Studio, Windsurf, and Cline.
-  2. Speaks the full protocol — stdio + Streamable HTTP transports;
-     tools, resources, resource templates, prompts, subscriptions,
-     logging, server-initiated requests; bearer + OAuth 2.1 + PKCE +
-     DCR; `raw` for any JSON-RPC method without a first-party verb.
-  3. Works in pipelines — stable exit codes, `--output json|yaml`,
-     `--query <jmespath>`, rustc-style errors with `E####` codes,
-     `--timeout SECS`, Ctrl-C cancellation.
-
-Common workflows:
-  mcpal server discover                 scan all clients for configured servers
-  mcpal server list --all               mcpal-owned + discovered together
+  mcpal server discover                 scan installed clients for servers
   mcpal server add <alias> -- <cmd>     register a stdio server
-  mcpal server ping <ref>               liveness check (initialize handshake)
-  mcpal server info <ref>               serverInfo (name, version, title)
-  mcpal server capabilities <ref>       advertised capability matrix
-  mcpal tool list <ref>                 compact list of tools on a server
-  mcpal tool describe <ref> <name>      full schema for one tool
-  mcpal tool call <ref> <name> [--key value ...]
+  mcpal server ping <ref>               liveness check
+  mcpal tool list <ref> | call <ref> <name> [--key value …]
   mcpal auth login <ref> --oauth        OAuth 2.1 + PKCE + DCR
 
-`<ref>` accepts: mcpal-owned alias, <source>:<name> (from discovery),
-bare <name> if unambiguous, raw https:// URL, or path to a JSON spec.
-
+`<ref>` resolves as: alias → URL → JSON path → <source>:<name> → bare name.
 Default output is YAML; pass --output json for machine-readable JSON.\
 "
 )]
 pub struct Cli {
-    /// Reserved for future per-profile settings (currently a no-op).
+    /// Per-profile setting (currently unused).
     #[arg(long, global = true, env = "MCPAL_PROFILE", default_value = "default")]
     pub profile: String,
 
-    /// Output format. Default is `yaml`; `json` is pretty-printed JSON.
+    /// `yaml` (default) or `json`.
     #[arg(long, global = true, value_enum)]
     pub output: Option<OutputFormat>,
 
-    /// Path to the mcpal config file. Defaults to the OS config dir + `mcpal/config.toml`.
+    /// Config file path. Defaults to the OS config dir.
     #[arg(long, global = true, env = "MCPAL_CONFIG")]
     pub config: Option<PathBuf>,
 
-    /// Repeat for more tracing. `-v` enables info-level mcpal logs; `-vv` is debug.
+    /// `-v` info-level mcpal logs; `-vv` debug.
     #[arg(short = 'v', long = "verbose", global = true, action = ArgAction::Count)]
     pub verbosity: u8,
 
-    /// Reserved — currently a no-op (no ANSI is emitted on stdout).
+    /// (reserved) Disable ANSI; mcpal already emits none on non-TTY stdout.
     #[arg(long, global = true)]
     pub no_color: bool,
 
-    /// Skip interactive prompts (elicitation requests decline by default).
+    /// Decline interactive prompts (elicitation, etc.).
     #[arg(long, global = true)]
     pub no_interactive: bool,
 
-    /// Filesystem root to expose to servers that call `roots/list` (repeatable).
+    /// Filesystem root exposed via `roots/list` (repeatable).
     #[arg(long = "root", value_name = "PATH", global = true, num_args = 1)]
     pub roots: Vec<String>,
 
-    /// Read a Claude/Cursor-style `mcp.json` and merge its servers into the
-    /// session config without writing to disk. Useful for `mcpal --mcp-json
-    /// ./mcp.json tool list <name>` against configs your team already has.
+    /// Overlay a Claude/Cursor-style `mcp.json` into the session config.
     #[arg(long, value_name = "PATH", global = true)]
     pub mcp_json: Option<PathBuf>,
 
-    /// JMESPath expression applied to the response before output (AWS-CLI
-    /// `--query` semantics). Drops everything that doesn't match. Example:
-    /// `mcpal --query 'content[0].text' tool call ev echo --message hi`.
+    /// AWS-CLI-style JMESPath filter applied to the response before output.
     #[arg(long, global = true, value_name = "JMESPATH")]
     pub query: Option<String>,
 
-    /// Abort an in-flight request after N seconds. Without this flag mcpal
-    /// waits indefinitely (servers can hang on cold `npx -y` installs).
-    /// Ctrl-C aborts the wait at any time.
+    /// Abort an in-flight request after N seconds (default: no deadline).
     #[arg(long, global = true, value_name = "SECS")]
     pub timeout: Option<u64>,
 
-    /// External program that handles `sampling/createMessage` requests.
-    /// mcpal pipes the request JSON on stdin and reads a CreateMessageResult
-    /// JSON from stdout. Use your shell's quoting for multi-arg commands.
+    /// External program for `sampling/createMessage` (JSON in/out on
+    /// stdin/stdout).
     #[arg(
         long = "sampling-handler",
         value_name = "CMD",
@@ -106,40 +79,32 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    /// Inspect or edit the mcpal config file (init, path, contents, $EDITOR).
+    /// Inspect / edit mcpal's config (init, path, show, edit).
     Config {
         #[command(subcommand)]
         action: ConfigAction,
     },
-
-    /// Manage server entries (list, add, install, discover) and read
-    /// server properties (info, protocol, capabilities, instructions, ping).
+    /// Manage server entries and read server properties.
     Server {
         #[command(subcommand)]
         action: ServerAction,
     },
-
-    /// List, describe, and call MCP tools on a server.
+    /// `tools/*` — list, describe, template, call.
     Tool {
         #[command(subcommand)]
         action: ToolAction,
     },
-
-    /// List resources and resource templates; read a resource by URI.
+    /// `resources/*` — list, read, templates, subscribe, complete.
     Resource {
         #[command(subcommand)]
         action: ResourceAction,
     },
-
-    /// List prompts and fetch one with `--key value` arguments.
+    /// `prompts/*` — list, get, complete.
     Prompt {
         #[command(subcommand)]
         action: PromptAction,
     },
-
-    /// Compare two servers' capabilities (tools, resources, prompts).
-    /// Reports `added`, `removed`, and `changed` entries between
-    /// `<ref-a>` and `<ref-b>`.
+    /// Diff two servers' tools/resources/prompts.
     Diff {
         ref_a: String,
         ref_b: String,
@@ -147,43 +112,32 @@ pub enum Command {
         #[arg(long, value_enum)]
         only: Option<DiffCategory>,
     },
-
-    /// Send an arbitrary JSON-RPC request. Escape hatch for MCP methods
-    /// without a dedicated subcommand.
+    /// Send arbitrary JSON-RPC. Escape hatch for unmapped methods.
     Raw {
         reference: String,
         method: String,
-        /// Params payload: inline JSON, `@path/to/file.json`, or `-` for stdin.
+        /// Inline JSON, `@path`, or `-`.
         #[arg(long)]
         params: Option<String>,
     },
-
-    /// Print shell completions for bash / zsh / fish.
+    /// Print shell completions.
     Completion {
         #[arg(value_enum)]
         shell: Shell,
     },
-
-    /// Store bearer tokens or run an OAuth 2.1 flow; tokens persist in the
-    /// OS keyring (Keychain / Secret Service / Credential Manager).
+    /// Bearer / OAuth 2.1 credential management (keyring-backed).
     Auth {
         #[command(subcommand)]
         action: AuthAction,
     },
-
-    /// Tell the server which log level to emit via `logging/setLevel`.
+    /// `logging/setLevel`.
     Logging {
         #[command(subcommand)]
         action: LoggingAction,
     },
-
-    /// Open a session and tail every server-initiated notification
-    /// (progress, log, resource-updated, list-changed) as YAML/JSON
-    /// documents until Ctrl-C.
+    /// Tail server-initiated notifications until Ctrl-C.
     Watch { reference: String },
-
-    /// Diagnostics: `debug doctor` checks the local environment;
-    /// `debug explain E####` prints the long-form prose for one error.
+    /// `debug doctor` / `debug explain E####`.
     Debug {
         #[command(subcommand)]
         action: DebugAction,
@@ -192,18 +146,14 @@ pub enum Command {
 
 #[derive(Subcommand, Debug)]
 pub enum DebugAction {
-    /// Sanity-check mcpal's local environment: config, keyring, stored
-    /// credentials per server, discovery sources. Pastable into a bug
-    /// report (use `--output json`).
+    /// Check the local environment (config, keyring, auth, discovery).
     Doctor,
-    /// Explain an error code in long form (like `rustc --explain`).
-    /// Example: `mcpal debug explain E0001`.
+    /// Print the long-form prose for an `E####` code.
     Explain { code: String },
 }
 
 #[derive(Subcommand, Debug)]
 pub enum LoggingAction {
-    /// Set the server-side logging verbosity. Level matches the MCP spec:
     /// debug | info | notice | warning | error | critical | alert | emergency.
     SetLevel {
         reference: String,
@@ -242,32 +192,29 @@ impl From<LogLevel> for mcpal_core::rmcp::model::LoggingLevel {
 
 #[derive(Subcommand, Debug)]
 pub enum AuthAction {
-    /// Store a bearer token, or run the OAuth 2.1 authorize flow, for a
-    /// server reference. Tokens persist in the OS keyring; bearer tokens
-    /// can also be supplied at call time via `MCPAL_BEARER`.
+    /// Store a bearer token or run the OAuth 2.1 flow.
     Login {
         reference: String,
-        /// Bearer token. `-` reads stdin; omit to prompt interactively.
+        /// Bearer token; `-` reads stdin.
         #[arg(long, conflicts_with = "oauth")]
         bearer: Option<String>,
-        /// Run the OAuth 2.1 authorization-code + PKCE flow against the server URL.
+        /// Run OAuth 2.1 authorization-code + PKCE.
         #[arg(long)]
         oauth: bool,
-        /// Server URL for OAuth discovery. Falls back to the resolved alias's URL.
+        /// Server URL (falls back to the resolved alias's URL).
         #[arg(long)]
         url: Option<String>,
-        /// Don't open a browser automatically; just print the URL.
+        /// Don't open a browser; print the URL.
         #[arg(long)]
         no_browser: bool,
     },
-    /// Forget the stored credentials for a reference (bearer or OAuth).
+    /// Forget stored credentials.
     Logout { reference: String },
     /// Show whether stored credentials exist.
     Status { reference: Option<String> },
-    /// Use the stored refresh token to mint a new access token.
+    /// Use the refresh token to mint a new access token.
     Refresh {
         reference: String,
-        /// Server URL for OAuth refresh. Falls back to the resolved alias's URL.
         #[arg(long)]
         url: Option<String>,
     },
@@ -275,62 +222,51 @@ pub enum AuthAction {
 
 #[derive(Subcommand, Debug)]
 pub enum ConfigAction {
-    /// Create an empty mcpal config file at the default path. Optional:
-    /// `server add` and the auth commands will create the file lazily.
+    /// Create the config file at the default path.
     Init,
-    /// Print the active config file path (honors $MCPAL_CONFIG / --config).
+    /// Print the active config file path.
     Path,
     /// Print the parsed config as TOML.
     Show,
-    /// Open the config in $VISUAL or $EDITOR (falls back to `vi`).
+    /// Open the config in $VISUAL / $EDITOR (falls back to `vi`).
     Edit,
 }
 
 #[derive(Subcommand, Debug)]
 pub enum ServerAction {
-    /// List mcpal-owned servers; `--all` includes discovered ones too.
+    /// List mcpal-owned servers; `--all` includes discovered ones.
     List(ServerListArgs),
-    /// Print the full spec for one server (mcpal-owned or discovered).
+    /// Print the full spec for one server.
     Show { reference: String },
-    /// Register a new server in mcpal config (stdio or HTTP).
+    /// Register a server in mcpal config.
     Add(ServerAddArgs),
-    /// Forget a mcpal-owned server (does not touch discovered entries).
+    /// Forget a mcpal-owned server.
     Remove { alias: String },
-    /// Copy a discovered server into mcpal config so you can override env/auth/alias.
+    /// Copy a discovered server into mcpal config.
     Import(ServerImportArgs),
-    /// Print `serverInfo` (name, version, title).
+    /// `serverInfo` (name, version, title).
     Info { reference: String },
-    /// Print the negotiated MCP `protocolVersion`.
+    /// Negotiated MCP `protocolVersion`.
     Protocol { reference: String },
-    /// Print the server's advertised capability matrix.
+    /// Advertised capability matrix.
     Capabilities { reference: String },
-    /// Print the server's free-form `instructions` string (or `null`).
+    /// Free-form `instructions` string (or `null`).
     Instructions { reference: String },
-    /// Liveness check — opens a connection and exits 0 on a successful
-    /// MCP handshake. The cheapest "is the server up?" command.
+    /// Liveness check (initialize handshake).
     Ping { reference: String },
-    /// Search the MCP Registry (registry.modelcontextprotocol.io).
+    /// Search the MCP Registry.
     Search {
-        /// Free-text search string. Field is named `keywords` (not
-        /// `query`) so clap's derive doesn't collide with the global
-        /// `--query <jmespath>` flag.
+        /// Field is `keywords` (not `query`) to avoid collision with global `--query`.
         #[arg(value_name = "QUERY")]
         keywords: String,
-        /// Max results to return.
         #[arg(long, default_value_t = 10)]
         limit: u32,
     },
-    /// Install a server from the MCP Registry by name. Resolves the
-    /// registry entry's package (`npm`, `pypi`, `oci`) or
-    /// streamable-http remote into a `ServerSpec` and writes it to
-    /// the mcpal config.
+    /// Install a server from the MCP Registry by name.
     Install(ServerInstallArgs),
-    /// Scan installed MCP clients (Claude, Cursor, opencode, …) for
-    /// servers they already configured. Servers found this way are
-    /// usable directly as `<source>:<name>` without copying into
-    /// mcpal config.
+    /// Scan installed MCP clients for already-configured servers.
     Discover {
-        /// Filter to a single source id (claude-code, cursor, …).
+        /// Filter to one source id.
         #[arg(long)]
         source: Option<String>,
     },
@@ -338,40 +274,33 @@ pub enum ServerAction {
 
 #[derive(clap::Args, Debug)]
 pub struct ServerListArgs {
-    /// Only show servers discovered from other clients.
+    /// Discovered-only.
     #[arg(long, conflicts_with = "all")]
     pub discovered: bool,
-    /// Show both mcpal-owned and discovered servers.
+    /// Owned + discovered.
     #[arg(long)]
     pub all: bool,
-    /// Filter discovered rows to a single source id.
+    /// Filter discovered rows to one source id.
     #[arg(long)]
     pub source: Option<String>,
 }
 
 #[derive(clap::Args, Debug)]
 pub struct ServerImportArgs {
-    /// Source id (claude-code, cursor, …).
     #[arg(long = "from")]
     pub from: String,
-    /// Server name as exposed by the source.
     pub name: String,
-    /// Alias to register in mcpal config (defaults to the source name).
     #[arg(long = "as")]
     pub alias: Option<String>,
 }
 
 #[derive(clap::Args, Debug)]
 pub struct ServerInstallArgs {
-    /// Fully-qualified registry name (e.g. `io.github.owner/repo`).
+    /// e.g. `io.github.owner/repo`.
     pub name: String,
-    /// Local alias for the installed server (defaults to the last path
-    /// segment of `name`).
     #[arg(long = "as")]
     pub alias: Option<String>,
-    /// Environment variable in K=V form (repeatable). Required when the
-    /// package's `environmentVariables` lists `isRequired: true` entries
-    /// without defaults.
+    /// Required env var(s) per the package's `environmentVariables`.
     #[arg(long = "env", value_name = "K=V", num_args = 1)]
     pub env: Vec<String>,
 }
@@ -379,33 +308,18 @@ pub struct ServerInstallArgs {
 #[derive(clap::Args, Debug)]
 pub struct ServerAddArgs {
     pub alias: String,
-
-    /// Stdio command. Mutually exclusive with --http. Prefer the
-    /// `mcpal server add <alias> -- <cmd> <args...>` form instead.
+    /// Prefer the trailing `-- <cmd> <args…>` form.
     #[arg(long, conflicts_with = "http")]
     pub stdio: Option<String>,
-
-    /// Argument for the stdio command (repeatable). Prefer the trailing
-    /// `-- <cmd> <args...>` form.
-    #[arg(
-        long = "arg",
-        value_name = "ARG",
-        num_args = 1,
-        allow_hyphen_values = true
-    )]
+    /// Prefer the trailing `-- <cmd> <args…>` form.
+    #[arg(long = "arg", value_name = "ARG", num_args = 1, allow_hyphen_values = true)]
     pub args: Vec<String>,
-
-    /// Environment variable in K=V form (repeatable).
     #[arg(long = "env", value_name = "K=V", num_args = 1)]
     pub env: Vec<String>,
-
-    /// HTTP URL. Mutually exclusive with --stdio.
+    /// Mutually exclusive with --stdio / trailing command.
     #[arg(long)]
     pub http: Option<String>,
-
-    /// Stdio command + args after `--`. The first token is the program,
-    /// the rest are its arguments. Example:
-    /// `mcpal server add ev -- npx -y @modelcontextprotocol/server-everything`.
+    /// `mcpal server add ev -- npx -y @mcp/server-everything`.
     #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 0..)]
     pub command: Vec<String>,
 }
@@ -423,33 +337,21 @@ pub enum ToolAction {
     /// Full schema for one tool (name, description, inputSchema, execution).
     Describe { reference: String, name: String },
 
-    /// Print an example JSON argument body populated from the tool's
-    /// inputSchema. Pipe into `tool call --cli-input-json -`.
+    /// Example JSON body populated from `inputSchema`.
     Template { reference: String, name: String },
-
-    /// Invoke a tool with AWS-CLI style `--key value` flags.
-    ///
-    /// Values parse as typed JSON when possible (numbers, booleans, JSON
-    /// literals); strings fall back to plain text. Pass `--cli-input-json
-    /// <path|->` to read a base argument object from a file or stdin and
-    /// override individual fields with extra `--key value` flags.
+    /// Call a tool with `--key value` flags (typed JSON when parseable).
     Call {
         reference: String,
         name: String,
-        /// JSON file (or `-` for stdin) used as the base argument object;
-        /// `--key value` pairs override individual fields.
+        /// Base argument object from a file or `-` (stdin).
         #[arg(long, value_name = "PATH|-")]
         cli_input_json: Option<String>,
-        /// Inline JSON body. Accepts `'{"k":"v"}'`, `@path`, or `-` for
-        /// stdin. Mutually exclusive with `--cli-input-json`.
+        /// Inline JSON, `@path`, or `-`. Conflicts with `--cli-input-json`.
         #[arg(long, value_name = "JSON|@PATH|-", conflicts_with = "cli_input_json")]
         params: Option<String>,
-        /// Skip client-side validation of arguments against the tool's
-        /// `inputSchema`. By default mcpal fetches the schema and checks
-        /// the assembled arguments before calling the tool.
+        /// Skip pre-send validation against `inputSchema`.
         #[arg(long)]
         skip_validation: bool,
-        /// Remaining tokens are interpreted as `--key value` pairs.
         #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 0..)]
         args: Vec<String>,
     },
@@ -460,14 +362,13 @@ pub enum ResourceAction {
     /// List resources.
     List {
         reference: String,
-        /// Print just the resource URIs, one per line. For shell completion.
+        /// One URI per line.
         #[arg(long)]
         names_only: bool,
     },
     /// Read a resource by URI.
     Read { reference: String, uri: String },
-    /// Subscribe to updates for one resource. Use `mcpal watch` (lands next)
-    /// to actually stream the resulting notifications.
+    /// Subscribe to updates (combine with `mcpal watch`).
     Subscribe { reference: String, uri: String },
     /// Cancel a prior subscription.
     Unsubscribe { reference: String, uri: String },
@@ -476,15 +377,12 @@ pub enum ResourceAction {
         #[command(subcommand)]
         action: ResourceTemplateAction,
     },
-    /// Get completion suggestions for a resource URI template argument
-    /// via the MCP `completion/complete` method.
+    /// `completion/complete` for a resource URI template argument.
     Complete {
         reference: String,
         /// URI template (e.g. `file:///{path}`).
         #[arg(long, value_name = "URI")]
         template: String,
-        /// `FIELD=PARTIAL` — the template argument to complete and its
-        /// current partial value.
         #[arg(long, value_name = "FIELD=PARTIAL")]
         arg: String,
     },
@@ -500,30 +398,27 @@ pub enum PromptAction {
     /// List prompts.
     List {
         reference: String,
-        /// Print just the prompt names, one per line. For shell completion.
+        /// One name per line.
         #[arg(long)]
         names_only: bool,
     },
-    /// Get a prompt. Arguments use `--key value` pairs (AWS-CLI style).
+    /// Get a prompt with `--key value` arguments.
     Get {
         reference: String,
         name: String,
         #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 0..)]
         args: Vec<String>,
     },
-    /// Get completion suggestions for a prompt argument via the MCP
-    /// `completion/complete` method.
+    /// `completion/complete` for a prompt argument.
     Complete {
         reference: String,
         name: String,
-        /// `FIELD=PARTIAL` — the prompt argument to complete and its
-        /// current partial value.
         #[arg(long, value_name = "FIELD=PARTIAL")]
         arg: String,
     },
 }
 
-#[derive(Copy, Clone, Debug, ValueEnum)]
+#[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq)]
 pub enum DiffCategory {
     Tools,
     Resources,

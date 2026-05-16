@@ -14,45 +14,19 @@ use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 use tokio::sync::mpsc::UnboundedSender;
 
-/// Client-side hooks for server-initiated traffic.
-///
-/// Overrides:
-///   - `list_roots` returns user-configured roots
-///   - `create_elicitation` prompts the user on a TTY, or declines when
-///     interactivity is off / there is no terminal
-///   - `create_message` (sampling) delegates to an external program when
-///     `sampling_handler` is set; otherwise returns method-not-found
-///   - `on_logging_message` routes server logs through `tracing`
+/// Client-side hooks for server-initiated traffic. Override `list_roots`,
+/// elicitation/sampling, and forward notifications via `events`.
 #[derive(Clone, Default)]
 pub struct Handler {
-    roots: Vec<String>,
-    interactive: bool,
-    sampling_handler: Option<Vec<String>>,
-    events: Option<UnboundedSender<Value>>,
-}
-
-/// Bundle of client-side defaults consumed by `Handler` and `Ctx`. Grouping
-/// these avoids a sprawling positional constructor.
-#[derive(Clone, Default)]
-pub struct HandlerOptions {
     pub roots: Vec<String>,
     pub interactive: bool,
     pub sampling_handler: Option<Vec<String>>,
-    /// If set, the handler forwards every server-initiated notification it
-    /// observes as a JSON `{kind, …}` document on this channel.
+    /// If set, the handler forwards every observed notification as a JSON
+    /// `{kind, …}` document on this channel.
     pub events: Option<UnboundedSender<Value>>,
 }
 
 impl Handler {
-    pub fn new(opts: HandlerOptions) -> Self {
-        Self {
-            roots: opts.roots,
-            interactive: opts.interactive,
-            sampling_handler: opts.sampling_handler.filter(|v| !v.is_empty()),
-            events: opts.events,
-        }
-    }
-
     fn emit(&self, value: Value) {
         if let Some(tx) = &self.events {
             let _ = tx.send(value);

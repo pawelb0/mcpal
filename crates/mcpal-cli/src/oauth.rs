@@ -136,20 +136,19 @@ pub async fn refresh(reference: &str, server_url: &str) -> Result<()> {
     Ok(())
 }
 
-/// Walks the serialized credential blob directly so we don't need to depend on
-/// the `oauth2` crate's `TokenResponse` trait for one field access.
+fn token_blob(reference: &str) -> Option<serde_json::Value> {
+    serde_json::from_str(&keyring::get(reference, Kind::Oauth)?).ok()
+}
+
 pub(crate) fn current_access_token(reference: &str) -> Option<String> {
-    let json = keyring::get(reference, Kind::Oauth)?;
-    let v: serde_json::Value = serde_json::from_str(&json).ok()?;
-    v.pointer("/token_response/access_token")?
+    token_blob(reference)?
+        .pointer("/token_response/access_token")?
         .as_str()
         .map(String::from)
 }
 
-/// Like `current_access_token`, but kicks off a `refresh_token` round-trip
-/// first when the stored token is within `REFRESH_MARGIN_SECS` of expiry.
-/// Silent on refresh failure — the caller surfaces E0004 if the resulting
-/// token still gets rejected.
+/// `current_access_token`, but kicks off a refresh first when the stored
+/// token is within 30s of expiry. Silent on refresh failure.
 pub(crate) async fn access_token_refreshing(reference: &str, server_url: &str) -> Option<String> {
     if expires_soon(reference)
         && let Err(e) = refresh(reference, server_url).await
@@ -159,28 +158,13 @@ pub(crate) async fn access_token_refreshing(reference: &str, server_url: &str) -
     current_access_token(reference)
 }
 
-const REFRESH_MARGIN_SECS: u64 = 30;
-
 fn expires_soon(reference: &str) -> bool {
-    let Some(json) = keyring::get(reference, Kind::Oauth) else {
-        return false;
-    };
-    let Ok(v) = serde_json::from_str::<serde_json::Value>(&json) else {
-        return false;
-    };
-    let Some(received) = v.pointer("/token_received_at").and_then(|x| x.as_u64()) else {
-        return false;
-    };
-    let Some(ttl) = v
-        .pointer("/token_response/expires_in")
-        .and_then(|x| x.as_u64())
-    else {
-        return false;
-    };
-    let expires_at = received + ttl;
+    let Some(v) = token_blob(reference) else { return false };
+    let received = v.pointer("/token_received_at").and_then(|x| x.as_u64());
+    let ttl = v.pointer("/token_response/expires_in").and_then(|x| x.as_u64());
+    let (Some(received), Some(ttl)) = (received, ttl) else { return false };
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    now + REFRESH_MARGIN_SECS >= expires_at
+        .map_or(0, |d| d.as_secs());
+    now + 30 >= received + ttl
 }

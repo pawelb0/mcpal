@@ -1,9 +1,9 @@
 use std::fs;
 use std::io::Read;
+use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
-use mcpal_core::rmcp::model::CallToolRequestParams;
-
+use mcpal_core::{Client, rmcp::model::CallToolRequestParams};
 use serde::Serialize;
 use serde_json::{Map, Value};
 
@@ -17,8 +17,19 @@ pub async fn run(action: ToolAction, ctx: &Ctx) -> Result<()> {
             reference,
             names_only,
         } => list(&reference, names_only, ctx).await,
-        ToolAction::Describe { reference, name } => describe(&reference, &name, ctx).await,
-        ToolAction::Template { reference, name } => template(&reference, &name, ctx).await,
+        ToolAction::Describe { reference, name } => {
+            let (client, tool) = find_tool(&reference, &name, ctx).await?;
+            ctx.render_one(&tool)?;
+            drop(client);
+            Ok(())
+        }
+        ToolAction::Template { reference, name } => {
+            let (client, tool) = find_tool(&reference, &name, ctx).await?;
+            let schema = serde_json::to_value(&*tool.input_schema).unwrap_or(Value::Null);
+            ctx.render_one(&schema_example(&schema))?;
+            drop(client);
+            Ok(())
+        }
         ToolAction::Call {
             reference,
             name,
@@ -64,61 +75,46 @@ async fn list(reference: &str, names_only: bool, ctx: &Ctx) -> Result<()> {
         .map(|t| ToolSummary {
             name: t.name.as_ref(),
             description: t.description.as_deref(),
-            required: required_fields(&t.input_schema),
+            required: t
+                .input_schema
+                .get("required")
+                .and_then(Value::as_array)
+                .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                .unwrap_or_default(),
         })
         .collect();
     ctx.render_list(&summaries)?;
     Ok(())
 }
 
-async fn describe(reference: &str, name: &str, ctx: &Ctx) -> Result<()> {
+async fn find_tool(
+    reference: &str,
+    name: &str,
+    ctx: &Ctx,
+) -> Result<(Client, mcpal_core::rmcp::model::Tool)> {
     let (_, client) = ctx.open(reference).await?;
     let tools = ctx.under_deadline(client.list_all_tools()).await??;
     let tool = tools
-        .iter()
+        .into_iter()
         .find(|t| t.name == *name)
         .ok_or_else(|| anyhow::anyhow!("no tool named '{name}' on {reference}"))?;
-    ctx.render_one(tool)?;
-    Ok(())
+    Ok((client, tool))
 }
 
-async fn template(reference: &str, name: &str, ctx: &Ctx) -> Result<()> {
-    let (_, client) = ctx.open(reference).await?;
-    let tools = ctx.under_deadline(client.list_all_tools()).await??;
-    let tool = tools
-        .iter()
-        .find(|t| t.name == *name)
-        .ok_or_else(|| anyhow::anyhow!("no tool named '{name}' on {reference}"))?;
-    let schema = serde_json::to_value(&*tool.input_schema).unwrap_or(Value::Null);
-    let example = schema_example(&schema);
-    ctx.render_one(&example)?;
-    Ok(())
-}
-
-/// Generate an example value from a JSON Schema fragment.
-fn schema_example(schema: &Value) -> Value {
-    let ty = schema.get("type").and_then(Value::as_str).unwrap_or("");
-    match ty {
-        "object" => {
-            let mut obj = serde_json::Map::new();
-            if let Some(props) = schema.get("properties").and_then(Value::as_object) {
-                for (k, v) in props {
-                    obj.insert(k.clone(), schema_example(v));
-                }
-            }
-            Value::Object(obj)
-        }
-        "array" => {
-            let items = schema
-                .get("items")
-                .map(schema_example)
-                .unwrap_or(Value::Null);
-            Value::Array(vec![items])
-        }
+fn schema_example(s: &Value) -> Value {
+    match s.get("type").and_then(Value::as_str).unwrap_or("") {
+        "object" => Value::Object(
+            s.get("properties")
+                .and_then(Value::as_object)
+                .map(|p| p.iter().map(|(k, v)| (k.clone(), schema_example(v))).collect())
+                .unwrap_or_default(),
+        ),
+        "array" => Value::Array(vec![
+            s.get("items").map(schema_example).unwrap_or(Value::Null),
+        ]),
         "string" => Value::String(String::new()),
         "integer" | "number" => Value::Number(0.into()),
         "boolean" => Value::Bool(false),
-        "null" => Value::Null,
         _ => Value::Null,
     }
 }
@@ -137,40 +133,35 @@ async fn call(
 
     if !skip_validation && !arguments.is_empty() {
         let tools = ctx.under_deadline(client.list_all_tools()).await??;
-        let tool = tools
+        let schema: Arc<_> = tools
             .iter()
             .find(|t| t.name == *name)
-            .ok_or_else(|| anyhow::anyhow!("no tool named '{name}' on {reference}"))?;
-        validate_args(&tool.input_schema, &arguments)?;
+            .ok_or_else(|| anyhow::anyhow!("no tool named '{name}' on {reference}"))?
+            .input_schema
+            .clone();
+        validate_args(&schema, &arguments)?;
     }
 
-    let mut params = CallToolRequestParams::new(name.to_string());
+    let mut req = CallToolRequestParams::new(name.to_string());
     if !arguments.is_empty() {
-        params = params.with_arguments(arguments);
+        req = req.with_arguments(arguments);
     }
     let result = ctx
-        .under_deadline(client.call_tool(params))
+        .under_deadline(client.call_tool(req))
         .await?
         .context("tools/call")?;
     ctx.render_one(&result)?;
     Ok(())
 }
 
-/// Validate `arguments` against the tool's `inputSchema`. Errors carry
-/// the JSON pointer of the failing field so `exit::classify` can lift
-/// them to E0002.
 fn validate_args(schema: &Map<String, Value>, arguments: &Map<String, Value>) -> Result<()> {
-    let schema_v = Value::Object(schema.clone());
-    let args_v = Value::Object(arguments.clone());
-    let validator = jsonschema::validator_for(&schema_v).with_context(|| {
-        "schema validation: tool's inputSchema is not a valid JSON Schema".to_string()
-    })?;
+    let validator = jsonschema::validator_for(&Value::Object(schema.clone()))
+        .context("schema validation: tool's inputSchema is not a valid JSON Schema")?;
     let issues: Vec<String> = validator
-        .iter_errors(&args_v)
+        .iter_errors(&Value::Object(arguments.clone()))
         .map(|e| {
-            let path = e.instance_path().to_string();
-            let where_ = if path.is_empty() { "/".into() } else { path };
-            format!("{where_}: {e}")
+            let p = e.instance_path().to_string();
+            format!("{}: {e}", if p.is_empty() { "/" } else { &p })
         })
         .collect();
     if !issues.is_empty() {
@@ -179,57 +170,36 @@ fn validate_args(schema: &Map<String, Value>, arguments: &Map<String, Value>) ->
     Ok(())
 }
 
-fn required_fields(schema: &Map<String, Value>) -> Vec<String> {
-    schema
-        .get("required")
-        .and_then(Value::as_array)
-        .map(|a| {
-            a.iter()
-                .filter_map(|v| v.as_str().map(String::from))
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 fn build_arguments(
     cli_input_json: Option<&str>,
     params: Option<&str>,
     flag_args: &[String],
 ) -> Result<Map<String, Value>> {
     let mut out = Map::new();
-
-    if let Some(spec) = cli_input_json {
-        let (text, source) = read_spec(spec, BareIs::Path)?;
-        merge_object(&mut out, &text, &source)?;
+    if let Some(s) = cli_input_json {
+        merge(&mut out, &read_spec(s, BareIs::Path)?)?;
     }
-    if let Some(spec) = params {
-        let (text, source) = read_spec(spec, BareIs::Inline)?;
-        merge_object(&mut out, &text, &source)?;
+    if let Some(s) = params {
+        merge(&mut out, &read_spec(s, BareIs::Inline)?)?;
     }
     out.extend(kv::parse_flag_args(flag_args.iter())?);
     Ok(out)
 }
 
-/// What a bare (no `@`, no `-`) value means for a given flag.
 enum BareIs {
     Path,
     Inline,
 }
 
-/// `-` reads stdin, `@path` reads a file, everything else depends on the flag.
+/// `-` = stdin, `@path` = file, else depends on `bare`.
 fn read_spec(spec: &str, bare: BareIs) -> Result<(String, String)> {
     if spec == "-" {
         let mut buf = String::new();
-        std::io::stdin()
-            .read_to_string(&mut buf)
-            .context("read stdin")?;
+        std::io::stdin().read_to_string(&mut buf).context("read stdin")?;
         return Ok((buf, "stdin".into()));
     }
     if let Some(path) = spec.strip_prefix('@') {
-        return Ok((
-            fs::read_to_string(path).with_context(|| format!("read {path}"))?,
-            path.into(),
-        ));
+        return Ok((fs::read_to_string(path).with_context(|| format!("read {path}"))?, path.into()));
     }
     match bare {
         BareIs::Path => Ok((
@@ -240,14 +210,12 @@ fn read_spec(spec: &str, bare: BareIs) -> Result<(String, String)> {
     }
 }
 
-fn merge_object(into: &mut Map<String, Value>, text: &str, source: &str) -> Result<()> {
+fn merge(into: &mut Map<String, Value>, (text, source): &(String, String)) -> Result<()> {
     let v: Value =
         serde_json::from_str(text).with_context(|| format!("parse JSON from {source}"))?;
     let Value::Object(obj) = v else {
         bail!("{source} must contain a JSON object");
     };
-    for (k, val) in obj {
-        into.insert(k, val);
-    }
+    into.extend(obj);
     Ok(())
 }

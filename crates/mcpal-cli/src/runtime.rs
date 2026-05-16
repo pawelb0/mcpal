@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{Result, anyhow};
-use mcpal_core::{AuthSpec, Client, Handler, HandlerOptions, ServerSpec, connect};
+use mcpal_core::{AuthSpec, Client, Handler, ServerSpec, connect};
 use mcpal_discovery::{DiscoveredServer, DiscoveryCtx, discover};
 use mcpal_output::{Format, emit_list, emit_one};
 use serde::Serialize;
@@ -20,7 +20,7 @@ pub struct Ctx {
     pub query: Option<String>,
     pub timeout: Option<u64>,
     pub config_path: PathBuf,
-    pub handler_opts: HandlerOptions,
+    pub handler: Handler,
     discovered: OnceCell<Vec<DiscoveredServer>>,
 }
 
@@ -31,7 +31,7 @@ impl Ctx {
         query: Option<String>,
         timeout: Option<u64>,
         config_path: PathBuf,
-        handler_opts: HandlerOptions,
+        handler: Handler,
     ) -> Self {
         Self {
             cfg,
@@ -39,7 +39,7 @@ impl Ctx {
             query,
             timeout,
             config_path,
-            handler_opts,
+            handler,
             discovered: OnceCell::new(),
         }
     }
@@ -95,8 +95,7 @@ impl Ctx {
     pub async fn open(&self, reference: &str) -> Result<(ResolvedServer, Client)> {
         let mut resolved = resolve(reference, self)?;
         attach_bearer(&mut resolved.spec, reference, &resolved.display).await;
-        let handler = Handler::new(self.handler_opts.clone());
-        let client = connect(&resolved.spec, handler).await?;
+        let client = connect(&resolved.spec, self.handler.clone()).await?;
         Ok((resolved, client))
     }
 }

@@ -17,9 +17,20 @@ use crate::runtime::Ctx;
 pub async fn run(action: ServerAction, ctx: &Ctx) -> Result<()> {
     match action {
         ServerAction::List(args) => list(args, ctx),
-        ServerAction::Show { reference } => show(&reference, ctx),
+        ServerAction::Show { reference } => {
+            ctx.render_one(&resolve(&reference, ctx)?.spec)?;
+            Ok(())
+        }
         ServerAction::Add(args) => add(args, ctx),
-        ServerAction::Remove { alias } => remove(&alias, ctx),
+        ServerAction::Remove { alias } => {
+            let mut cfg = Config::load(&ctx.config_path)?;
+            if cfg.server.remove(&alias).is_none() {
+                bail!("server '{alias}' not found");
+            }
+            cfg.save(&ctx.config_path)?;
+            eprintln!("removed server '{alias}'");
+            Ok(())
+        }
         ServerAction::Import(args) => import(args, ctx),
         ServerAction::Info { reference } => peer_field(&reference, "/serverInfo", ctx).await,
         ServerAction::Protocol { reference } => {
@@ -31,10 +42,16 @@ pub async fn run(action: ServerAction, ctx: &Ctx) -> Result<()> {
         ServerAction::Instructions { reference } => {
             peer_field(&reference, "/instructions", ctx).await
         }
-        ServerAction::Ping { reference } => ping(&reference, ctx).await,
+        ServerAction::Ping { reference } => {
+            let (r, _) = ctx.open(&reference).await?;
+            ctx.render_one(&json!({ "ref": r.display, "ok": true }))?;
+            Ok(())
+        }
         ServerAction::Search { keywords, limit } => search(&keywords, limit, ctx).await,
         ServerAction::Install(args) => install(args, ctx).await,
-        ServerAction::Discover { source } => crate::commands::discover::run(source.as_deref(), ctx),
+        ServerAction::Discover { source } => {
+            crate::commands::discover::run(source.as_deref(), ctx)
+        }
     }
 }
 
@@ -48,10 +65,7 @@ struct Row {
 
 fn list(args: ServerListArgs, ctx: &Ctx) -> Result<()> {
     let mut rows: Vec<Row> = Vec::new();
-    let include_owned = !args.discovered;
-    let include_discovered = args.discovered || args.all;
-
-    if include_owned {
+    if !args.discovered {
         for (alias, spec) in &ctx.cfg.server {
             rows.push(Row {
                 source: "mcpal".into(),
@@ -61,11 +75,10 @@ fn list(args: ServerListArgs, ctx: &Ctx) -> Result<()> {
             });
         }
     }
-
-    if include_discovered {
+    if args.discovered || args.all {
         for s in ctx.discovered()? {
-            if let Some(filter) = args.source.as_deref()
-                && s.source != filter
+            if let Some(f) = args.source.as_deref()
+                && s.source != f
             {
                 continue;
             }
@@ -77,73 +90,47 @@ fn list(args: ServerListArgs, ctx: &Ctx) -> Result<()> {
             });
         }
     }
-
     ctx.render_list(&rows)?;
     Ok(())
 }
 
-fn show(reference: &str, ctx: &Ctx) -> Result<()> {
-    let r = resolve(reference, ctx)?;
-    ctx.render_one(&r.spec)?;
-    Ok(())
+fn parse_env(kvs: &[String]) -> Result<BTreeMap<String, String>> {
+    kvs.iter()
+        .map(|kv| {
+            kv.split_once('=')
+                .map(|(k, v)| (k.into(), v.into()))
+                .ok_or_else(|| anyhow!("--env requires K=V: {kv}"))
+        })
+        .collect()
 }
 
 fn add(args: ServerAddArgs, ctx: &Ctx) -> Result<()> {
-    let mut command = args.stdio;
-    let mut stdio_args = args.args;
-    if let Some((first, rest)) = args.command.split_first() {
-        if command.is_some() {
-            bail!("can't combine `--stdio` with a trailing `-- <cmd>`; pick one form");
+    let (command, stdio_args) = match (args.stdio, args.command.split_first()) {
+        (Some(_), Some(_)) => bail!("can't combine `--stdio` with a trailing `-- <cmd>`"),
+        (Some(cmd), None) => (Some(cmd), args.args),
+        (None, Some((c, rest))) => {
+            if !args.args.is_empty() {
+                bail!("can't combine `--arg` with a trailing `-- <cmd>`");
+            }
+            (Some(c.clone()), rest.to_vec())
         }
-        command = Some(first.clone());
-        if !stdio_args.is_empty() {
-            bail!("can't combine `--arg` with a trailing `-- <cmd>`; pick one form");
-        }
-        stdio_args = rest.to_vec();
-    }
-
+        (None, None) => (None, args.args),
+    };
     let spec = match (command, args.http) {
-        (Some(cmd), None) => {
-            let mut env = BTreeMap::new();
-            for kv in args.env {
-                let (k, v) = kv
-                    .split_once('=')
-                    .ok_or_else(|| anyhow!("--env requires K=V: {kv}"))?;
-                env.insert(k.into(), v.into());
-            }
-            ServerSpec::Stdio {
-                command: cmd,
-                args: stdio_args,
-                env,
-            }
-        }
+        (Some(_), Some(_)) => bail!("--stdio/`-- cmd` and --http are mutually exclusive"),
+        (Some(cmd), None) => ServerSpec::Stdio {
+            command: cmd,
+            args: stdio_args,
+            env: parse_env(&args.env)?,
+        },
         (None, Some(url)) => ServerSpec::Http {
             url,
             headers: BTreeMap::new(),
             auth: None,
         },
-        (Some(_), Some(_)) => bail!("--stdio/`-- cmd` and --http are mutually exclusive"),
         (None, None) => bail!("provide a stdio command (`-- cmd args…`) or `--http <url>`"),
     };
-
-    let mut cfg = Config::load(&ctx.config_path)?;
-    if cfg.server.contains_key(&args.alias) {
-        bail!("server '{}' already exists", args.alias);
-    }
-    cfg.server.insert(args.alias.clone(), spec);
-    cfg.save(&ctx.config_path)?;
-    eprintln!("added server '{}'", args.alias);
-    Ok(())
-}
-
-fn remove(alias: &str, ctx: &Ctx) -> Result<()> {
-    let mut cfg = Config::load(&ctx.config_path)?;
-    if cfg.server.remove(alias).is_none() {
-        bail!("server '{alias}' not found");
-    }
-    cfg.save(&ctx.config_path)?;
-    eprintln!("removed server '{alias}'");
-    Ok(())
+    write_server(&ctx.config_path, &args.alias, spec)
 }
 
 fn import(args: ServerImportArgs, ctx: &Ctx) -> Result<()> {
@@ -152,16 +139,8 @@ fn import(args: ServerImportArgs, ctx: &Ctx) -> Result<()> {
         .iter()
         .find(|s| s.source == args.from && s.name == args.name)
         .ok_or_else(|| anyhow!("not found: {}:{}", args.from, args.name))?;
-
     let alias = args.alias.unwrap_or_else(|| found.name.clone());
-    let mut cfg = Config::load(&ctx.config_path)?;
-    if cfg.server.contains_key(&alias) {
-        bail!("server '{alias}' already exists in mcpal config");
-    }
-    cfg.server.insert(alias.clone(), found.spec.clone());
-    cfg.save(&ctx.config_path)?;
-    eprintln!("imported {}:{} as '{alias}'", found.source, found.name);
-    Ok(())
+    write_server(&ctx.config_path, &alias, found.spec.clone())
 }
 
 async fn search(keywords: &str, limit: u32, ctx: &Ctx) -> Result<()> {
@@ -182,32 +161,29 @@ async fn search(keywords: &str, limit: u32, ctx: &Ctx) -> Result<()> {
 
 async fn install(args: ServerInstallArgs, ctx: &Ctx) -> Result<()> {
     let server = registry::fetch(&args.name).await?;
-    let mut env_map = BTreeMap::new();
-    for kv in &args.env {
-        let (k, v) = kv
-            .split_once('=')
-            .ok_or_else(|| anyhow!("--env requires K=V: {kv}"))?;
-        env_map.insert(k.into(), v.into());
-    }
-    let spec = registry::to_spec(&server, &env_map)?;
-
+    let spec = registry::to_spec(&server, &parse_env(&args.env)?)?;
     let alias = args
         .alias
-        .unwrap_or_else(|| default_alias(&server.name).to_string());
-    let mut cfg = Config::load(&ctx.config_path)?;
-    if cfg.server.contains_key(&alias) {
-        bail!("server '{alias}' already exists in mcpal config");
-    }
-    cfg.server.insert(alias.clone(), spec);
-    cfg.save(&ctx.config_path)?;
+        .unwrap_or_else(|| default_alias(&server.name).into());
+    write_server(&ctx.config_path, &alias, spec)?;
     eprintln!("installed {} as '{alias}'", server.name);
     Ok(())
 }
 
-/// `io.github.foo/bar` → `bar`; falls back to the whole name if there's
-/// no `/`.
+fn write_server(path: &std::path::Path, alias: &str, spec: ServerSpec) -> Result<()> {
+    let mut cfg = Config::load(path)?;
+    if cfg.server.contains_key(alias) {
+        bail!("server '{alias}' already exists");
+    }
+    cfg.server.insert(alias.into(), spec);
+    cfg.save(path)?;
+    eprintln!("added server '{alias}'");
+    Ok(())
+}
+
+/// `io.github.foo/bar` → `bar`; otherwise the whole name.
 fn default_alias(name: &str) -> &str {
-    name.rsplit_once('/').map(|(_, t)| t).unwrap_or(name)
+    name.rsplit_once('/').map_or(name, |(_, t)| t)
 }
 
 async fn peer_field(reference: &str, pointer: &str, ctx: &Ctx) -> Result<()> {
@@ -218,11 +194,5 @@ async fn peer_field(reference: &str, pointer: &str, ctx: &Ctx) -> Result<()> {
         .and_then(|v| v.pointer(pointer).cloned())
         .unwrap_or(json!(null));
     ctx.render_one(&v)?;
-    Ok(())
-}
-
-async fn ping(reference: &str, ctx: &Ctx) -> Result<()> {
-    let (r, _) = ctx.open(reference).await?;
-    ctx.render_one(&json!({ "ref": r.display, "ok": true }))?;
     Ok(())
 }

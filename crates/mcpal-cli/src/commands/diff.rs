@@ -2,30 +2,23 @@ use std::collections::BTreeMap;
 
 use anyhow::Result;
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{Map, Value, to_value};
 
 use crate::cli::DiffCategory;
 use crate::runtime::Ctx;
 
-pub async fn run(
-    ref_a: &str,
-    ref_b: &str,
-    only: Option<DiffCategory>,
-    ctx: &Ctx,
-) -> Result<()> {
+pub async fn run(ref_a: &str, ref_b: &str, only: Option<DiffCategory>, ctx: &Ctx) -> Result<()> {
     let (a, b) = tokio::try_join!(load(ref_a, ctx), load(ref_b, ctx))?;
-    let mut out = serde_json::Map::new();
-    if only.is_none() || matches!(only, Some(DiffCategory::Tools)) {
-        out.insert("tools".into(), serde_json::to_value(diff(&a.tools, &b.tools))?);
+    let pick = |c: DiffCategory| only.is_none() || only == Some(c);
+    let mut out = Map::new();
+    if pick(DiffCategory::Tools) {
+        out.insert("tools".into(), to_value(diff(&a.tools, &b.tools))?);
     }
-    if only.is_none() || matches!(only, Some(DiffCategory::Resources)) {
-        out.insert(
-            "resources".into(),
-            serde_json::to_value(diff(&a.resources, &b.resources))?,
-        );
+    if pick(DiffCategory::Resources) {
+        out.insert("resources".into(), to_value(diff(&a.resources, &b.resources))?);
     }
-    if only.is_none() || matches!(only, Some(DiffCategory::Prompts)) {
-        out.insert("prompts".into(), serde_json::to_value(diff(&a.prompts, &b.prompts))?);
+    if pick(DiffCategory::Prompts) {
+        out.insert("prompts".into(), to_value(diff(&a.prompts, &b.prompts))?);
     }
     ctx.render_one(&Value::Object(out))?;
     Ok(())
@@ -42,18 +35,19 @@ async fn load(reference: &str, ctx: &Ctx) -> Result<Snapshot> {
     let tools = ctx.under_deadline(client.list_all_tools()).await??;
     let resources = ctx.under_deadline(client.list_all_resources()).await??;
     let prompts = ctx.under_deadline(client.list_all_prompts()).await??;
+    let val = |v: serde_json::Result<Value>| v.unwrap_or(Value::Null);
     Ok(Snapshot {
         tools: tools
             .into_iter()
-            .map(|t| (t.name.to_string(), serde_json::to_value(&t.input_schema).unwrap_or(Value::Null)))
+            .map(|t| (t.name.to_string(), val(to_value(&t.input_schema))))
             .collect(),
         resources: resources
             .into_iter()
-            .map(|r| (r.uri.clone(), serde_json::to_value(&r).unwrap_or(Value::Null)))
+            .map(|r| (r.uri.clone(), val(to_value(&r))))
             .collect(),
         prompts: prompts
             .into_iter()
-            .map(|p| (p.name.clone(), serde_json::to_value(&p).unwrap_or(Value::Null)))
+            .map(|p| (p.name.clone(), val(to_value(&p))))
             .collect(),
     })
 }
@@ -69,20 +63,16 @@ struct CategoryDiff {
 }
 
 fn diff(a: &BTreeMap<String, Value>, b: &BTreeMap<String, Value>) -> CategoryDiff {
-    let mut out = CategoryDiff::default();
-    for (name, va) in a {
-        match b.get(name) {
-            None => out.removed.push(name.clone()),
-            Some(vb) if vb != va => out.changed.push(name.clone()),
-            Some(_) => {}
+    let mut d = CategoryDiff::default();
+    for (k, va) in a {
+        match b.get(k) {
+            None => d.removed.push(k.clone()),
+            Some(vb) if vb != va => d.changed.push(k.clone()),
+            _ => {}
         }
     }
-    for name in b.keys() {
-        if !a.contains_key(name) {
-            out.added.push(name.clone());
-        }
-    }
-    out
+    d.added = b.keys().filter(|k| !a.contains_key(*k)).cloned().collect();
+    d
 }
 
 #[cfg(test)]

@@ -2,7 +2,6 @@ use anyhow::Result;
 use mcpal_core::rmcp::model::{
     ReadResourceRequestParams, SubscribeRequestParams, UnsubscribeRequestParams,
 };
-
 use serde::Serialize;
 use serde_json::json;
 
@@ -15,9 +14,28 @@ pub async fn run(action: ResourceAction, ctx: &Ctx) -> Result<()> {
             reference,
             names_only,
         } => list(&reference, names_only, ctx).await,
-        ResourceAction::Read { reference, uri } => read(&reference, &uri, ctx).await,
-        ResourceAction::Subscribe { reference, uri } => subscribe(&reference, &uri, ctx).await,
-        ResourceAction::Unsubscribe { reference, uri } => unsubscribe(&reference, &uri, ctx).await,
+        ResourceAction::Read { reference, uri } => {
+            let (_, client) = ctx.open(&reference).await?;
+            let r = ctx
+                .under_deadline(client.read_resource(ReadResourceRequestParams::new(uri)))
+                .await??;
+            ctx.render_one(&r)?;
+            Ok(())
+        }
+        ResourceAction::Subscribe { reference, uri } => {
+            let (_, client) = ctx.open(&reference).await?;
+            ctx.under_deadline(client.subscribe(SubscribeRequestParams::new(&uri)))
+                .await??;
+            ctx.render_one(&json!({"ok": true, "subscribed": uri}))?;
+            Ok(())
+        }
+        ResourceAction::Unsubscribe { reference, uri } => {
+            let (_, client) = ctx.open(&reference).await?;
+            ctx.under_deadline(client.unsubscribe(UnsubscribeRequestParams::new(&uri)))
+                .await??;
+            ctx.render_one(&json!({"ok": true, "unsubscribed": uri}))?;
+            Ok(())
+        }
         ResourceAction::Template { action } => match action {
             ResourceTemplateAction::List { reference } => templates(&reference, ctx).await,
         },
@@ -25,7 +43,17 @@ pub async fn run(action: ResourceAction, ctx: &Ctx) -> Result<()> {
             reference,
             template,
             arg,
-        } => complete(&reference, &template, &arg, ctx).await,
+        } => {
+            let (name, value) = arg
+                .split_once('=')
+                .ok_or_else(|| anyhow::anyhow!("--arg expects FIELD=PARTIAL, got '{arg}'"))?;
+            let (_, client) = ctx.open(&reference).await?;
+            let c = ctx
+                .under_deadline(client.complete_resource_argument(&template, name, value, None))
+                .await??;
+            ctx.render_one(&c)?;
+            Ok(())
+        }
     }
 }
 
@@ -66,48 +94,9 @@ async fn list(reference: &str, names_only: bool, ctx: &Ctx) -> Result<()> {
     Ok(())
 }
 
-async fn read(reference: &str, uri: &str, ctx: &Ctx) -> Result<()> {
-    let (_, client) = ctx.open(reference).await?;
-    let result = ctx
-        .under_deadline(client.read_resource(ReadResourceRequestParams::new(uri)))
-        .await??;
-    ctx.render_one(&result)?;
-    Ok(())
-}
-
-async fn subscribe(reference: &str, uri: &str, ctx: &Ctx) -> Result<()> {
-    let (_, client) = ctx.open(reference).await?;
-    ctx.under_deadline(client.subscribe(SubscribeRequestParams::new(uri)))
-        .await??;
-    ctx.render_one(&json!({"ok": true, "subscribed": uri}))?;
-    Ok(())
-}
-
-async fn unsubscribe(reference: &str, uri: &str, ctx: &Ctx) -> Result<()> {
-    let (_, client) = ctx.open(reference).await?;
-    ctx.under_deadline(client.unsubscribe(UnsubscribeRequestParams::new(uri)))
-        .await??;
-    ctx.render_one(&json!({"ok": true, "unsubscribed": uri}))?;
-    Ok(())
-}
-
-async fn complete(reference: &str, template: &str, arg: &str, ctx: &Ctx) -> Result<()> {
-    let (name, value) = arg
-        .split_once('=')
-        .ok_or_else(|| anyhow::anyhow!("--arg expects FIELD=PARTIAL, got '{arg}'"))?;
-    let (_, client) = ctx.open(reference).await?;
-    let completion = ctx
-        .under_deadline(client.complete_resource_argument(template, name, value, None))
-        .await??;
-    ctx.render_one(&completion)?;
-    Ok(())
-}
-
 async fn templates(reference: &str, ctx: &Ctx) -> Result<()> {
     let (_, client) = ctx.open(reference).await?;
-    let templates = ctx
-        .under_deadline(client.list_all_resource_templates())
-        .await??;
+    let templates = ctx.under_deadline(client.list_all_resource_templates()).await??;
     let summaries: Vec<TemplateSummary<'_>> = templates
         .iter()
         .map(|t| TemplateSummary {

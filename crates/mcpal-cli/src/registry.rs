@@ -9,17 +9,16 @@ use serde::Deserialize;
 
 const DEFAULT_BASE: &str = "https://registry.modelcontextprotocol.io";
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 pub struct Envelope {
     pub servers: Vec<ServerWrapper>,
 }
-
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 pub struct ServerWrapper {
     pub server: Server,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 pub struct Server {
     pub name: String,
     #[serde(default)]
@@ -32,7 +31,7 @@ pub struct Server {
     pub remotes: Vec<Remote>,
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Package {
     pub registry_type: String,
@@ -49,13 +48,13 @@ pub struct Package {
     pub runtime_arguments: Vec<Argument>,
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Clone, Default)]
 pub struct Transport {
     #[serde(default)]
     pub r#type: String,
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct EnvVar {
     pub name: String,
@@ -65,7 +64,7 @@ pub struct EnvVar {
     pub default: Option<String>,
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Clone)]
 pub struct Argument {
     #[serde(default)]
     pub value: Option<String>,
@@ -73,13 +72,13 @@ pub struct Argument {
     pub default: Option<String>,
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Clone)]
 pub struct Remote {
     pub r#type: String,
     pub url: String,
 }
 
-#[derive(serde::Serialize, Debug)]
+#[derive(serde::Serialize)]
 pub struct Hit<'a> {
     pub name: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -89,18 +88,14 @@ pub struct Hit<'a> {
     pub kind: &'static str,
 }
 
-pub fn classify(server: &Server) -> &'static str {
-    if !server.packages.is_empty() {
+pub fn classify(s: &Server) -> &'static str {
+    if !s.packages.is_empty() {
         "stdio"
-    } else if !server.remotes.is_empty() {
+    } else if !s.remotes.is_empty() {
         "http"
     } else {
         "unknown"
     }
-}
-
-fn base_url() -> String {
-    std::env::var("MCPAL_REGISTRY_URL").unwrap_or_else(|_| DEFAULT_BASE.into())
 }
 
 fn client() -> Result<reqwest::Client> {
@@ -111,22 +106,23 @@ fn client() -> Result<reqwest::Client> {
 }
 
 pub async fn search(query: &str, limit: u32) -> Result<Envelope> {
-    let url = format!("{}/v0/servers", base_url());
-    let resp = client()?
-        .get(&url)
+    let base = std::env::var("MCPAL_REGISTRY_URL").unwrap_or_else(|_| DEFAULT_BASE.into());
+    Ok(client()?
+        .get(format!("{base}/v0/servers"))
         .query(&[("search", query), ("limit", &limit.to_string())])
         .send()
         .await?
-        .error_for_status()?;
-    Ok(resp.json().await?)
+        .error_for_status()?
+        .json()
+        .await?)
 }
 
-/// Fetch a single server by exact registry name. The registry's
-/// `?name=` filter doesn't actually filter — we run a `?search=` and
-/// keep only the entry whose `name` matches verbatim.
+/// Registry's `?name=` doesn't actually filter, so we search and pick the
+/// exact-name match.
 pub async fn fetch(name: &str) -> Result<Server> {
-    let env = search(name, 20).await?;
-    env.servers
+    search(name, 20)
+        .await?
+        .servers
         .into_iter()
         .map(|w| w.server)
         .find(|s| s.name == name)
@@ -135,19 +131,17 @@ pub async fn fetch(name: &str) -> Result<Server> {
         })
 }
 
-/// Build a `ServerSpec` from a registry entry. `extra_env` provides
-/// `--env K=V` overrides for required environment variables.
 pub fn to_spec(server: &Server, extra_env: &BTreeMap<String, String>) -> Result<ServerSpec> {
-    if let Some(pkg) = pick_stdio_package(server) {
+    if let Some(pkg) = server
+        .packages
+        .iter()
+        .find(|p| p.transport.as_ref().is_none_or(|t| t.r#type == "stdio"))
+    {
         return stdio_from_package(pkg, extra_env);
     }
-    if let Some(remote) = server
-        .remotes
-        .iter()
-        .find(|r| r.r#type == "streamable-http")
-    {
+    if let Some(r) = server.remotes.iter().find(|r| r.r#type == "streamable-http") {
         return Ok(ServerSpec::Http {
-            url: remote.url.clone(),
+            url: r.url.clone(),
             headers: BTreeMap::new(),
             auth: None,
         });
@@ -158,39 +152,38 @@ pub fn to_spec(server: &Server, extra_env: &BTreeMap<String, String>) -> Result<
     )
 }
 
-fn pick_stdio_package(server: &Server) -> Option<&Package> {
-    server.packages.iter().find(|p| {
-        p.transport
-            .as_ref()
-            .map(|t| t.r#type == "stdio")
-            .unwrap_or(true)
-    })
-}
-
 fn stdio_from_package(pkg: &Package, extra_env: &BTreeMap<String, String>) -> Result<ServerSpec> {
-    let (command, mut args) = match pkg.registry_type.as_str() {
+    let id = &pkg.identifier;
+    let ver = pkg.version.as_deref().filter(|v| !v.is_empty());
+    let (command, mut args): (&str, Vec<String>) = match pkg.registry_type.as_str() {
         "npm" => (
-            "npx".to_string(),
-            vec!["-y".into(), npm_target(&pkg.identifier, pkg.version.as_deref())],
+            "npx",
+            vec![
+                "-y".into(),
+                ver.map_or_else(|| id.clone(), |v| format!("{id}@{v}")),
+            ],
         ),
-        "pypi" => ("uvx".into(), vec![pkg.identifier.clone()]),
+        "pypi" => ("uvx", vec![id.clone()]),
         "oci" => (
-            "docker".into(),
-            vec!["run".into(), "--rm".into(), "-i".into(), pkg.identifier.clone()],
+            "docker",
+            vec!["run".into(), "--rm".into(), "-i".into(), id.clone()],
         ),
-        other => bail!("unsupported registry_type '{other}' (try `mcpal raw` or file an issue)"),
+        other => bail!("unsupported registry_type '{other}'"),
     };
-    args.extend(arg_values(&pkg.package_arguments));
-    args.extend(arg_values(&pkg.runtime_arguments));
+    let extra_vals = |xs: &[Argument]| -> Vec<String> {
+        xs.iter()
+            .filter_map(|a| a.value.clone().or_else(|| a.default.clone()))
+            .collect()
+    };
+    args.extend(extra_vals(&pkg.package_arguments));
+    args.extend(extra_vals(&pkg.runtime_arguments));
 
     let mut env: BTreeMap<String, String> = pkg
         .environment_variables
         .iter()
-        .filter_map(|v| v.default.as_ref().map(|d| (v.name.clone(), d.clone())))
+        .filter_map(|v| Some((v.name.clone(), v.default.clone()?)))
         .collect();
-    for (k, v) in extra_env {
-        env.insert(k.clone(), v.clone());
-    }
+    env.extend(extra_env.iter().map(|(k, v)| (k.clone(), v.clone())));
     let missing: Vec<&str> = pkg
         .environment_variables
         .iter()
@@ -203,60 +196,48 @@ fn stdio_from_package(pkg: &Package, extra_env: &BTreeMap<String, String>) -> Re
             missing.join("=… --env "),
         );
     }
-
-    Ok(ServerSpec::Stdio { command, args, env })
-}
-
-fn npm_target(identifier: &str, version: Option<&str>) -> String {
-    match version {
-        Some(v) if !v.is_empty() => format!("{identifier}@{v}"),
-        _ => identifier.to_string(),
-    }
-}
-
-fn arg_values(args: &[Argument]) -> impl Iterator<Item = String> + '_ {
-    args.iter()
-        .filter_map(|a| a.value.clone().or_else(|| a.default.clone()))
+    Ok(ServerSpec::Stdio {
+        command: command.into(),
+        args,
+        env,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn parse(body: &str) -> Server {
+        serde_json::from_str::<Envelope>(body)
+            .unwrap()
+            .servers
+            .pop()
+            .unwrap()
+            .server
+    }
+
     #[test]
     fn parses_remote_envelope() {
-        let body = r#"{
-            "servers":[{"server":{
-                "name":"x/y","version":"0.1",
-                "remotes":[{"type":"streamable-http","url":"https://a.example/mcp"}]
-            }}],
-            "metadata":{"nextCursor":"next","count":1}
-        }"#;
-        let env: Envelope = serde_json::from_str(body).unwrap();
-        assert_eq!(env.servers.len(), 1);
-        assert_eq!(classify(&env.servers[0].server), "http");
-        let spec = to_spec(&env.servers[0].server, &BTreeMap::new()).unwrap();
-        assert!(matches!(spec, ServerSpec::Http { .. }));
+        let s = parse(
+            r#"{"servers":[{"server":{
+                "name":"x/y","remotes":[{"type":"streamable-http","url":"https://a/mcp"}]}}]}"#,
+        );
+        assert_eq!(classify(&s), "http");
+        assert!(matches!(to_spec(&s, &BTreeMap::new()).unwrap(), ServerSpec::Http { .. }));
     }
 
     #[test]
     fn parses_npm_package_and_builds_npx() {
-        let body = r#"{"servers":[{"server":{
-            "name":"x/y",
-            "packages":[{
-                "registryType":"npm",
-                "identifier":"@mcp/foo",
-                "version":"1.2.3",
+        let s = parse(
+            r#"{"servers":[{"server":{"name":"x/y","packages":[{
+                "registryType":"npm","identifier":"@mcp/foo","version":"1.2.3",
                 "transport":{"type":"stdio"},
-                "environmentVariables":[{"name":"API_KEY","isRequired":true}]
-            }]
-        }}]}"#;
-        let env: Envelope = serde_json::from_str(body).unwrap();
+                "environmentVariables":[{"name":"API_KEY","isRequired":true}]}]}}]}"#,
+        );
         let mut extra = BTreeMap::new();
         extra.insert("API_KEY".into(), "k".into());
-        let spec = to_spec(&env.servers[0].server, &extra).unwrap();
-        let ServerSpec::Stdio { command, args, env } = spec else {
-            panic!("expected stdio")
+        let ServerSpec::Stdio { command, args, env } = to_spec(&s, &extra).unwrap() else {
+            panic!("expected stdio");
         };
         assert_eq!(command, "npx");
         assert_eq!(args, vec!["-y", "@mcp/foo@1.2.3"]);
@@ -265,17 +246,11 @@ mod tests {
 
     #[test]
     fn errors_when_required_env_missing() {
-        let body = r#"{"servers":[{"server":{
-            "name":"x/y",
-            "packages":[{
-                "registryType":"npm",
-                "identifier":"@mcp/foo",
-                "environmentVariables":[{"name":"NEEDED","isRequired":true}]
-            }]
-        }}]}"#;
-        let env: Envelope = serde_json::from_str(body).unwrap();
-        let err = to_spec(&env.servers[0].server, &BTreeMap::new()).unwrap_err();
-        let msg = err.to_string();
-        assert!(msg.contains("NEEDED"), "{msg}");
+        let s = parse(
+            r#"{"servers":[{"server":{"name":"x/y","packages":[{
+                "registryType":"npm","identifier":"@mcp/foo",
+                "environmentVariables":[{"name":"NEEDED","isRequired":true}]}]}}]}"#,
+        );
+        assert!(to_spec(&s, &BTreeMap::new()).unwrap_err().to_string().contains("NEEDED"));
     }
 }

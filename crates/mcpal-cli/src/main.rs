@@ -12,7 +12,7 @@ mod runtime;
 
 use anyhow::Result;
 use clap::Parser;
-use mcpal_core::HandlerOptions;
+use mcpal_core::Handler;
 use mcpal_output::Format;
 use tracing_subscriber::EnvFilter;
 
@@ -60,16 +60,17 @@ async fn dispatch(cli: Cli) -> Result<()> {
         cfg.server.extend(extra);
     }
     let format = Format::resolve(cli.output.map(Into::into));
-    let handler_opts = HandlerOptions {
+    let handler = Handler {
         roots: cli.roots,
         interactive: !cli.no_interactive,
         sampling_handler: cli
             .sampling_handler
             .as_deref()
-            .map(|s| s.split_whitespace().map(String::from).collect()),
+            .map(|s| s.split_whitespace().map(String::from).collect())
+            .filter(|v: &Vec<String>| !v.is_empty()),
         events: None,
     };
-    let ctx = Ctx::new(cfg, format, cli.query, cli.timeout, path, handler_opts);
+    let ctx = Ctx::new(cfg, format, cli.query, cli.timeout, path, handler);
 
     match cli.command {
         Command::Config { action } => commands::config::run(action, &ctx.config_path),

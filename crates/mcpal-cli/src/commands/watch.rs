@@ -2,7 +2,7 @@
 //! notification as one YAML document per event until ctrl-c.
 
 use anyhow::Result;
-use mcpal_core::{Handler, connect};
+use mcpal_core::connect;
 use tokio::sync::mpsc;
 
 use crate::resolver::resolve;
@@ -10,9 +10,8 @@ use crate::runtime::Ctx;
 
 pub async fn run(reference: &str, ctx: &Ctx) -> Result<()> {
     let (tx, mut rx) = mpsc::unbounded_channel();
-    let mut opts = ctx.handler_opts.clone();
-    opts.events = Some(tx);
-    let handler = Handler::new(opts);
+    let mut handler = ctx.handler.clone();
+    handler.events = Some(tx);
 
     let resolved = resolve(reference, ctx)?;
     let client = connect(&resolved.spec, handler).await?;
