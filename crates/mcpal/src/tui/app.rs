@@ -15,6 +15,7 @@ use ratatui::Terminal;
 use ratatui::backend::Backend;
 use ratatui::layout::{Constraint, Direction, Layout};
 use serde_json::Value;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::time::interval;
 
 use crate::runtime::Ctx;
@@ -73,10 +74,13 @@ pub struct App<'a> {
     pending: FuturesUnordered<BoxFuture<'static, AsyncMsg>>,
     services: HashMap<String, Arc<Client>>,
     output: OutputBuffer,
+    notif_tx: UnboundedSender<Value>,
+    notif_rx: UnboundedReceiver<Value>,
 }
 
 impl<'a> App<'a> {
     pub fn new(ctx: &'a Ctx) -> Result<Self> {
+        let (notif_tx, notif_rx) = unbounded_channel();
         Ok(Self {
             ctx,
             focus: Focus::Sidebar,
@@ -87,6 +91,8 @@ impl<'a> App<'a> {
             pending: FuturesUnordered::new(),
             services: HashMap::new(),
             output: OutputBuffer::new(200),
+            notif_tx,
+            notif_rx,
         })
     }
 
@@ -100,10 +106,39 @@ impl<'a> App<'a> {
                 Some(msg) = self.pending.next(), if !self.pending.is_empty() => {
                     self.on_async(msg);
                 }
+                Some(notif) = self.notif_rx.recv() => self.on_notification(notif),
                 _ = ticker.tick() => {}
             }
         }
         Ok(())
+    }
+
+    fn on_notification(&mut self, n: Value) {
+        let kind = n.get("kind").and_then(|v| v.as_str()).unwrap_or("event");
+        let summary = match kind {
+            "progress" => format!(
+                "→ progress {}/{}",
+                n.get("progress")
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "?".into()),
+                n.get("total")
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "?".into()),
+            ),
+            "log" => {
+                let level = n
+                    .get("level")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("info");
+                let msg = n
+                    .get("data")
+                    .map(|v| v.to_string())
+                    .unwrap_or_default();
+                format!("→ log {level}: {msg}")
+            }
+            other => format!("→ {other}"),
+        };
+        self.output.info(summary);
     }
 
     fn on_event(&mut self, ev: Event) {
@@ -201,7 +236,8 @@ impl<'a> App<'a> {
         };
         let reference = entry.display.clone();
         let spec = entry.spec.clone();
-        let handler = self.ctx.handler.clone();
+        let mut handler = self.ctx.handler.clone();
+        handler.events = Some(self.notif_tx.clone());
         self.output.info(format!("$ connect {reference}"));
         self.detail = View::Connecting(reference.clone());
         self.pending.push(
