@@ -13,7 +13,10 @@ use mcpal_core::rmcp::model::{CallToolRequestParams, CallToolResult};
 use ratatui::Frame;
 use ratatui::Terminal;
 use ratatui::backend::Backend;
-use ratatui::layout::{Constraint, Direction, Layout};
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 use serde_json::Value;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::time::interval;
@@ -76,6 +79,7 @@ pub struct App<'a> {
     output: OutputBuffer,
     notif_tx: UnboundedSender<Value>,
     notif_rx: UnboundedReceiver<Value>,
+    help: bool,
 }
 
 impl<'a> App<'a> {
@@ -93,6 +97,7 @@ impl<'a> App<'a> {
             output: OutputBuffer::new(200),
             notif_tx,
             notif_rx,
+            help: false,
         })
     }
 
@@ -147,6 +152,12 @@ impl<'a> App<'a> {
             self.quit = true;
             return;
         }
+        if self.help {
+            if matches!(key.code, KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q')) {
+                self.help = false;
+            }
+            return;
+        }
         if self.modal.is_some() {
             self.on_modal_key(key);
             return;
@@ -175,6 +186,10 @@ impl<'a> App<'a> {
         match key.code {
             KeyCode::Char('q') => {
                 self.quit = true;
+                true
+            }
+            KeyCode::Char('?') => {
+                self.help = true;
                 true
             }
             KeyCode::Tab => {
@@ -356,7 +371,11 @@ impl<'a> App<'a> {
     fn render(&mut self, f: &mut Frame) {
         let outer = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Min(0), Constraint::Length(7)])
+            .constraints([
+                Constraint::Min(0),
+                Constraint::Length(7),
+                Constraint::Length(1),
+            ])
             .split(f.area());
         let top = Layout::default()
             .direction(Direction::Horizontal)
@@ -366,9 +385,104 @@ impl<'a> App<'a> {
             .render(f, top[0], self.focus == Focus::Sidebar);
         detail::render(&mut self.detail, f, top[1], self.focus == Focus::Detail);
         self.output.render(f, outer[1], self.focus == Focus::Output);
+        self.render_hint(f, outer[2]);
         if let Some(form) = &self.modal {
             call::render(form, f, f.area());
         }
+        if self.help {
+            render_help(f, f.area());
+        }
     }
+
+    fn render_hint(&self, f: &mut Frame, area: Rect) {
+        let text = match self.focus {
+            Focus::Sidebar => "Tab cycle · Enter open · / filter · ? help · q quit",
+            Focus::Detail => match &self.detail {
+                View::Server { tab: detail::Tab::Tools, .. } => {
+                    "Enter schema · c call · l next tab · Esc back · ? help"
+                }
+                View::Server { .. } => "l next tab · Esc back · ? help",
+                View::Schema(_) | View::CallResult { .. } => "Esc back · ? help",
+                _ => "? help · q quit",
+            },
+            Focus::Output => "PgUp/PgDn scroll · ? help · q quit",
+        };
+        f.render_widget(
+            Paragraph::new(text).style(Style::default().fg(Color::DarkGray)),
+            area,
+        );
+    }
+}
+
+fn render_help(f: &mut Frame, area: Rect) {
+    let popup = centered(area, 60, 70);
+    f.render_widget(Clear, popup);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Yellow))
+        .title("help (Esc to close)");
+    let inner = block.inner(popup);
+    f.render_widget(block, popup);
+    let lines: Vec<Line<'static>> = HELP_LINES
+        .iter()
+        .map(|(key, desc)| {
+            if key.is_empty() {
+                Line::from("")
+            } else if desc.is_empty() {
+                Line::from(Span::styled(
+                    key.to_string(),
+                    Style::default().add_modifier(Modifier::BOLD),
+                ))
+            } else {
+                Line::from(vec![
+                    Span::styled(
+                        format!("  {:<14}", key),
+                        Style::default().fg(Color::Cyan),
+                    ),
+                    Span::raw(desc.to_string()),
+                ])
+            }
+        })
+        .collect();
+    f.render_widget(Paragraph::new(lines), inner);
+}
+
+const HELP_LINES: &[(&str, &str)] = &[
+    ("NAVIGATION", ""),
+    ("Tab / S-Tab", "cycle pane focus"),
+    ("j/k  ↑/↓", "move selection"),
+    ("gg / G", "top / bottom"),
+    ("Enter", "drill in"),
+    ("Esc", "drill back / close modal"),
+    ("", ""),
+    ("SERVERS", ""),
+    ("/", "filter list"),
+    ("", ""),
+    ("TOOLS", ""),
+    ("c", "call selected tool"),
+    ("l / Right", "next tab"),
+    ("", ""),
+    ("GLOBAL", ""),
+    ("q / Ctrl-C", "quit"),
+    ("?", "toggle this help"),
+];
+
+fn centered(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
+    let vertical = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(area);
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(vertical[1])[1]
 }
 
