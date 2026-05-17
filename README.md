@@ -15,6 +15,16 @@ mcpal --query 'content[0].text' tool call ev echo --message hi
 mcpal tui                                       # interactive browser
 ```
 
+## From your shell
+
+![cli](assets/cli.gif)
+
+## Scriptable
+
+![scripting](assets/scripting.gif)
+
+> Tapes that produce these GIFs live in [`demo/`](demo/README.md).
+
 ## Install
 
     brew tap pawelb0/tap
