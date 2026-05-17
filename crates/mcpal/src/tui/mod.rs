@@ -1,6 +1,7 @@
 mod app;
 mod call;
 mod detail;
+mod output;
 mod sidebar;
 
 use std::io;

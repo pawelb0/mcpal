@@ -14,14 +14,13 @@ use ratatui::Frame;
 use ratatui::Terminal;
 use ratatui::backend::Backend;
 use ratatui::layout::{Constraint, Direction, Layout};
-use ratatui::style::{Color, Style};
-use ratatui::widgets::{Block, Borders};
 use serde_json::Value;
 use tokio::time::interval;
 
 use crate::runtime::Ctx;
 use crate::tui::call::{self, CallForm};
 use crate::tui::detail::{self, Loaded, View};
+use crate::tui::output::OutputBuffer;
 use crate::tui::sidebar::Sidebar;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -73,6 +72,7 @@ pub struct App<'a> {
     modal: Option<CallForm>,
     pending: FuturesUnordered<BoxFuture<'static, AsyncMsg>>,
     services: HashMap<String, Arc<Client>>,
+    output: OutputBuffer,
 }
 
 impl<'a> App<'a> {
@@ -86,6 +86,7 @@ impl<'a> App<'a> {
             modal: None,
             pending: FuturesUnordered::new(),
             services: HashMap::new(),
+            output: OutputBuffer::new(200),
         })
     }
 
@@ -201,6 +202,7 @@ impl<'a> App<'a> {
         let reference = entry.display.clone();
         let spec = entry.spec.clone();
         let handler = self.ctx.handler.clone();
+        self.output.info(format!("$ connect {reference}"));
         self.detail = View::Connecting(reference.clone());
         self.pending.push(
             async move {
@@ -244,6 +246,8 @@ impl<'a> App<'a> {
         if !arguments.is_empty() {
             req = req.with_arguments(arguments);
         }
+        self.output
+            .info(format!("$ tool call {reference} {tool_name}"));
         self.pending.push(
             async move {
                 let outcome = client
@@ -274,19 +278,31 @@ impl<'a> App<'a> {
     fn on_async(&mut self, msg: AsyncMsg) {
         match msg {
             AsyncMsg::Connected { client, loaded } => {
+                self.output.ok(format!(
+                    "connected to {} ({} tools)",
+                    loaded.reference,
+                    loaded.tools.len()
+                ));
                 self.services
                     .insert(loaded.reference.clone(), Arc::new(client));
                 self.detail = View::server(loaded);
                 self.focus = Focus::Detail;
             }
             AsyncMsg::ConnectFailed { reference, err } => {
+                self.output.err(format!("{reference}: {err}"));
                 self.detail = View::Failed { reference, err };
             }
             AsyncMsg::Called { reference, tool, outcome } => {
+                match &outcome {
+                    Ok(r) if r.is_error.unwrap_or(false) => {
+                        self.output.err(format!("{reference} {tool}: server error"));
+                    }
+                    Ok(_) => self.output.ok(format!("{reference} {tool}")),
+                    Err(e) => self.output.err(format!("{reference} {tool}: {e}")),
+                }
                 let loaded = match self.take_loaded() {
                     Some(l) if l.reference == reference => l,
                     Some(l) => {
-                        // user navigated away; restore their view and drop the result
                         self.detail = View::Server {
                             loaded: l,
                             tab: detail::Tab::Tools,
@@ -313,21 +329,10 @@ impl<'a> App<'a> {
         self.sidebar
             .render(f, top[0], self.focus == Focus::Sidebar);
         detail::render(&mut self.detail, f, top[1], self.focus == Focus::Detail);
-        f.render_widget(plain("Output", self.focus == Focus::Output), outer[1]);
+        self.output.render(f, outer[1], self.focus == Focus::Output);
         if let Some(form) = &self.modal {
             call::render(form, f, f.area());
         }
     }
 }
 
-fn plain(title: &str, focused: bool) -> Block<'_> {
-    let style = if focused {
-        Style::default().fg(Color::Cyan)
-    } else {
-        Style::default()
-    };
-    Block::default()
-        .title(title)
-        .borders(Borders::ALL)
-        .border_style(style)
-}
