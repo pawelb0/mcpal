@@ -51,6 +51,11 @@ impl Focus {
     }
 }
 
+enum Modal {
+    Call(CallForm),
+    Bearer { reference: String, buf: String },
+}
+
 enum AsyncMsg {
     Connected {
         client: Client,
@@ -73,7 +78,7 @@ pub struct App<'a> {
     quit: bool,
     sidebar: Sidebar,
     detail: View,
-    modal: Option<CallForm>,
+    modal: Option<Modal>,
     pending: FuturesUnordered<BoxFuture<'static, AsyncMsg>>,
     services: HashMap<String, Arc<Client>>,
     output: OutputBuffer,
@@ -174,11 +179,35 @@ impl<'a> App<'a> {
     }
 
     fn on_modal_key(&mut self, key: KeyEvent) {
-        let Some(form) = self.modal.as_mut() else { return };
-        match form.on_key(key) {
-            call::Outcome::Cancel => self.modal = None,
-            call::Outcome::Submit => self.submit_call(),
-            call::Outcome::Handled => {}
+        let Some(modal) = self.modal.as_mut() else { return };
+        match modal {
+            Modal::Call(form) => match form.on_key(key) {
+                call::Outcome::Cancel => self.modal = None,
+                call::Outcome::Submit => self.submit_call(),
+                call::Outcome::Handled => {}
+            },
+            Modal::Bearer { buf, .. } => match key.code {
+                KeyCode::Esc => self.modal = None,
+                KeyCode::Enter => self.save_bearer(),
+                KeyCode::Backspace => {
+                    buf.pop();
+                }
+                KeyCode::Char(c) => buf.push(c),
+                _ => {}
+            },
+        }
+    }
+
+    fn save_bearer(&mut self) {
+        let Some(Modal::Bearer { reference, buf }) = self.modal.take() else {
+            return;
+        };
+        if buf.is_empty() {
+            return;
+        }
+        match crate::keyring::put(&reference, crate::keyring::Kind::Bearer, &buf) {
+            Ok(()) => self.output.ok(format!("bearer stored for {reference}")),
+            Err(e) => self.output.err(format!("keyring: {e}")),
         }
     }
 
@@ -209,6 +238,15 @@ impl<'a> App<'a> {
             self.open_selected();
             return;
         }
+        if matches!(key.code, KeyCode::Char('b'))
+            && let Some(entry) = self.sidebar.selected()
+        {
+            self.modal = Some(Modal::Bearer {
+                reference: entry.display.clone(),
+                buf: String::new(),
+            });
+            return;
+        }
         self.sidebar.on_key(key);
     }
 
@@ -223,7 +261,7 @@ impl<'a> App<'a> {
         if matches!(key.code, KeyCode::Char('c'))
             && let Some(tool) = self.selected_tool().cloned()
         {
-            self.modal = Some(CallForm::new(tool));
+            self.modal = Some(Modal::Call(CallForm::new(tool)));
             return;
         }
         if matches!(key.code, KeyCode::Enter)
@@ -270,7 +308,7 @@ impl<'a> App<'a> {
     }
 
     fn submit_call(&mut self) {
-        let Some(form) = self.modal.take() else { return };
+        let Some(Modal::Call(form)) = self.modal.take() else { return };
         let tool_name = form.tool.name.to_string();
         let arguments = match form.to_json() {
             Ok(Value::Object(m)) => m,
@@ -386,8 +424,10 @@ impl<'a> App<'a> {
         detail::render(&mut self.detail, f, top[1], self.focus == Focus::Detail);
         self.output.render(f, outer[1], self.focus == Focus::Output);
         self.render_hint(f, outer[2]);
-        if let Some(form) = &self.modal {
-            call::render(form, f, f.area());
+        match &self.modal {
+            Some(Modal::Call(form)) => call::render(form, f, f.area()),
+            Some(Modal::Bearer { reference, buf }) => render_bearer(reference, buf, f, f.area()),
+            None => {}
         }
         if self.help {
             render_help(f, f.area());
@@ -412,6 +452,26 @@ impl<'a> App<'a> {
             area,
         );
     }
+}
+
+fn render_bearer(reference: &str, buf: &str, f: &mut Frame, area: Rect) {
+    let popup = centered(area, 60, 20);
+    f.render_widget(Clear, popup);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Yellow))
+        .title(format!("bearer for {reference}"));
+    let inner = block.inner(popup);
+    f.render_widget(block, popup);
+    let masked = "*".repeat(buf.len());
+    f.render_widget(
+        Paragraph::new(vec![
+            Line::from(format!("› {masked}▌")),
+            Line::from(""),
+            Line::from("Enter save · Esc cancel"),
+        ]),
+        inner,
+    );
 }
 
 fn render_help(f: &mut Frame, area: Rect) {
