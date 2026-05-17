@@ -1,0 +1,54 @@
+name: deb
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach the .deb to"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+
+      - name: Install system deps
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-deb
+        run: cargo install --locked cargo-deb
+
+      - name: Build mcpal release binary
+        run: cargo build --release -p mcpal
+
+      - name: Build .deb
+        run: cargo deb -p mcpal --no-build
+
+      - name: Stable + versioned filenames
+        run: |
+          set -euo pipefail
+          original=$(ls target/debian/mcpal_*_amd64.deb)
+          cp "$original" target/debian/mcpal_amd64.deb
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+        run: |
+          gh release upload "$TAG" \
+            target/debian/mcpal_amd64.deb \
+            target/debian/mcpal_*_amd64.deb \
+            --clobber

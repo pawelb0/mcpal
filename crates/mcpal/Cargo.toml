@@ -50,6 +50,23 @@ tui-textarea = { workspace = true, optional = true }
 default = ["tui"]
 tui = ["dep:ratatui", "dep:crossterm", "dep:tui-input", "dep:tui-textarea"]
 
+[package.metadata.deb]
+maintainer = "Paweł B. <pawelb@fastmail.com>"
+copyright = "2026, Paweł B. <pawelb@fastmail.com>"
+license-file = ["../../LICENSE", "0"]
+extended-description = """\
+mcpal is a scriptable CLI for the Model Context Protocol. It connects to MCP
+servers over stdio or HTTP and calls tools, reads resources, gets prompts,
+runs raw JSON-RPC, streams notifications, and ships an interactive TUI.\
+"""
+section = "utils"
+priority = "optional"
+depends = "$auto, libdbus-1-3"
+assets = [
+    ["target/release/mcpal", "usr/bin/", "755"],
+    ["../../README.md", "usr/share/doc/mcpal/README.md", "644"],
+]
+
 [dev-dependencies]
 assert_cmd.workspace = true
 predicates.workspace = true

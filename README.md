@@ -27,8 +27,15 @@ mcpal tui                                       # interactive browser
 
 ## Install
 
+macOS / Linux via Homebrew:
+
     brew tap pawelb0/tap
     brew install pawelb0/tap/mcpal
+
+Debian / Ubuntu:
+
+    curl -fsSLO https://github.com/pawelb0/mcpal/releases/latest/download/mcpal_amd64.deb
+    sudo dpkg -i mcpal_amd64.deb
 
 From source:
 
