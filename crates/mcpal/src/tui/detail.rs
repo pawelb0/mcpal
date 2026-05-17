@@ -1,5 +1,6 @@
 use crossterm::event::{KeyCode, KeyEvent};
 use mcpal_core::Client;
+use mcpal_core::rmcp::model::CallToolResult;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -51,6 +52,11 @@ pub enum View {
         state: ListState,
     },
     Schema(Tool),
+    CallResult {
+        loaded: Loaded,
+        tool: String,
+        outcome: Result<CallToolResult, String>,
+    },
 }
 
 impl View {
@@ -100,7 +106,41 @@ pub fn render(view: &mut View, f: &mut Frame, area: Rect, focused: bool) {
         }
         View::Server { loaded, tab, state } => render_server(loaded, *tab, state, f, inner),
         View::Schema(tool) => render_schema(tool, f, inner),
+        View::CallResult { tool, outcome, .. } => render_call_result(tool, outcome, f, inner),
     }
+}
+
+fn render_call_result(
+    tool: &str,
+    outcome: &Result<CallToolResult, String>,
+    f: &mut Frame,
+    area: Rect,
+) {
+    let (header, body) = match outcome {
+        Ok(r) => {
+            let mark = if r.is_error.unwrap_or(false) {
+                Span::styled("✗", Style::default().fg(Color::Red))
+            } else {
+                Span::styled("✓", Style::default().fg(Color::Green))
+            };
+            let body = serde_json::to_string_pretty(r).unwrap_or_else(|e| e.to_string());
+            (mark, body)
+        }
+        Err(e) => (
+            Span::styled("✗", Style::default().fg(Color::Red)),
+            e.clone(),
+        ),
+    };
+    let mut lines = vec![Line::from(vec![
+        header,
+        Span::raw(" "),
+        Span::styled(tool.to_string(), Style::default().add_modifier(Modifier::BOLD)),
+    ])];
+    lines.push(Line::from(""));
+    lines.extend(body.lines().map(|l| Line::from(l.to_string())));
+    lines.push(Line::from(""));
+    lines.push(Line::from("Esc back"));
+    f.render_widget(Paragraph::new(lines), area);
 }
 
 fn render_server(loaded: &Loaded, tab: Tab, state: &mut ListState, f: &mut Frame, area: Rect) {

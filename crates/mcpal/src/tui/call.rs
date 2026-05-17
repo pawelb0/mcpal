@@ -62,10 +62,6 @@ impl CallForm {
         }
     }
 
-    pub fn current_field(&self) -> Option<&Field> {
-        self.fields.get(self.current)
-    }
-
     pub fn on_key(&mut self, key: KeyEvent) -> Outcome {
         match key.code {
             KeyCode::Esc => Outcome::Cancel,

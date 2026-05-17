@@ -7,13 +7,16 @@ use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyModifiers};
 use futures::FutureExt;
 use futures::StreamExt;
 use futures::future::BoxFuture;
+use futures::stream::FuturesUnordered;
 use mcpal_core::Client;
+use mcpal_core::rmcp::model::{CallToolRequestParams, CallToolResult};
 use ratatui::Frame;
 use ratatui::Terminal;
 use ratatui::backend::Backend;
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, Borders};
+use serde_json::Value;
 use tokio::time::interval;
 
 use crate::runtime::Ctx;
@@ -45,14 +48,19 @@ impl Focus {
     }
 }
 
-enum ConnectionMsg {
-    Loaded {
+enum AsyncMsg {
+    Connected {
         client: Client,
         loaded: Loaded,
     },
-    Failed {
+    ConnectFailed {
         reference: String,
         err: String,
+    },
+    Called {
+        reference: String,
+        tool: String,
+        outcome: Result<CallToolResult, String>,
     },
 }
 
@@ -63,7 +71,7 @@ pub struct App<'a> {
     sidebar: Sidebar,
     detail: View,
     modal: Option<CallForm>,
-    pending: Option<BoxFuture<'static, ConnectionMsg>>,
+    pending: FuturesUnordered<BoxFuture<'static, AsyncMsg>>,
     services: HashMap<String, Arc<Client>>,
 }
 
@@ -76,7 +84,7 @@ impl<'a> App<'a> {
             sidebar: Sidebar::from_ctx(ctx)?,
             detail: View::Empty,
             modal: None,
-            pending: None,
+            pending: FuturesUnordered::new(),
             services: HashMap::new(),
         })
     }
@@ -86,13 +94,10 @@ impl<'a> App<'a> {
         let mut ticker = interval(Duration::from_millis(250));
         while !self.quit {
             terminal.draw(|f| self.render(f))?;
-            let pending = self.pending.as_mut();
-            let pending_active = pending.is_some();
             tokio::select! {
                 Some(Ok(ev)) = events.next() => self.on_event(ev),
-                msg = poll_pending(pending), if pending_active => {
-                    self.pending = None;
-                    self.on_connection(msg);
+                Some(msg) = self.pending.next(), if !self.pending.is_empty() => {
+                    self.on_async(msg);
                 }
                 _ = ticker.tick() => {}
             }
@@ -125,9 +130,7 @@ impl<'a> App<'a> {
         let Some(form) = self.modal.as_mut() else { return };
         match form.on_key(key) {
             call::Outcome::Cancel => self.modal = None,
-            call::Outcome::Submit => {
-                // submit wiring lands in the next commit
-            }
+            call::Outcome::Submit => self.submit_call(),
             call::Outcome::Handled => {}
         }
     }
@@ -199,11 +202,11 @@ impl<'a> App<'a> {
         let spec = entry.spec.clone();
         let handler = self.ctx.handler.clone();
         self.detail = View::Connecting(reference.clone());
-        self.pending = Some(
+        self.pending.push(
             async move {
                 match detail::open(reference.clone(), spec, handler).await {
-                    Ok((client, loaded)) => ConnectionMsg::Loaded { client, loaded },
-                    Err(e) => ConnectionMsg::Failed {
+                    Ok((client, loaded)) => AsyncMsg::Connected { client, loaded },
+                    Err(e) => AsyncMsg::ConnectFailed {
                         reference,
                         err: e.to_string(),
                     },
@@ -213,16 +216,87 @@ impl<'a> App<'a> {
         );
     }
 
-    fn on_connection(&mut self, msg: ConnectionMsg) {
+    fn submit_call(&mut self) {
+        let Some(form) = self.modal.take() else { return };
+        let tool_name = form.tool.name.to_string();
+        let arguments = match form.to_json() {
+            Ok(Value::Object(m)) => m,
+            Ok(_) => return,
+            Err(e) => {
+                if let Some(loaded) = self.take_loaded() {
+                    self.detail = View::CallResult {
+                        loaded,
+                        tool: tool_name,
+                        outcome: Err(e),
+                    };
+                }
+                return;
+            }
+        };
+        let reference = match &self.detail {
+            View::Server { loaded, .. } => loaded.reference.clone(),
+            _ => return,
+        };
+        let Some(client) = self.services.get(&reference).cloned() else {
+            return;
+        };
+        let mut req = CallToolRequestParams::new(tool_name.clone());
+        if !arguments.is_empty() {
+            req = req.with_arguments(arguments);
+        }
+        self.pending.push(
+            async move {
+                let outcome = client
+                    .call_tool(req)
+                    .await
+                    .map_err(|e| e.to_string());
+                AsyncMsg::Called {
+                    reference,
+                    tool: tool_name,
+                    outcome,
+                }
+            }
+            .boxed(),
+        );
+    }
+
+    fn take_loaded(&mut self) -> Option<Loaded> {
+        match std::mem::replace(&mut self.detail, View::Empty) {
+            View::Server { loaded, .. } => Some(loaded),
+            View::CallResult { loaded, .. } => Some(loaded),
+            other => {
+                self.detail = other;
+                None
+            }
+        }
+    }
+
+    fn on_async(&mut self, msg: AsyncMsg) {
         match msg {
-            ConnectionMsg::Loaded { client, loaded } => {
+            AsyncMsg::Connected { client, loaded } => {
                 self.services
                     .insert(loaded.reference.clone(), Arc::new(client));
                 self.detail = View::server(loaded);
                 self.focus = Focus::Detail;
             }
-            ConnectionMsg::Failed { reference, err } => {
+            AsyncMsg::ConnectFailed { reference, err } => {
                 self.detail = View::Failed { reference, err };
+            }
+            AsyncMsg::Called { reference, tool, outcome } => {
+                let loaded = match self.take_loaded() {
+                    Some(l) if l.reference == reference => l,
+                    Some(l) => {
+                        // user navigated away; restore their view and drop the result
+                        self.detail = View::Server {
+                            loaded: l,
+                            tab: detail::Tab::Tools,
+                            state: Default::default(),
+                        };
+                        return;
+                    }
+                    None => return,
+                };
+                self.detail = View::CallResult { loaded, tool, outcome };
             }
         }
     }
@@ -243,15 +317,6 @@ impl<'a> App<'a> {
         if let Some(form) = &self.modal {
             call::render(form, f, f.area());
         }
-    }
-}
-
-async fn poll_pending<'b>(
-    fut: Option<&'b mut BoxFuture<'static, ConnectionMsg>>,
-) -> ConnectionMsg {
-    match fut {
-        Some(f) => f.await,
-        None => std::future::pending().await,
     }
 }
 
