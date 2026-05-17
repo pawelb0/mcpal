@@ -48,8 +48,7 @@ async fn connect_stdio(
     };
     let (transport, _stderr) = rmcp::transport::TokioChildProcess::builder(cmd)
         .stderr(stderr_stdio)
-        .spawn()
-        .map_err(std::io::Error::from)?;
+        .spawn()?;
     handler
         .serve(transport)
         .await

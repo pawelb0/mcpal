@@ -140,11 +140,41 @@ impl<'a> App<'a> {
                     .get("level")
                     .and_then(|v| v.as_str())
                     .unwrap_or("info");
-                let msg = n
-                    .get("data")
-                    .map(|v| v.to_string())
-                    .unwrap_or_default();
+                let msg = n.get("data").map(|v| v.to_string()).unwrap_or_default();
                 format!("→ log {level}: {msg}")
+            }
+            "elicitation_request" => {
+                let msg = n
+                    .get("message")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("(no message)");
+                format!("→ elicitation: {msg}")
+            }
+            "elicitation_response" => {
+                let action = n
+                    .get("action")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("?");
+                format!("← elicit {action}")
+            }
+            "sampling_request" => {
+                let n_msgs = n
+                    .get("messages")
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.len())
+                    .unwrap_or(0);
+                format!("→ sampling: {n_msgs} message(s)")
+            }
+            "sampling_response" => {
+                if let Some(err) = n.get("error").and_then(|v| v.as_str()) {
+                    format!("← sampling error: {err}")
+                } else {
+                    let model = n
+                        .get("model")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("?");
+                    format!("← sampling reply from {model}")
+                }
             }
             other => format!("→ {other}"),
         };

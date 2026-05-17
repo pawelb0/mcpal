@@ -60,34 +60,38 @@ impl ClientHandler for Handler {
         request: CreateElicitationRequestParams,
         _ctx: RequestContext<RoleClient>,
     ) -> Result<CreateElicitationResult, ErrorData> {
+        self.tag("elicitation_request", &request);
         use CreateElicitationRequestParams::*;
-        match request {
+        let result = match request {
             FormElicitationParams { message, .. } => {
                 if !self.interactive || !std::io::stdin().is_terminal() {
-                    return Ok(CreateElicitationResult::new(ElicitationAction::Decline));
-                }
-                eprintln!("[server elicitation] {message}");
-                eprint!("> ");
-                std::io::stderr().flush().ok();
-                let buf = tokio::task::spawn_blocking(|| {
-                    let mut b = String::new();
-                    std::io::stdin().lock().read_line(&mut b).map(|_| b)
-                })
-                .await
-                .map_err(|e| ErrorData::internal_error(e.to_string(), None))?
-                .unwrap_or_default();
-                Ok(if buf.is_empty() {
-                    CreateElicitationResult::new(ElicitationAction::Cancel)
+                    CreateElicitationResult::new(ElicitationAction::Decline)
                 } else {
-                    CreateElicitationResult::new(ElicitationAction::Accept)
-                        .with_content(json!({"value": buf.trim()}))
-                })
+                    eprintln!("[server elicitation] {message}");
+                    eprint!("> ");
+                    std::io::stderr().flush().ok();
+                    let buf = tokio::task::spawn_blocking(|| {
+                        let mut b = String::new();
+                        std::io::stdin().lock().read_line(&mut b).map(|_| b)
+                    })
+                    .await
+                    .map_err(|e| ErrorData::internal_error(e.to_string(), None))?
+                    .unwrap_or_default();
+                    if buf.is_empty() {
+                        CreateElicitationResult::new(ElicitationAction::Cancel)
+                    } else {
+                        CreateElicitationResult::new(ElicitationAction::Accept)
+                            .with_content(json!({"value": buf.trim()}))
+                    }
+                }
             }
             UrlElicitationParams { url, message, .. } => {
                 eprintln!("[server elicitation] {message}\n  open: {url}");
-                Ok(CreateElicitationResult::new(ElicitationAction::Accept))
+                CreateElicitationResult::new(ElicitationAction::Accept)
             }
-        }
+        };
+        self.tag("elicitation_response", &result);
+        Ok(result)
     }
 
     async fn create_message(
@@ -95,12 +99,25 @@ impl ClientHandler for Handler {
         params: CreateMessageRequestParams,
         _ctx: RequestContext<RoleClient>,
     ) -> Result<CreateMessageResult, ErrorData> {
+        self.tag("sampling_request", &params);
         let argv = self.sampling_handler.as_ref().ok_or_else(|| {
+            self.emit(json!({
+                "kind": "sampling_response",
+                "error": "no sampling handler configured",
+            }));
             ErrorData::method_not_found::<rmcp::model::CreateMessageRequestMethod>()
         })?;
-        run_sampling_handler(argv, &params)
-            .await
-            .map_err(|e| ErrorData::internal_error(format!("sampling handler: {e}"), None))
+        match run_sampling_handler(argv, &params).await {
+            Ok(result) => {
+                self.tag("sampling_response", &result);
+                Ok(result)
+            }
+            Err(e) => {
+                let msg = format!("sampling handler: {e}");
+                self.emit(json!({"kind": "sampling_response", "error": e}));
+                Err(ErrorData::internal_error(msg, None))
+            }
+        }
     }
 
     async fn on_logging_message(
