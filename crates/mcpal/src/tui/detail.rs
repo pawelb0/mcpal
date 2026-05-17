@@ -95,10 +95,10 @@ pub fn render(view: &mut View, f: &mut Frame, area: Rect, focused: bool) {
         View::Failed { reference, err } => {
             let p = Paragraph::new(vec![
                 Line::from(Span::styled(
-                    format!("{reference}: failed"),
+                    sanitize(&format!("{reference}: failed")),
                     Style::default().fg(Color::Red),
                 )),
-                Line::from(err.as_str()),
+                Line::from(sanitize(err)),
                 Line::from(""),
                 Line::from("r retry  Esc back"),
             ]);
@@ -134,13 +134,27 @@ fn render_call_result(
     let mut lines = vec![Line::from(vec![
         header,
         Span::raw(" "),
-        Span::styled(tool.to_string(), Style::default().add_modifier(Modifier::BOLD)),
+        Span::styled(sanitize(tool), Style::default().add_modifier(Modifier::BOLD)),
     ])];
     lines.push(Line::from(""));
-    lines.extend(body.lines().map(|l| Line::from(l.to_string())));
+    lines.extend(body.lines().map(|l| Line::from(sanitize(l))));
     lines.push(Line::from(""));
     lines.push(Line::from("Esc back"));
     f.render_widget(Paragraph::new(lines), area);
+}
+
+pub fn sanitize(s: &str) -> String {
+    s.chars()
+        .map(|c| {
+            if c == '\n' || c == '\t' {
+                c
+            } else if c.is_control() {
+                '·'
+            } else {
+                c
+            }
+        })
+        .collect()
 }
 
 fn render_server(loaded: &Loaded, tab: Tab, state: &mut ListState, f: &mut Frame, area: Rect) {
@@ -170,9 +184,9 @@ fn render_server(loaded: &Loaded, tab: Tab, state: &mut ListState, f: &mut Frame
             .map(|t| {
                 let desc = t.description.as_deref().unwrap_or("");
                 let line = if desc.is_empty() {
-                    t.name.to_string()
+                    sanitize(&t.name)
                 } else {
-                    format!("{}  {}", t.name, desc)
+                    sanitize(&format!("{}  {}", t.name, desc))
                 };
                 ListItem::new(line)
             })
@@ -181,9 +195,7 @@ fn render_server(loaded: &Loaded, tab: Tab, state: &mut ListState, f: &mut Frame
             .resources
             .iter()
             .map(|r| {
-                let name = r.raw.name.as_str();
-                let uri = r.raw.uri.as_str();
-                ListItem::new(format!("{name}  {uri}"))
+                ListItem::new(sanitize(&format!("{}  {}", r.raw.name, r.raw.uri)))
             })
             .collect(),
         Tab::Prompts => loaded
@@ -192,9 +204,9 @@ fn render_server(loaded: &Loaded, tab: Tab, state: &mut ListState, f: &mut Frame
             .map(|p| {
                 let d = p.description.as_deref().unwrap_or("");
                 let line = if d.is_empty() {
-                    p.name.clone()
+                    sanitize(&p.name)
                 } else {
-                    format!("{}  {}", p.name, d)
+                    sanitize(&format!("{}  {}", p.name, d))
                 };
                 ListItem::new(line)
             })
@@ -209,14 +221,14 @@ fn render_schema(tool: &Tool, f: &mut Frame, area: Rect) {
     let schema = serde_json::to_string_pretty(&*tool.input_schema)
         .unwrap_or_else(|e| format!("<schema error: {e}>"));
     let mut lines = vec![Line::from(Span::styled(
-        tool.name.to_string(),
+        sanitize(&tool.name),
         Style::default().add_modifier(Modifier::BOLD),
     ))];
     if let Some(desc) = tool.description.as_deref() {
-        lines.push(Line::from(desc.to_string()));
+        lines.push(Line::from(sanitize(desc)));
     }
     lines.push(Line::from(""));
-    lines.extend(schema.lines().map(|l| Line::from(l.to_string())));
+    lines.extend(schema.lines().map(|l| Line::from(sanitize(l))));
     lines.push(Line::from(""));
     lines.push(Line::from("Esc back"));
     f.render_widget(Paragraph::new(lines), area);

@@ -6,6 +6,12 @@ use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 
+fn sanitize(s: &str) -> String {
+    s.chars()
+        .map(|c| if c.is_control() && c != '\n' && c != '\t' { '·' } else { c })
+        .collect()
+}
+
 pub struct OutputBuffer {
     lines: VecDeque<Line<'static>>,
     cap: usize,
@@ -27,20 +33,20 @@ impl OutputBuffer {
     }
 
     pub fn info<S: Into<String>>(&mut self, s: S) {
-        self.push(Line::from(s.into()));
+        self.push(Line::from(sanitize(&s.into())));
     }
 
     pub fn ok<S: Into<String>>(&mut self, s: S) {
         self.push(Line::from(vec![
             Span::styled("✓ ", Style::default().fg(Color::Green)),
-            Span::raw(s.into()),
+            Span::raw(sanitize(&s.into())),
         ]));
     }
 
     pub fn err<S: Into<String>>(&mut self, s: S) {
         self.push(Line::from(vec![
             Span::styled("✗ ", Style::default().fg(Color::Red)),
-            Span::raw(s.into()),
+            Span::raw(sanitize(&s.into())),
         ]));
     }
 
