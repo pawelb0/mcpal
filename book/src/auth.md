@@ -38,6 +38,22 @@ Use a different env var per call:
 MCPAL_BEARER=ghp_xxx mcpal tool list github
 ```
 
+Already configured the same server in another MCP client (Cursor,
+Claude Code, opencode, ...)? Import — mcpal lifts the bearer out
+of the source `mcp.json`, stores it in the keyring, and leaves
+your `config.toml` clean:
+
+```bash
+mcpal server discover                            # confirm it's there
+mcpal server import --from cursor github         # alias = github
+mcpal server import --from opencode gh --as gh   # rename on import
+mcpal tool list github                           # just works
+```
+
+`${VAR}` placeholders in the source's `Authorization` header are
+preserved — they become `BearerEnv` entries pointing at the same
+env var, so the secret keeps living in your shell, not on disk.
+
 Reference an env var from `config.toml` (lets one config travel
 between machines without baking the secret in):
 

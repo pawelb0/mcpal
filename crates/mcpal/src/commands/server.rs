@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Result, anyhow, bail};
-use mcpal_core::ServerSpec;
+use mcpal_core::{AuthSpec, ServerSpec};
+
+use crate::keyring;
 use serde::Serialize;
 use serde_json::json;
 
@@ -138,7 +140,47 @@ fn import(args: ServerImportArgs, ctx: &Ctx) -> Result<()> {
         .find(|s| s.source == args.from && s.name == args.name)
         .ok_or_else(|| anyhow!("not found: {}:{}", args.from, args.name))?;
     let alias = args.alias.unwrap_or_else(|| found.name.clone());
-    write_server(&ctx.config_path, &alias, found.spec.clone())
+    let mut spec = found.spec.clone();
+    promote_auth(&mut spec, &alias)?;
+    write_server(&ctx.config_path, &alias, spec)
+}
+
+/// Pull any `Authorization: Bearer …` header out of an imported HTTP spec.
+/// Literal tokens go to the OS keyring; `${ENV}` references convert to
+/// `BearerEnv`. Either way, no secret lands in `config.toml`.
+fn promote_auth(spec: &mut ServerSpec, alias: &str) -> Result<()> {
+    let ServerSpec::Http { headers, auth, .. } = spec else {
+        return Ok(());
+    };
+    let key = headers
+        .keys()
+        .find(|k| k.eq_ignore_ascii_case("authorization"))
+        .cloned();
+    let Some(key) = key else { return Ok(()) };
+    let value = headers.remove(&key).unwrap_or_default();
+    let token = value
+        .strip_prefix("Bearer ")
+        .or_else(|| value.strip_prefix("bearer "))
+        .map(str::trim);
+    let Some(token) = token else {
+        headers.insert(key, value);
+        return Ok(());
+    };
+    let env_var = token
+        .strip_prefix("${")
+        .and_then(|s| s.strip_suffix('}'))
+        .or_else(|| token.strip_prefix('$'))
+        .filter(|s| !s.is_empty() && s.chars().all(|c| c.is_alphanumeric() || c == '_'));
+    if let Some(env) = env_var {
+        *auth = Some(AuthSpec::BearerEnv {
+            env: env.to_string(),
+        });
+        eprintln!("imported '{alias}': bearer comes from ${env}");
+        return Ok(());
+    }
+    keyring::put(alias, keyring::Kind::Bearer, token)?;
+    eprintln!("imported '{alias}': bearer stored in keyring");
+    Ok(())
 }
 
 async fn search(keywords: &str, limit: u32, ctx: &Ctx) -> Result<()> {
