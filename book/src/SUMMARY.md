@@ -11,6 +11,7 @@
 - [Recipes](./recipes.md)
 - [Authenticate to an HTTP server](./auth.md)
 - [Interactive TUI](./tui.md)
+- [UI-rich MCP servers](./ui.md)
 - [Script around mcpal](./scripting.md)
 - [Troubleshoot](./troubleshooting.md)
 
