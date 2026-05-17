@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use http::{HeaderName, HeaderValue};
 use rmcp::service::RunningService;
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
-use rmcp::transport::{StreamableHttpClientTransport, TokioChildProcess};
+use rmcp::transport::StreamableHttpClientTransport;
 use rmcp::{RoleClient, ServiceExt};
 use tokio::process::Command;
 
@@ -34,20 +34,22 @@ async fn connect_stdio(
     for (k, v) in env {
         cmd.env(k, v);
     }
-    // Drop child stderr by default so banner lines and any stray ANSI escape
-    // sequences from the spawned server don't bleed into our terminal.
-    // `MCPAL_CHILD_STDERR=inherit` opts back in for debugging.
-    let inherit = std::env::var("MCPAL_CHILD_STDERR")
-        .map(|v| v == "inherit")
-        .unwrap_or(false);
-    if !inherit {
-        cmd.stderr(std::process::Stdio::null());
-    }
     // Detach the child from our controlling terminal so uv/npx-style
     // installers can't write progress UI to /dev/tty over our alt-screen.
     #[cfg(unix)]
     detach_session(&mut cmd);
-    let transport = TokioChildProcess::new(cmd)?;
+    // TokioChildProcess defaults stderr to inherit(); use the builder so we
+    // can null it (or pipe it for MCPAL_CHILD_STDERR=inherit/capture).
+    use std::process::Stdio;
+    let stderr_mode = std::env::var("MCPAL_CHILD_STDERR").unwrap_or_default();
+    let stderr_stdio = match stderr_mode.as_str() {
+        "inherit" => Stdio::inherit(),
+        _ => Stdio::null(),
+    };
+    let (transport, _stderr) = rmcp::transport::TokioChildProcess::builder(cmd)
+        .stderr(stderr_stdio)
+        .spawn()
+        .map_err(std::io::Error::from)?;
     handler
         .serve(transport)
         .await
