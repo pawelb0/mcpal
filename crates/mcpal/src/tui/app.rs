@@ -17,6 +17,7 @@ use ratatui::widgets::{Block, Borders};
 use tokio::time::interval;
 
 use crate::runtime::Ctx;
+use crate::tui::call::{self, CallForm};
 use crate::tui::detail::{self, Loaded, View};
 use crate::tui::sidebar::Sidebar;
 
@@ -61,6 +62,7 @@ pub struct App<'a> {
     quit: bool,
     sidebar: Sidebar,
     detail: View,
+    modal: Option<CallForm>,
     pending: Option<BoxFuture<'static, ConnectionMsg>>,
     services: HashMap<String, Arc<Client>>,
 }
@@ -73,6 +75,7 @@ impl<'a> App<'a> {
             quit: false,
             sidebar: Sidebar::from_ctx(ctx)?,
             detail: View::Empty,
+            modal: None,
             pending: None,
             services: HashMap::new(),
         })
@@ -103,6 +106,10 @@ impl<'a> App<'a> {
             self.quit = true;
             return;
         }
+        if self.modal.is_some() {
+            self.on_modal_key(key);
+            return;
+        }
         let typing = self.focus == Focus::Sidebar && self.sidebar.filter_active;
         if !typing && self.on_global(key) {
             return;
@@ -111,6 +118,17 @@ impl<'a> App<'a> {
             Focus::Sidebar => self.on_sidebar_key(key),
             Focus::Detail => self.on_detail_key(key),
             Focus::Output => {}
+        }
+    }
+
+    fn on_modal_key(&mut self, key: KeyEvent) {
+        let Some(form) = self.modal.as_mut() else { return };
+        match form.on_key(key) {
+            call::Outcome::Cancel => self.modal = None,
+            call::Outcome::Submit => {
+                // submit wiring lands in the next commit
+            }
+            call::Outcome::Handled => {}
         }
     }
 
@@ -143,25 +161,34 @@ impl<'a> App<'a> {
     fn on_detail_key(&mut self, key: KeyEvent) {
         if matches!(key.code, KeyCode::Esc) {
             self.detail = match std::mem::replace(&mut self.detail, View::Empty) {
-                View::Schema(_) => {
-                    // Re-fetch the last server view from services? For now
-                    // just go empty; tab-back is rare.
-                    View::Empty
-                }
+                View::Schema(_) => View::Empty,
                 other => other,
             };
             return;
         }
-        if matches!(key.code, KeyCode::Enter)
-            && let View::Server { loaded, state, tab, .. } = &self.detail
-            && matches!(tab, detail::Tab::Tools)
-            && let Some(i) = state.selected()
-            && let Some(tool) = loaded.tools.get(i)
+        if matches!(key.code, KeyCode::Char('c'))
+            && let Some(tool) = self.selected_tool().cloned()
         {
-            self.detail = View::Schema(tool.clone());
+            self.modal = Some(CallForm::new(tool));
+            return;
+        }
+        if matches!(key.code, KeyCode::Enter)
+            && let Some(tool) = self.selected_tool().cloned()
+        {
+            self.detail = View::Schema(tool);
             return;
         }
         detail::on_key(&mut self.detail, key);
+    }
+
+    fn selected_tool(&self) -> Option<&mcpal_core::rmcp::model::Tool> {
+        let View::Server { loaded, state, tab, .. } = &self.detail else {
+            return None;
+        };
+        if !matches!(tab, detail::Tab::Tools) {
+            return None;
+        }
+        loaded.tools.get(state.selected()?)
     }
 
     fn open_selected(&mut self) {
@@ -213,6 +240,9 @@ impl<'a> App<'a> {
             .render(f, top[0], self.focus == Focus::Sidebar);
         detail::render(&mut self.detail, f, top[1], self.focus == Focus::Detail);
         f.render_widget(plain("Output", self.focus == Focus::Output), outer[1]);
+        if let Some(form) = &self.modal {
+            call::render(form, f, f.area());
+        }
     }
 }
 
