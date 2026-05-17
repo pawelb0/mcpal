@@ -23,7 +23,7 @@ use tokio::time::interval;
 
 use crate::runtime::Ctx;
 use crate::tui::call::{self, CallForm};
-use crate::tui::detail::{self, Loaded, View};
+use crate::tui::detail::{self, Loaded, ServerView, View};
 use crate::tui::output::OutputBuffer;
 use crate::tui::sidebar::Sidebar;
 
@@ -252,35 +252,104 @@ impl<'a> App<'a> {
 
     fn on_detail_key(&mut self, key: KeyEvent) {
         if matches!(key.code, KeyCode::Esc) {
-            self.detail = match std::mem::replace(&mut self.detail, View::Empty) {
-                View::Schema(_) => View::Empty,
-                other => other,
-            };
+            self.back_detail();
             return;
         }
         if matches!(key.code, KeyCode::Char('c'))
-            && let Some(tool) = self.selected_tool().cloned()
+            && let Some(tool) = self.current_tool()
         {
             self.modal = Some(Modal::Call(CallForm::new(tool)));
             return;
         }
-        if matches!(key.code, KeyCode::Enter)
-            && let Some(tool) = self.selected_tool().cloned()
-        {
-            self.detail = View::Schema(tool);
+        if matches!(key.code, KeyCode::Enter) {
+            self.drill_in();
             return;
         }
-        detail::on_key(&mut self.detail, key);
+        if let View::Server(sv) = &mut self.detail {
+            match key.code {
+                KeyCode::Char('h') | KeyCode::Left => {
+                    sv.tab = sv.tab.prev();
+                    sv.reset_selection();
+                }
+                KeyCode::Char('l') | KeyCode::Right => {
+                    sv.tab = sv.tab.next();
+                    sv.reset_selection();
+                }
+                KeyCode::Char('j') | KeyCode::Down => sv.move_by(1),
+                KeyCode::Char('k') | KeyCode::Up => sv.move_by(-1),
+                KeyCode::Char('g') => sv.top(),
+                KeyCode::Char('G') => sv.bottom(),
+                _ => {}
+            }
+        }
     }
 
-    fn selected_tool(&self) -> Option<&mcpal_core::rmcp::model::Tool> {
-        let View::Server { loaded, state, tab, .. } = &self.detail else {
-            return None;
+    fn back_detail(&mut self) {
+        let cur = std::mem::replace(&mut self.detail, View::Empty);
+        self.detail = match cur {
+            View::Schema { parent, .. } | View::CallResult { parent, .. } => View::Server(parent),
+            View::Server(sv) => {
+                self.focus = Focus::Sidebar;
+                View::Server(sv)
+            }
+            View::Failed { .. } | View::Connecting(_) => {
+                self.focus = Focus::Sidebar;
+                View::Empty
+            }
+            View::Empty => View::Empty,
         };
-        if !matches!(tab, detail::Tab::Tools) {
-            return None;
+    }
+
+    fn drill_in(&mut self) {
+        let cur = std::mem::replace(&mut self.detail, View::Empty);
+        self.detail = match cur {
+            View::Server(sv) if sv.tab == detail::Tab::Tools => match sv.selected_tool().cloned() {
+                Some(tool) => View::Schema { parent: sv, tool },
+                None => View::Server(sv),
+            },
+            other => other,
+        };
+    }
+
+    fn current_tool(&self) -> Option<mcpal_core::rmcp::model::Tool> {
+        match &self.detail {
+            View::Server(sv) => sv.selected_tool().cloned(),
+            View::Schema { tool, .. } => Some(tool.clone()),
+            View::CallResult { parent, tool, .. } => parent
+                .loaded
+                .tools
+                .iter()
+                .find(|t| *t.name == *tool)
+                .cloned(),
+            _ => None,
         }
-        loaded.tools.get(state.selected()?)
+    }
+
+    fn current_server_ref(&self) -> Option<String> {
+        match &self.detail {
+            View::Server(sv) => Some(sv.loaded.reference.clone()),
+            View::Schema { parent, .. } | View::CallResult { parent, .. } => {
+                Some(parent.loaded.reference.clone())
+            }
+            _ => None,
+        }
+    }
+
+    fn set_call_result(
+        &mut self,
+        tool: String,
+        outcome: Result<CallToolResult, String>,
+    ) {
+        let cur = std::mem::replace(&mut self.detail, View::Empty);
+        let parent = match cur {
+            View::Server(sv) => sv,
+            View::Schema { parent, .. } | View::CallResult { parent, .. } => parent,
+            other => {
+                self.detail = other;
+                return;
+            }
+        };
+        self.detail = View::CallResult { parent, tool, outcome };
     }
 
     fn open_selected(&mut self) {
@@ -314,23 +383,12 @@ impl<'a> App<'a> {
             Ok(Value::Object(m)) => m,
             Ok(_) => return,
             Err(e) => {
-                if let Some(loaded) = self.take_loaded() {
-                    self.detail = View::CallResult {
-                        loaded,
-                        tool: tool_name,
-                        outcome: Err(e),
-                    };
-                }
+                self.set_call_result(tool_name, Err(e));
                 return;
             }
         };
-        let reference = match &self.detail {
-            View::Server { loaded, .. } => loaded.reference.clone(),
-            _ => return,
-        };
-        let Some(client) = self.services.get(&reference).cloned() else {
-            return;
-        };
+        let Some(reference) = self.current_server_ref() else { return };
+        let Some(client) = self.services.get(&reference).cloned() else { return };
         let mut req = CallToolRequestParams::new(tool_name.clone());
         if !arguments.is_empty() {
             req = req.with_arguments(arguments);
@@ -353,17 +411,6 @@ impl<'a> App<'a> {
         );
     }
 
-    fn take_loaded(&mut self) -> Option<Loaded> {
-        match std::mem::replace(&mut self.detail, View::Empty) {
-            View::Server { loaded, .. } => Some(loaded),
-            View::CallResult { loaded, .. } => Some(loaded),
-            other => {
-                self.detail = other;
-                None
-            }
-        }
-    }
-
     fn on_async(&mut self, msg: AsyncMsg) {
         match msg {
             AsyncMsg::Connected { client, loaded } => {
@@ -374,7 +421,7 @@ impl<'a> App<'a> {
                 ));
                 self.services
                     .insert(loaded.reference.clone(), Arc::new(client));
-                self.detail = View::server(loaded);
+                self.detail = View::Server(ServerView::new(loaded));
                 self.focus = Focus::Detail;
             }
             AsyncMsg::ConnectFailed { reference, err } => {
@@ -389,19 +436,11 @@ impl<'a> App<'a> {
                     Ok(_) => self.output.ok(format!("{reference} {tool}")),
                     Err(e) => self.output.err(format!("{reference} {tool}: {e}")),
                 }
-                let loaded = match self.take_loaded() {
-                    Some(l) if l.reference == reference => l,
-                    Some(l) => {
-                        self.detail = View::Server {
-                            loaded: l,
-                            tab: detail::Tab::Tools,
-                            state: Default::default(),
-                        };
-                        return;
-                    }
-                    None => return,
-                };
-                self.detail = View::CallResult { loaded, tool, outcome };
+                if self.current_server_ref().as_deref() != Some(&reference) {
+                    // User navigated to a different server; drop the late result.
+                    return;
+                }
+                self.set_call_result(tool, outcome);
             }
         }
     }
@@ -436,14 +475,15 @@ impl<'a> App<'a> {
 
     fn render_hint(&self, f: &mut Frame, area: Rect) {
         let text = match self.focus {
-            Focus::Sidebar => "Tab cycle · Enter open · / filter · ? help · q quit",
+            Focus::Sidebar => "Enter open · / filter · b bearer · Tab cycle · ? help · q quit",
             Focus::Detail => match &self.detail {
-                View::Server { tab: detail::Tab::Tools, .. } => {
-                    "Enter schema · c call · l next tab · Esc back · ? help"
+                View::Server(sv) if sv.tab == detail::Tab::Tools => {
+                    "Enter schema · c call · h/l tab · Esc back · ? help"
                 }
-                View::Server { .. } => "l next tab · Esc back · ? help",
-                View::Schema(_) | View::CallResult { .. } => "Esc back · ? help",
-                _ => "? help · q quit",
+                View::Server(_) => "h/l tab · Esc back · ? help",
+                View::Schema { .. } => "c call · Esc back · ? help",
+                View::CallResult { .. } => "c call again · Esc back · ? help",
+                _ => "Esc back · ? help",
             },
             Focus::Output => "PgUp/PgDn scroll · ? help · q quit",
         };

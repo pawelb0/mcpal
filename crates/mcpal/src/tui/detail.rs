@@ -1,12 +1,11 @@
-use crossterm::event::{KeyCode, KeyEvent};
 use mcpal_core::Client;
 use mcpal_core::rmcp::model::CallToolResult;
+use mcpal_core::rmcp::model::{Prompt, Resource, Tool};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Tabs};
-use mcpal_core::rmcp::model::{Prompt, Resource, Tool};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Tab {
@@ -26,11 +25,18 @@ impl Tab {
             Tab::Prompts => 2,
         }
     }
-    fn next(self) -> Self {
+    pub fn next(self) -> Self {
         match self {
             Tab::Tools => Tab::Resources,
             Tab::Resources => Tab::Prompts,
             Tab::Prompts => Tab::Tools,
+        }
+    }
+    pub fn prev(self) -> Self {
+        match self {
+            Tab::Tools => Tab::Prompts,
+            Tab::Resources => Tab::Tools,
+            Tab::Prompts => Tab::Resources,
         }
     }
 }
@@ -42,35 +48,86 @@ pub struct Loaded {
     pub prompts: Vec<Prompt>,
 }
 
-pub enum View {
-    Empty,
-    Connecting(String),
-    Failed { reference: String, err: String },
-    Server {
-        loaded: Loaded,
-        tab: Tab,
-        state: ListState,
-    },
-    Schema(Tool),
-    CallResult {
-        loaded: Loaded,
-        tool: String,
-        outcome: Result<CallToolResult, String>,
-    },
+pub struct ServerView {
+    pub loaded: Loaded,
+    pub tab: Tab,
+    pub state: ListState,
 }
 
-impl View {
-    pub fn server(loaded: Loaded) -> Self {
+impl ServerView {
+    pub fn new(loaded: Loaded) -> Self {
         let mut state = ListState::default();
         if !loaded.tools.is_empty() {
             state.select(Some(0));
         }
-        View::Server {
+        Self {
             loaded,
             tab: Tab::Tools,
             state,
         }
     }
+
+    pub fn len(&self) -> usize {
+        match self.tab {
+            Tab::Tools => self.loaded.tools.len(),
+            Tab::Resources => self.loaded.resources.len(),
+            Tab::Prompts => self.loaded.prompts.len(),
+        }
+    }
+
+    pub fn reset_selection(&mut self) {
+        let len = self.len();
+        self.state.select(if len == 0 { None } else { Some(0) });
+    }
+
+    pub fn move_by(&mut self, delta: isize) {
+        let len = self.len();
+        if len == 0 {
+            return;
+        }
+        let cur = self.state.selected().unwrap_or(0) as isize;
+        let next = (cur + delta).clamp(0, len as isize - 1) as usize;
+        self.state.select(Some(next));
+    }
+
+    pub fn top(&mut self) {
+        if self.len() > 0 {
+            self.state.select(Some(0));
+        }
+    }
+
+    pub fn bottom(&mut self) {
+        let len = self.len();
+        if len > 0 {
+            self.state.select(Some(len - 1));
+        }
+    }
+
+    pub fn selected_tool(&self) -> Option<&Tool> {
+        if self.tab != Tab::Tools {
+            return None;
+        }
+        self.loaded.tools.get(self.state.selected()?)
+    }
+}
+
+pub enum View {
+    Empty,
+    Connecting(String),
+    Failed {
+        reference: String,
+        err: String,
+    },
+    Server(ServerView),
+    Schema {
+        parent: ServerView,
+        tool: Tool,
+    },
+    CallResult {
+        parent: ServerView,
+        tool: String,
+        outcome: Result<CallToolResult, String>,
+    },
 }
 
 pub fn render(view: &mut View, f: &mut Frame, area: Rect, focused: bool) {
@@ -100,12 +157,12 @@ pub fn render(view: &mut View, f: &mut Frame, area: Rect, focused: bool) {
                 )),
                 Line::from(sanitize(err)),
                 Line::from(""),
-                Line::from("r retry  Esc back"),
+                Line::from("Esc back · b set bearer"),
             ]);
             f.render_widget(p, inner);
         }
-        View::Server { loaded, tab, state } => render_server(loaded, *tab, state, f, inner),
-        View::Schema(tool) => render_schema(tool, f, inner),
+        View::Server(sv) => render_server(sv, f, inner),
+        View::Schema { tool, .. } => render_schema(tool, f, inner),
         View::CallResult { tool, outcome, .. } => render_call_result(tool, outcome, f, inner),
     }
 }
@@ -139,7 +196,7 @@ fn render_call_result(
     lines.push(Line::from(""));
     lines.extend(body.lines().map(|l| Line::from(sanitize(l))));
     lines.push(Line::from(""));
-    lines.push(Line::from("Esc back"));
+    lines.push(Line::from("Esc back · c call again"));
     f.render_widget(Paragraph::new(lines), area);
 }
 
@@ -157,15 +214,15 @@ pub fn sanitize(s: &str) -> String {
         .collect()
 }
 
-fn render_server(loaded: &Loaded, tab: Tab, state: &mut ListState, f: &mut Frame, area: Rect) {
+fn render_server(sv: &mut ServerView, f: &mut Frame, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(1), Constraint::Min(0)])
         .split(area);
     let counts = [
-        loaded.tools.len(),
-        loaded.resources.len(),
-        loaded.prompts.len(),
+        sv.loaded.tools.len(),
+        sv.loaded.resources.len(),
+        sv.loaded.prompts.len(),
     ];
     let titles: Vec<Line> = Tab::titles()
         .iter()
@@ -173,12 +230,13 @@ fn render_server(loaded: &Loaded, tab: Tab, state: &mut ListState, f: &mut Frame
         .map(|(t, n)| Line::from(format!("{t} ({n})")))
         .collect();
     let tabs = Tabs::new(titles)
-        .select(tab.index())
+        .select(sv.tab.index())
         .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
     f.render_widget(tabs, chunks[0]);
 
-    let items: Vec<ListItem> = match tab {
-        Tab::Tools => loaded
+    let items: Vec<ListItem> = match sv.tab {
+        Tab::Tools => sv
+            .loaded
             .tools
             .iter()
             .map(|t| {
@@ -191,14 +249,14 @@ fn render_server(loaded: &Loaded, tab: Tab, state: &mut ListState, f: &mut Frame
                 ListItem::new(line)
             })
             .collect(),
-        Tab::Resources => loaded
+        Tab::Resources => sv
+            .loaded
             .resources
             .iter()
-            .map(|r| {
-                ListItem::new(sanitize(&format!("{}  {}", r.raw.name, r.raw.uri)))
-            })
+            .map(|r| ListItem::new(sanitize(&format!("{}  {}", r.raw.name, r.raw.uri))))
             .collect(),
-        Tab::Prompts => loaded
+        Tab::Prompts => sv
+            .loaded
             .prompts
             .iter()
             .map(|p| {
@@ -214,7 +272,7 @@ fn render_server(loaded: &Loaded, tab: Tab, state: &mut ListState, f: &mut Frame
     };
     let list = List::new(items)
         .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
-    f.render_stateful_widget(list, chunks[1], state);
+    f.render_stateful_widget(list, chunks[1], &mut sv.state);
 }
 
 fn render_schema(tool: &Tool, f: &mut Frame, area: Rect) {
@@ -230,71 +288,8 @@ fn render_schema(tool: &Tool, f: &mut Frame, area: Rect) {
     lines.push(Line::from(""));
     lines.extend(schema.lines().map(|l| Line::from(sanitize(l))));
     lines.push(Line::from(""));
-    lines.push(Line::from("Esc back"));
+    lines.push(Line::from("Esc back · c call"));
     f.render_widget(Paragraph::new(lines), area);
-}
-
-pub fn on_key(view: &mut View, key: KeyEvent) -> bool {
-    match view {
-        View::Server { loaded, tab, state } => on_server_key(loaded, tab, state, key),
-        View::Schema(_) => {
-            if matches!(key.code, KeyCode::Esc) {
-                // Caller (App) downgrades to last Server view; signal handled.
-                return true;
-            }
-            false
-        }
-        _ => false,
-    }
-}
-
-fn on_server_key(
-    loaded: &Loaded,
-    tab: &mut Tab,
-    state: &mut ListState,
-    key: KeyEvent,
-) -> bool {
-    if matches!(key.code, KeyCode::Right | KeyCode::Char('l')) {
-        *tab = tab.next();
-        reset_state(state, len_for(loaded, *tab));
-        return true;
-    }
-    let len = len_for(loaded, *tab);
-    if len == 0 {
-        return false;
-    }
-    let cur = state.selected().unwrap_or(0);
-    match key.code {
-        KeyCode::Char('j') | KeyCode::Down if cur + 1 < len => {
-            state.select(Some(cur + 1));
-            true
-        }
-        KeyCode::Char('k') | KeyCode::Up if cur > 0 => {
-            state.select(Some(cur - 1));
-            true
-        }
-        KeyCode::Char('g') => {
-            state.select(Some(0));
-            true
-        }
-        KeyCode::Char('G') => {
-            state.select(Some(len - 1));
-            true
-        }
-        _ => false,
-    }
-}
-
-fn len_for(loaded: &Loaded, tab: Tab) -> usize {
-    match tab {
-        Tab::Tools => loaded.tools.len(),
-        Tab::Resources => loaded.resources.len(),
-        Tab::Prompts => loaded.prompts.len(),
-    }
-}
-
-fn reset_state(state: &mut ListState, len: usize) {
-    state.select(if len == 0 { None } else { Some(0) });
 }
 
 pub async fn open(
