@@ -46,46 +46,38 @@ Type "mcpal tui"
 Enter
 Wait+Screen /Servers/
 
-Sleep 1500ms
+Sleep 1800ms
 
-# Move to ev, open it
-Type "j"
-Sleep 600ms
+# ev is selected by default (alphabetical) — open it
 Enter
 Wait+Screen /Tools/
-Sleep 1500ms
+Sleep 2200ms
 
-# Filter tools for echo
-Type "/"
-Sleep 400ms
-Type "echo"
-Sleep 800ms
-Enter
-Sleep 800ms
-
-# Open the call form
+# echo is the first tool — open the call form directly
 Type "c"
 Wait+Screen /call echo/
-Sleep 1200ms
+Sleep 1500ms
 
-# Fill the message field
+# Fill the message field; form's first field is `message` (string).
 Type "hello from mcpal"
-Sleep 1200ms
+Sleep 1500ms
 
 # Submit
 Enter
-Wait+Screen /tool call.*echo/
+Wait+Screen /tool call ev echo/
 Sleep 3500ms
 
-# Back to server view, then back to sidebar
-Escape
-Sleep 1200ms
+# Esc: CallResult → Server (tab Tools, selection kept)
 Escape
 Sleep 1200ms
 
-# Show the help overlay briefly
+# Esc again: Server view stays warm, focus jumps to sidebar
+Escape
+Sleep 1000ms
+
+# Show the help overlay
 Type "?"
-Sleep 2500ms
+Sleep 2800ms
 Escape
 Sleep 800ms
 

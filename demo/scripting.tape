@@ -17,7 +17,6 @@ Set Width 1300
 Set Height 760
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 35ms
-Set Prompt "$ "
 
 Hide
 Type "export MCPAL_CONFIG=$(mktemp -t mcpal-demo.XXXXXX.toml)"
