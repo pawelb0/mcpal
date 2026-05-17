@@ -74,7 +74,7 @@ json5 = "0.4"
 jsonschema = { version = "0.46", default-features = false }
 
 [workspace.lints.rust]
-unsafe_code = "forbid"
+unsafe_code = "deny"
 
 [workspace.lints.clippy]
 redundant_clone = "warn"

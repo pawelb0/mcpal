@@ -43,11 +43,28 @@ async fn connect_stdio(
     if !inherit {
         cmd.stderr(std::process::Stdio::null());
     }
+    // Detach the child from our controlling terminal so uv/npx-style
+    // installers can't write progress UI to /dev/tty over our alt-screen.
+    #[cfg(unix)]
+    detach_session(&mut cmd);
     let transport = TokioChildProcess::new(cmd)?;
     handler
         .serve(transport)
         .await
         .map_err(|e| Error::Service(e.to_string()))
+}
+
+#[cfg(unix)]
+#[allow(unsafe_code)]
+fn detach_session(cmd: &mut Command) {
+    // SAFETY: setsid is async-signal-safe and only mutates the child's
+    // process group / session, not the parent's.
+    unsafe {
+        cmd.pre_exec(|| {
+            libc::setsid();
+            Ok(())
+        });
+    }
 }
 
 async fn connect_http(

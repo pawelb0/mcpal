@@ -26,6 +26,9 @@ tracing.workspace = true
 anyhow.workspace = true
 http.workspace = true
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 toml.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
