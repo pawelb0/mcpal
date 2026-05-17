@@ -122,6 +122,11 @@ pub enum Command {
     },
     /// Tail server notifications until Ctrl-C.
     Watch { reference: String },
+    /// Inspect mcp-ui and OpenAI Apps payloads in tool results.
+    Ui {
+        #[command(subcommand)]
+        action: UiAction,
+    },
     /// Local checks and error-code explanations.
     Debug {
         #[command(subcommand)]
@@ -130,6 +135,24 @@ pub enum Command {
     /// Launch the interactive TUI.
     #[cfg(feature = "tui")]
     Tui,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum UiAction {
+    /// Call a tool and classify each content block (mcp-ui, OpenAI Apps).
+    Inspect {
+        reference: String,
+        name: String,
+        /// Inline JSON, `@path`, or `-`. Pass tool arguments here.
+        #[arg(long)]
+        params: Option<String>,
+        /// Write any UI/app resources to `/tmp/mcpal-ui-*` files.
+        #[arg(long)]
+        save: bool,
+        /// Implies --save; also open each saved file with the OS opener.
+        #[arg(long)]
+        open: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]

@@ -173,7 +173,7 @@ fn render_call_result(
     f: &mut Frame,
     area: Rect,
 ) {
-    let (header, body) = match outcome {
+    let (header, body, ui_badge) = match outcome {
         Ok(r) => {
             let mark = if r.is_error.unwrap_or(false) {
                 Span::styled("✗", Style::default().fg(Color::Red))
@@ -181,22 +181,37 @@ fn render_call_result(
                 Span::styled("✓", Style::default().fg(Color::Green))
             };
             let body = serde_json::to_string_pretty(r).unwrap_or_else(|e| e.to_string());
-            (mark, body)
+            let badge = if crate::commands::ui::has_ui(r) {
+                Some(Span::styled(
+                    "  UI ✦",
+                    Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD),
+                ))
+            } else {
+                None
+            };
+            (mark, body, badge)
         }
         Err(e) => (
             Span::styled("✗", Style::default().fg(Color::Red)),
             e.clone(),
+            None,
         ),
     };
-    let mut lines = vec![Line::from(vec![
+    let mut header_spans = vec![
         header,
         Span::raw(" "),
         Span::styled(sanitize(tool), Style::default().add_modifier(Modifier::BOLD)),
-    ])];
+    ];
+    if let Some(b) = ui_badge {
+        header_spans.push(b);
+    }
+    let mut lines = vec![Line::from(header_spans)];
     lines.push(Line::from(""));
     lines.extend(body.lines().map(|l| Line::from(sanitize(l))));
     lines.push(Line::from(""));
-    lines.push(Line::from("Esc back · c call again"));
+    lines.push(Line::from(
+        "Esc back · c call again · :ui inspect to save the UI payload",
+    ));
     f.render_widget(Paragraph::new(lines), area);
 }
 

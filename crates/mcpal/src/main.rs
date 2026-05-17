@@ -90,6 +90,7 @@ async fn dispatch(cli: Cli) -> Result<()> {
         Auth { action } => commands::auth::run(action, &ctx).await,
         Logging { action } => commands::logging::run(action, &ctx).await,
         Watch { reference } => commands::watch::run(&reference, &ctx).await,
+        Ui { action } => commands::ui::run(action, &ctx).await,
         Debug { action } => match action {
             cli::DebugAction::Doctor => commands::doctor::run(&ctx),
             cli::DebugAction::Explain { code } => exit::explain(&code)
