@@ -5,6 +5,8 @@ mcpal is a command-line client for the
 to MCP servers over stdio or HTTP and calls tools, reads resources,
 gets prompts, runs raw JSON-RPC, and streams notifications.
 
+![mcpal tui](assets/tui.gif)
+
 ```
 mcpal server list --all
 mcpal tool call cursor:linear get-issue --id ENG-123
