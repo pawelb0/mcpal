@@ -161,6 +161,55 @@ section auth
 it          'auth status of an unknown ref'  mc auth status nope
 it          'auth logout (idempotent)'       mc auth logout nope
 
+# ---------- server import promotes Authorization -----
+section 'server import (bearer extraction)'
+IMPORT_DIR="$(mktemp -d -t mcpal-import.XXXXXX)"
+cat >"$IMPORT_DIR/.mcp.json" <<'JSON'
+{
+  "mcpServers": {
+    "lit": {
+      "url": "https://example.test/mcp",
+      "headers": { "Authorization": "Bearer TESTLITERAL-INTEGRATION" }
+    },
+    "envref": {
+      "url": "https://example.test/mcp",
+      "headers": { "Authorization": "Bearer ${MY_TOK}" }
+    }
+  }
+}
+JSON
+it_import_grep() {
+    # Run mc inside $IMPORT_DIR, capture stdout+stderr together.
+    local name="$1" pat="$2"; shift 2
+    ( cd "$IMPORT_DIR" && mc "$@" ) >"$OUT" 2>&1 || true
+    if grep -iqE -- "$pat" "$OUT"; then
+        printf '  ok   %s\n' "$name"
+        pass=$((pass + 1))
+    else
+        printf '  FAIL %s (no /%s/ in stdout+stderr)\n' "$name" "$pat"
+        sed 's/^/      | /' "$OUT" >&2
+        fail=$((fail + 1))
+    fi
+}
+it_import_grep 'import literal moves token to keyring' 'stored in keyring' \
+               server import --from claude-code lit
+it_import_grep 'import env-ref produces bearer_env'    'comes from \$MY_TOK' \
+               server import --from claude-code envref
+it_grep 'literal lands as bearer in keyring'  'bearer: true'  mc auth status lit
+it_grep 'env-ref has no keyring entry'        'bearer: false' mc auth status envref
+it_grep 'env-ref spec records bearer_env'     'bearer_env'    mc server show envref
+it_grep 'literal spec drops Authorization'    '^url:'         mc server show lit
+mc server show lit >"$OUT" 2>&1
+if grep -iq 'authorization' "$OUT"; then
+    printf '  FAIL %s (Authorization survived in spec)\n' 'literal scrubs Authorization' >&2
+    fail=$((fail + 1))
+else
+    printf '  ok   %s\n' 'literal scrubs Authorization'
+    pass=$((pass + 1))
+fi
+it 'cleanup: logout the test bearer' mc auth logout lit
+rm -rf "$IMPORT_DIR"
+
 # ---------- tool input variants ----------
 section 'tool input variants'
 ARGS_JSON="$(mktemp -t mcpal-args.XXXXXX).json"

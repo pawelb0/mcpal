@@ -145,26 +145,36 @@ fn import(args: ServerImportArgs, ctx: &Ctx) -> Result<()> {
     write_server(&ctx.config_path, &alias, spec)
 }
 
-/// Pull any `Authorization: Bearer …` header out of an imported HTTP spec.
-/// Literal tokens go to the OS keyring; `${ENV}` references convert to
-/// `BearerEnv`. Either way, no secret lands in `config.toml`.
-fn promote_auth(spec: &mut ServerSpec, alias: &str) -> Result<()> {
+#[derive(Debug, PartialEq, Eq)]
+enum BearerSource {
+    None,
+    Literal(String),
+    Env(String),
+}
+
+/// Strip any `Authorization: Bearer …` header out of an HTTP spec and
+/// classify it. Literal tokens come back as `Literal`; `${VAR}` / `$VAR`
+/// references mutate `auth` to `BearerEnv` and come back as `Env`. Any
+/// other Authorization value (Basic, Digest, …) is left in place.
+fn extract_bearer(spec: &mut ServerSpec) -> BearerSource {
     let ServerSpec::Http { headers, auth, .. } = spec else {
-        return Ok(());
+        return BearerSource::None;
     };
-    let key = headers
+    let Some(key) = headers
         .keys()
         .find(|k| k.eq_ignore_ascii_case("authorization"))
-        .cloned();
-    let Some(key) = key else { return Ok(()) };
+        .cloned()
+    else {
+        return BearerSource::None;
+    };
     let value = headers.remove(&key).unwrap_or_default();
-    let token = value
+    let Some(token) = value
         .strip_prefix("Bearer ")
         .or_else(|| value.strip_prefix("bearer "))
-        .map(str::trim);
-    let Some(token) = token else {
+        .map(str::trim)
+    else {
         headers.insert(key, value);
-        return Ok(());
+        return BearerSource::None;
     };
     let env_var = token
         .strip_prefix("${")
@@ -175,11 +185,25 @@ fn promote_auth(spec: &mut ServerSpec, alias: &str) -> Result<()> {
         *auth = Some(AuthSpec::BearerEnv {
             env: env.to_string(),
         });
-        eprintln!("imported '{alias}': bearer comes from ${env}");
-        return Ok(());
+        return BearerSource::Env(env.to_string());
     }
-    keyring::put(alias, keyring::Kind::Bearer, token)?;
-    eprintln!("imported '{alias}': bearer stored in keyring");
+    BearerSource::Literal(token.to_string())
+}
+
+/// Pull any `Authorization: Bearer …` header out of an imported HTTP spec.
+/// Literal tokens go to the OS keyring; `${ENV}` references convert to
+/// `BearerEnv`. Either way, no secret lands in `config.toml`.
+fn promote_auth(spec: &mut ServerSpec, alias: &str) -> Result<()> {
+    match extract_bearer(spec) {
+        BearerSource::None => {}
+        BearerSource::Literal(token) => {
+            keyring::put(alias, keyring::Kind::Bearer, &token)?;
+            eprintln!("imported '{alias}': bearer stored in keyring");
+        }
+        BearerSource::Env(env) => {
+            eprintln!("imported '{alias}': bearer comes from ${env}");
+        }
+    }
     Ok(())
 }
 
@@ -235,4 +259,117 @@ async fn peer_field(reference: &str, pointer: &str, ctx: &Ctx) -> Result<()> {
         .unwrap_or(json!(null));
     ctx.render_one(&v)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use super::*;
+
+    fn http(authorization: Option<&str>) -> ServerSpec {
+        let mut headers = BTreeMap::new();
+        if let Some(v) = authorization {
+            headers.insert("Authorization".into(), v.into());
+        }
+        ServerSpec::Http {
+            url: "https://example.test/mcp".into(),
+            headers,
+            auth: None,
+        }
+    }
+
+    fn assert_no_auth_header(spec: &ServerSpec) {
+        if let ServerSpec::Http { headers, .. } = spec {
+            assert!(
+                !headers
+                    .keys()
+                    .any(|k| k.eq_ignore_ascii_case("authorization")),
+                "Authorization header survived: {headers:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn literal_bearer_strips_header() {
+        let mut spec = http(Some("Bearer ghp_REALTOKEN"));
+        let got = extract_bearer(&mut spec);
+        assert_eq!(got, BearerSource::Literal("ghp_REALTOKEN".into()));
+        assert_no_auth_header(&spec);
+    }
+
+    #[test]
+    fn lowercase_bearer_recognised() {
+        let mut spec = http(Some("bearer abc"));
+        assert_eq!(
+            extract_bearer(&mut spec),
+            BearerSource::Literal("abc".into())
+        );
+    }
+
+    #[test]
+    fn header_name_case_insensitive() {
+        let mut headers = BTreeMap::new();
+        headers.insert("authorization".to_string(), "Bearer t".to_string());
+        let mut spec = ServerSpec::Http {
+            url: "https://x".into(),
+            headers,
+            auth: None,
+        };
+        assert_eq!(extract_bearer(&mut spec), BearerSource::Literal("t".into()));
+        assert_no_auth_header(&spec);
+    }
+
+    #[test]
+    fn braced_env_ref_becomes_bearer_env() {
+        let mut spec = http(Some("Bearer ${GH_TOKEN}"));
+        assert_eq!(
+            extract_bearer(&mut spec),
+            BearerSource::Env("GH_TOKEN".into())
+        );
+        let ServerSpec::Http { auth, .. } = &spec else {
+            unreachable!()
+        };
+        assert!(matches!(auth, Some(AuthSpec::BearerEnv { env }) if env == "GH_TOKEN"));
+        assert_no_auth_header(&spec);
+    }
+
+    #[test]
+    fn unbraced_env_ref_becomes_bearer_env() {
+        let mut spec = http(Some("Bearer $GH_TOKEN"));
+        assert_eq!(
+            extract_bearer(&mut spec),
+            BearerSource::Env("GH_TOKEN".into())
+        );
+    }
+
+    #[test]
+    fn non_bearer_scheme_preserved() {
+        let mut spec = http(Some("Basic dXNlcjpwYXNz"));
+        assert_eq!(extract_bearer(&mut spec), BearerSource::None);
+        let ServerSpec::Http { headers, .. } = &spec else {
+            unreachable!()
+        };
+        assert_eq!(
+            headers.get("Authorization").map(String::as_str),
+            Some("Basic dXNlcjpwYXNz"),
+        );
+    }
+
+    #[test]
+    fn missing_header_is_no_op() {
+        let mut spec = http(None);
+        assert_eq!(extract_bearer(&mut spec), BearerSource::None);
+        assert_no_auth_header(&spec);
+    }
+
+    #[test]
+    fn stdio_spec_short_circuits() {
+        let mut spec = ServerSpec::Stdio {
+            command: "npx".into(),
+            args: vec![],
+            env: BTreeMap::new(),
+        };
+        assert_eq!(extract_bearer(&mut spec), BearerSource::None);
+    }
 }

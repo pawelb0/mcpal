@@ -247,3 +247,108 @@ fn opener() -> &'static str {
 fn opener() -> &'static str {
     "explorer"
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    fn parse(v: serde_json::Value) -> CallToolResult {
+        serde_json::from_value(v).expect("valid CallToolResult JSON")
+    }
+
+    #[test]
+    fn text_block_classified_as_text() {
+        let r = parse(json!({
+            "content": [{ "type": "text", "text": "hello" }]
+        }));
+        let hits = classify(&r);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].kind, HitKind::Text);
+        assert_eq!(hits[0].size_bytes, 5);
+    }
+
+    #[test]
+    fn ui_uri_classified_as_mcp_ui() {
+        let r = parse(json!({
+            "content": [{
+                "type": "resource",
+                "resource": {
+                    "uri": "ui://weather/london",
+                    "mimeType": "text/html",
+                    "text": "<html></html>"
+                }
+            }]
+        }));
+        let hits = classify(&r);
+        assert_eq!(hits[0].kind, HitKind::McpUi);
+        assert_eq!(hits[0].uri.as_deref(), Some("ui://weather/london"));
+        assert!(has_ui_in(&r));
+    }
+
+    #[test]
+    fn vnd_openai_mime_classified_as_openai_app() {
+        let r = parse(json!({
+            "content": [{
+                "type": "resource",
+                "resource": {
+                    "uri": "openai://app/x",
+                    "mimeType": "application/vnd.openai.app+json",
+                    "text": "{\"component\":\"X\"}"
+                }
+            }]
+        }));
+        let hits = classify(&r);
+        assert_eq!(hits[0].kind, HitKind::OpenAiApp);
+        assert!(has_ui_in(&r));
+    }
+
+    #[test]
+    fn plain_resource_not_flagged() {
+        let r = parse(json!({
+            "content": [{
+                "type": "resource",
+                "resource": {
+                    "uri": "file:///etc/hosts",
+                    "mimeType": "text/plain",
+                    "text": "127.0.0.1 localhost"
+                }
+            }]
+        }));
+        let hits = classify(&r);
+        assert_eq!(hits[0].kind, HitKind::Resource);
+        assert!(!has_ui_in(&r));
+    }
+
+    #[test]
+    fn mixed_payload_counts_ui_correctly() {
+        let r = parse(json!({
+            "content": [
+                { "type": "text", "text": "describe me" },
+                { "type": "resource", "resource": {
+                    "uri": "ui://x", "mimeType": "text/html", "text": "<p/>" }
+                },
+                { "type": "resource", "resource": {
+                    "uri": "data://other", "mimeType": "application/octet-stream",
+                    "blob": "" }
+                }
+            ]
+        }));
+        let hits = classify(&r);
+        assert_eq!(hits.len(), 3);
+        assert_eq!(hits[0].kind, HitKind::Text);
+        assert_eq!(hits[1].kind, HitKind::McpUi);
+        assert_eq!(hits[2].kind, HitKind::Resource);
+        assert!(has_ui_in(&r));
+    }
+
+    /// `has_ui` is gated by `#[cfg(feature = "tui")]`, so the test
+    /// re-implements the predicate locally to stay buildable without
+    /// the feature.
+    fn has_ui_in(r: &CallToolResult) -> bool {
+        classify(r)
+            .iter()
+            .any(|h| matches!(h.kind, HitKind::McpUi | HitKind::OpenAiApp))
+    }
+}
