@@ -178,14 +178,58 @@ fn fields_from_schema(schema: &serde_json::Map<String, Value>) -> Vec<Field> {
         .iter()
         .map(|(name, def)| {
             let ty = def.get("type").and_then(|v| v.as_str()).unwrap_or("string");
+            let kind = FieldKind::from_str(ty);
             Field {
                 name: name.clone(),
                 required: required.contains(name),
-                kind: FieldKind::from_str(ty),
-                buf: String::new(),
+                kind,
+                buf: prefill(def, kind),
             }
         })
         .collect()
+}
+
+fn prefill(def: &Value, kind: FieldKind) -> String {
+    // Explicit default wins.
+    if let Some(d) = def.get("default") {
+        return scalar(d);
+    }
+    // Enum's first option is a sensible starting point.
+    if let Some(first) = def.get("enum").and_then(Value::as_array).and_then(|a| a.first()) {
+        return scalar(first);
+    }
+    match kind {
+        // Single-line compact JSON keeps the modal readable; submit accepts
+        // any valid JSON.
+        FieldKind::Json => serde_json::to_string(&example(def)).unwrap_or_default(),
+        _ => String::new(),
+    }
+}
+
+fn scalar(v: &Value) -> String {
+    match v {
+        Value::String(s) => s.clone(),
+        Value::Null => String::new(),
+        other => other.to_string(),
+    }
+}
+
+fn example(s: &Value) -> Value {
+    match s.get("type").and_then(Value::as_str).unwrap_or("") {
+        "object" => Value::Object(
+            s.get("properties")
+                .and_then(Value::as_object)
+                .map(|p| p.iter().map(|(k, v)| (k.clone(), example(v))).collect())
+                .unwrap_or_default(),
+        ),
+        "array" => Value::Array(vec![
+            s.get("items").map(example).unwrap_or(Value::Null),
+        ]),
+        "string" => Value::String(String::new()),
+        "integer" | "number" => Value::Number(0.into()),
+        "boolean" => Value::Bool(false),
+        _ => Value::Null,
+    }
 }
 
 fn parse_field(buf: &str, kind: FieldKind) -> Result<Value, String> {
