@@ -10,6 +10,7 @@ mcpal server list --all
 mcpal tool call cursor:linear get-issue --id ENG-123
 mcpal auth login notion --oauth
 mcpal --query 'content[0].text' tool call ev echo --message hi
+mcpal tui                                       # interactive browser
 ```
 
 ## Install
