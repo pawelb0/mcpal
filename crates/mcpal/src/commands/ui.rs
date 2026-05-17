@@ -10,7 +10,9 @@ use std::io::Write;
 
 use anyhow::{Context, Result};
 use base64::Engine;
-use mcpal_core::rmcp::model::{CallToolRequestParams, CallToolResult, RawContent, ResourceContents};
+use mcpal_core::rmcp::model::{
+    CallToolRequestParams, CallToolResult, RawContent, ResourceContents,
+};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -222,12 +224,7 @@ fn save_artifacts(hits: &[Hit], also_open: bool) -> Result<()> {
             Some(m) if m.contains("javascript") => "js",
             _ => "html",
         };
-        let path = format!(
-            "/tmp/mcpal-ui-{}-{}.{}",
-            std::process::id(),
-            h.index,
-            ext
-        );
+        let path = format!("/tmp/mcpal-ui-{}-{}.{}", std::process::id(), h.index, ext);
         let mut f = std::fs::File::create(&path).with_context(|| format!("create {path}"))?;
         f.write_all(bytes)?;
         eprintln!("saved hit #{}: {path}", h.index);

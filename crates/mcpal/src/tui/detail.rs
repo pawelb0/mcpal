@@ -184,7 +184,9 @@ fn render_call_result(
             let badge = if crate::commands::ui::has_ui(r) {
                 Some(Span::styled(
                     "  UI ✦",
-                    Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::Magenta)
+                        .add_modifier(Modifier::BOLD),
                 ))
             } else {
                 None
@@ -200,7 +202,10 @@ fn render_call_result(
     let mut header_spans = vec![
         header,
         Span::raw(" "),
-        Span::styled(sanitize(tool), Style::default().add_modifier(Modifier::BOLD)),
+        Span::styled(
+            sanitize(tool),
+            Style::default().add_modifier(Modifier::BOLD),
+        ),
     ];
     if let Some(b) = ui_badge {
         header_spans.push(b);
@@ -285,8 +290,7 @@ fn render_server(sv: &mut ServerView, f: &mut Frame, area: Rect) {
             })
             .collect(),
     };
-    let list = List::new(items)
-        .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
+    let list = List::new(items).highlight_style(Style::default().add_modifier(Modifier::REVERSED));
     f.render_stateful_widget(list, chunks[1], &mut sv.state);
 }
 

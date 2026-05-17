@@ -178,7 +178,11 @@ impl Sidebar {
         let list = List::new(items)
             .block(
                 Block::default()
-                    .title(format!("Servers ({}/{})", visible.len(), self.entries.len()))
+                    .title(format!(
+                        "Servers ({}/{})",
+                        visible.len(),
+                        self.entries.len()
+                    ))
                     .borders(Borders::ALL)
                     .border_style(border),
             )

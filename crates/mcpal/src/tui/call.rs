@@ -100,8 +100,7 @@ impl CallForm {
             if f.buf.is_empty() && !f.required {
                 continue;
             }
-            let parsed = parse_field(&f.buf, f.kind)
-                .map_err(|e| format!("{}: {e}", f.name))?;
+            let parsed = parse_field(&f.buf, f.kind).map_err(|e| format!("{}: {e}", f.name))?;
             obj.insert(f.name.clone(), parsed);
         }
         Ok(Value::Object(obj))
@@ -134,7 +133,9 @@ pub fn render(form: &CallForm, f: &mut Frame, area: Rect) {
         .flat_map(|(i, fld)| {
             let active = i == form.current;
             let header_style = if active {
-                Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan)
+                Style::default()
+                    .add_modifier(Modifier::BOLD)
+                    .fg(Color::Cyan)
             } else {
                 Style::default()
             };
@@ -153,9 +154,8 @@ pub fn render(form: &CallForm, f: &mut Frame, area: Rect) {
         .collect();
     f.render_widget(Paragraph::new(lines), rows[0]);
     f.render_widget(
-        Paragraph::new("Enter submit  Esc cancel  Tab next field").style(
-            Style::default().fg(Color::DarkGray),
-        ),
+        Paragraph::new("Enter submit  Esc cancel  Tab next field")
+            .style(Style::default().fg(Color::DarkGray)),
         rows[1],
     );
 }
@@ -195,7 +195,11 @@ fn prefill(def: &Value, kind: FieldKind) -> String {
         return scalar(d);
     }
     // Enum's first option is a sensible starting point.
-    if let Some(first) = def.get("enum").and_then(Value::as_array).and_then(|a| a.first()) {
+    if let Some(first) = def
+        .get("enum")
+        .and_then(Value::as_array)
+        .and_then(|a| a.first())
+    {
         return scalar(first);
     }
     match kind {
@@ -222,9 +226,7 @@ fn example(s: &Value) -> Value {
                 .map(|p| p.iter().map(|(k, v)| (k.clone(), example(v))).collect())
                 .unwrap_or_default(),
         ),
-        "array" => Value::Array(vec![
-            s.get("items").map(example).unwrap_or(Value::Null),
-        ]),
+        "array" => Value::Array(vec![s.get("items").map(example).unwrap_or(Value::Null)]),
         "string" => Value::String(String::new()),
         "integer" | "number" => Value::Number(0.into()),
         "boolean" => Value::Bool(false),

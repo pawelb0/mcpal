@@ -136,10 +136,7 @@ impl<'a> App<'a> {
                     .unwrap_or_else(|| "?".into()),
             ),
             "log" => {
-                let level = n
-                    .get("level")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("info");
+                let level = n.get("level").and_then(|v| v.as_str()).unwrap_or("info");
                 let msg = n.get("data").map(|v| v.to_string()).unwrap_or_default();
                 format!("→ log {level}: {msg}")
             }
@@ -151,10 +148,7 @@ impl<'a> App<'a> {
                 format!("→ elicitation: {msg}")
             }
             "elicitation_response" => {
-                let action = n
-                    .get("action")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("?");
+                let action = n.get("action").and_then(|v| v.as_str()).unwrap_or("?");
                 format!("← elicit {action}")
             }
             "sampling_request" => {
@@ -169,10 +163,7 @@ impl<'a> App<'a> {
                 if let Some(err) = n.get("error").and_then(|v| v.as_str()) {
                     format!("← sampling error: {err}")
                 } else {
-                    let model = n
-                        .get("model")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("?");
+                    let model = n.get("model").and_then(|v| v.as_str()).unwrap_or("?");
                     format!("← sampling reply from {model}")
                 }
             }
@@ -188,7 +179,10 @@ impl<'a> App<'a> {
             return;
         }
         if self.help {
-            if matches!(key.code, KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q')) {
+            if matches!(
+                key.code,
+                KeyCode::Esc | KeyCode::Char('?') | KeyCode::Char('q')
+            ) {
                 self.help = false;
             }
             return;
@@ -209,7 +203,9 @@ impl<'a> App<'a> {
     }
 
     fn on_modal_key(&mut self, key: KeyEvent) {
-        let Some(modal) = self.modal.as_mut() else { return };
+        let Some(modal) = self.modal.as_mut() else {
+            return;
+        };
         match modal {
             Modal::Call(form) => match form.on_key(key) {
                 call::Outcome::Cancel => self.modal = None,
@@ -365,11 +361,7 @@ impl<'a> App<'a> {
         }
     }
 
-    fn set_call_result(
-        &mut self,
-        tool: String,
-        outcome: Result<CallToolResult, String>,
-    ) {
+    fn set_call_result(&mut self, tool: String, outcome: Result<CallToolResult, String>) {
         let cur = std::mem::replace(&mut self.detail, View::Empty);
         let parent = match cur {
             View::Server(sv) => sv,
@@ -379,7 +371,11 @@ impl<'a> App<'a> {
                 return;
             }
         };
-        self.detail = View::CallResult { parent, tool, outcome };
+        self.detail = View::CallResult {
+            parent,
+            tool,
+            outcome,
+        };
     }
 
     fn open_selected(&mut self) {
@@ -407,7 +403,9 @@ impl<'a> App<'a> {
     }
 
     fn submit_call(&mut self) {
-        let Some(Modal::Call(form)) = self.modal.take() else { return };
+        let Some(Modal::Call(form)) = self.modal.take() else {
+            return;
+        };
         let tool_name = form.tool.name.to_string();
         let arguments = match form.to_json() {
             Ok(Value::Object(m)) => m,
@@ -417,8 +415,12 @@ impl<'a> App<'a> {
                 return;
             }
         };
-        let Some(reference) = self.current_server_ref() else { return };
-        let Some(client) = self.services.get(&reference).cloned() else { return };
+        let Some(reference) = self.current_server_ref() else {
+            return;
+        };
+        let Some(client) = self.services.get(&reference).cloned() else {
+            return;
+        };
         let mut req = CallToolRequestParams::new(tool_name.clone());
         if !arguments.is_empty() {
             req = req.with_arguments(arguments);
@@ -427,10 +429,7 @@ impl<'a> App<'a> {
             .info(format!("$ tool call {reference} {tool_name}"));
         self.pending.push(
             async move {
-                let outcome = client
-                    .call_tool(req)
-                    .await
-                    .map_err(|e| e.to_string());
+                let outcome = client.call_tool(req).await.map_err(|e| e.to_string());
                 AsyncMsg::Called {
                     reference,
                     tool: tool_name,
@@ -458,7 +457,11 @@ impl<'a> App<'a> {
                 self.output.err(format!("{reference}: {err}"));
                 self.detail = View::Failed { reference, err };
             }
-            AsyncMsg::Called { reference, tool, outcome } => {
+            AsyncMsg::Called {
+                reference,
+                tool,
+                outcome,
+            } => {
                 match &outcome {
                     Ok(r) if r.is_error.unwrap_or(false) => {
                         self.output.err(format!("{reference} {tool}: server error"));
@@ -488,8 +491,7 @@ impl<'a> App<'a> {
             .direction(Direction::Horizontal)
             .constraints([Constraint::Length(28), Constraint::Min(0)])
             .split(outer[0]);
-        self.sidebar
-            .render(f, top[0], self.focus == Focus::Sidebar);
+        self.sidebar.render(f, top[0], self.focus == Focus::Sidebar);
         detail::render(&mut self.detail, f, top[1], self.focus == Focus::Detail);
         self.output.render(f, outer[1], self.focus == Focus::Output);
         self.render_hint(f, outer[2]);
@@ -565,10 +567,7 @@ fn render_help(f: &mut Frame, area: Rect) {
                 ))
             } else {
                 Line::from(vec![
-                    Span::styled(
-                        format!("  {:<14}", key),
-                        Style::default().fg(Color::Cyan),
-                    ),
+                    Span::styled(format!("  {:<14}", key), Style::default().fg(Color::Cyan)),
                     Span::raw(desc.to_string()),
                 ])
             }
@@ -615,4 +614,3 @@ fn centered(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
         ])
         .split(vertical[1])[1]
 }
-

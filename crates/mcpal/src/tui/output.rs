@@ -8,7 +8,13 @@ use ratatui::widgets::{Block, Borders, Paragraph};
 
 fn sanitize(s: &str) -> String {
     s.chars()
-        .map(|c| if c.is_control() && c != '\n' && c != '\t' { '·' } else { c })
+        .map(|c| {
+            if c.is_control() && c != '\n' && c != '\t' {
+                '·'
+            } else {
+                c
+            }
+        })
         .collect()
 }
 
