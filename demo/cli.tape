@@ -25,9 +25,11 @@ Type "export PS1='$ '"
 Enter
 Type "mcpal config init >/dev/null"
 Enter
-Type "clear"
-Enter
+Sleep 500ms
+Ctrl+L
+Sleep 600ms
 Show
+Sleep 400ms
 
 # Register a stdio MCP server in one line
 Type "mcpal server add ev -- npx -y @modelcontextprotocol/server-everything"

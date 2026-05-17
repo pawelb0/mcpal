@@ -29,9 +29,11 @@ Type "mcpal server add ev -- npx -y @modelcontextprotocol/server-everything"
 Enter
 Type "mcpal server ping ev >/dev/null 2>&1 || true"
 Enter
-Type "clear"
-Enter
+Sleep 500ms
+Ctrl+L
+Sleep 600ms
 Show
+Sleep 400ms
 
 # JMESPath: extract one field
 Type "mcpal --query 'content[0].text' tool call ev echo --message hi"

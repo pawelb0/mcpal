@@ -35,11 +35,11 @@ Enter
 Sleep 200ms
 Type "mcpal server ping ev >/dev/null 2>&1 || true"
 Enter
-Sleep 200ms
-Type "clear"
-Enter
-Sleep 200ms
+Sleep 500ms
+Ctrl+L
+Sleep 600ms
 Show
+Sleep 400ms
 
 # --- demo proper ---
 Type "mcpal tui"
