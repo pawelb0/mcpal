@@ -1,9 +1,14 @@
 # mcpal
 
-mcpal is a command-line client for the
-[Model Context Protocol](https://modelcontextprotocol.io). It connects
-to MCP servers over stdio or HTTP and calls tools, reads resources,
-gets prompts, runs raw JSON-RPC, and streams notifications.
+**Inspect, call, and script any MCP server — over stdio or HTTP, with
+OAuth, from one CLI.** The curl-equivalent for the
+[Model Context Protocol](https://modelcontextprotocol.io).
+
+> Your editors (Claude Desktop, Cursor, Zed, opencode) configure dozens
+> of MCP servers. Once configured, the only way to drive them is from
+> inside that chat app. mcpal is the shell tool that was missing: point
+> it at any server and call tools, read resources, get prompts, run raw
+> JSON-RPC, or stream notifications.
 
 ```bash
 mcpal server list --all

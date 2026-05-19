@@ -1,8 +1,8 @@
 # Your first MCP call
 
-A guided walk-through. By the end you will have mcpal installed,
-a reference MCP server registered, and a tool call returning a real
-response.
+By the end you will have called a real MCP tool from your shell —
+mcpal installed, a reference server registered, a live response back.
+A lesson, not a reference; follow it top to bottom.
 
 Time: about five minutes once `npx` is cached.
 
