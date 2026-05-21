@@ -23,7 +23,7 @@ pub async fn run(action: ServerAction, ctx: &Ctx) -> Result<()> {
             ctx.render_one(&resolve(&reference, ctx)?.spec)?;
             Ok(())
         }
-        ServerAction::Add(args) => add(args, ctx),
+        ServerAction::Add(args) => add(args, ctx).await,
         ServerAction::Remove { alias } => {
             let mut cfg = Config::load(&ctx.config_path)?;
             if cfg.server.remove(&alias).is_none() {
@@ -104,33 +104,44 @@ fn parse_env(kvs: &[String]) -> Result<BTreeMap<String, String>> {
         .collect()
 }
 
-fn add(args: ServerAddArgs, ctx: &Ctx) -> Result<()> {
-    let (command, stdio_args) = match (args.stdio, args.command.split_first()) {
-        (Some(_), Some(_)) => bail!("can't combine `--stdio` with a trailing `-- <cmd>`"),
-        (Some(cmd), None) => (Some(cmd), args.args),
-        (None, Some((c, rest))) => {
-            if !args.args.is_empty() {
-                bail!("can't combine `--arg` with a trailing `-- <cmd>`");
-            }
-            (Some(c.clone()), rest.to_vec())
-        }
-        (None, None) => (None, args.args),
+async fn add(args: ServerAddArgs, ctx: &Ctx) -> Result<()> {
+    let alias = args.alias.clone();
+    let no_login = args.no_login;
+    let force = args.force;
+    let (spec, intent) = derive(args)?;
+    let transport = match &spec {
+        ServerSpec::Http { .. } => "http",
+        ServerSpec::Stdio { .. } => "stdio",
     };
-    let spec = match (command, args.http) {
-        (Some(_), Some(_)) => bail!("--stdio/`-- cmd` and --http are mutually exclusive"),
-        (Some(cmd), None) => ServerSpec::Stdio {
-            command: cmd,
-            args: stdio_args,
-            env: parse_env(&args.env)?,
-        },
-        (None, Some(url)) => ServerSpec::Http {
-            url,
-            headers: BTreeMap::new(),
-            auth: None,
-        },
-        (None, None) => bail!("provide a stdio command (`-- cmd args…`) or `--http <url>`"),
-    };
-    write_server(&ctx.config_path, &args.alias, spec)
+    write_server(&ctx.config_path, &alias, spec, force)?;
+    materialise_auth(&alias, &intent, no_login, ctx).await?;
+    ctx.render_one(&json!({
+        "ok": true,
+        "ref": alias,
+        "transport": transport,
+        "auth": auth_label(&intent),
+    }))?;
+    Ok(())
+}
+
+fn auth_label(intent: &AuthIntent) -> &'static str {
+    match intent {
+        AuthIntent::None => "none",
+        AuthIntent::Literal(_) => "bearer",
+        AuthIntent::Env(_) => "bearer_env",
+        AuthIntent::Oauth => "oauth",
+    }
+}
+
+async fn materialise_auth(
+    _alias: &str,
+    _intent: &AuthIntent,
+    _no_login: bool,
+    _ctx: &Ctx,
+) -> Result<()> {
+    // Filled out in Task 2 + Task 3. Keeping a no-op stub here so the
+    // intent-derivation tests can run.
+    Ok(())
 }
 
 fn import(args: ServerImportArgs, ctx: &Ctx) -> Result<()> {
@@ -142,7 +153,7 @@ fn import(args: ServerImportArgs, ctx: &Ctx) -> Result<()> {
     let alias = args.alias.unwrap_or_else(|| found.name.clone());
     let mut spec = found.spec.clone();
     promote_auth(&mut spec, &alias)?;
-    write_server(&ctx.config_path, &alias, spec)
+    write_server(&ctx.config_path, &alias, spec, false)
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -150,6 +161,90 @@ enum BearerSource {
     None,
     Literal(String),
     Env(String),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum AuthIntent {
+    None,
+    Literal(String),
+    Env(String),
+    Oauth,
+}
+
+// Pure derivation of what add() will persist. No I/O.
+fn derive(args: ServerAddArgs) -> Result<(ServerSpec, AuthIntent)> {
+    let (command, stdio_args) = match (args.stdio, args.command.split_first()) {
+        (Some(_), Some(_)) => bail!("can't combine `--stdio` with a trailing `-- <cmd>`"),
+        (Some(cmd), None) => (Some(cmd), args.args),
+        (None, Some((c, rest))) => {
+            if !args.args.is_empty() {
+                bail!("can't combine `--arg` with a trailing `-- <cmd>`");
+            }
+            (Some(c.clone()), rest.to_vec())
+        }
+        (None, None) => (None, args.args),
+    };
+    let is_stdio = command.is_some();
+    let auth_flags_present = args.bearer.is_some()
+        || args.bearer_env.is_some()
+        || args.oauth
+        || args.header.iter().any(|h| {
+            h.split_once(':')
+                .is_some_and(|(k, _)| k.eq_ignore_ascii_case("authorization"))
+        });
+    if is_stdio && auth_flags_present {
+        bail!("auth flags require --http (stdio servers carry no Authorization)");
+    }
+
+    let mut spec = match (command, args.http) {
+        (Some(_), Some(_)) => bail!("--stdio/`-- cmd` and --http are mutually exclusive"),
+        (Some(cmd), None) => ServerSpec::Stdio {
+            command: cmd,
+            args: stdio_args,
+            env: parse_env(&args.env)?,
+        },
+        (None, Some(url)) => {
+            let mut headers = BTreeMap::new();
+            for h in &args.header {
+                let (k, v) = h
+                    .split_once(':')
+                    .ok_or_else(|| anyhow!("--header needs `K: V`, got: {h}"))?;
+                headers.insert(k.trim().to_string(), v.trim().to_string());
+            }
+            ServerSpec::Http {
+                url,
+                headers,
+                auth: None,
+            }
+        }
+        (None, None) => bail!("provide a stdio command (`-- cmd args…`) or `--http <url>`"),
+    };
+
+    // 1) header-derived Authorization wins as the *baseline*.
+    let header_intent = match extract_bearer(&mut spec) {
+        BearerSource::None => AuthIntent::None,
+        BearerSource::Literal(t) => AuthIntent::Literal(t),
+        BearerSource::Env(v) => AuthIntent::Env(v),
+    };
+
+    // 2) explicit --bearer / --bearer-env / --oauth override the header path.
+    let intent = if let Some(t) = args.bearer {
+        AuthIntent::Literal(t)
+    } else if let Some(v) = args.bearer_env {
+        if let ServerSpec::Http { auth, .. } = &mut spec {
+            *auth = Some(AuthSpec::BearerEnv { env: v.clone() });
+        }
+        AuthIntent::Env(v)
+    } else if args.oauth {
+        if let ServerSpec::Http { auth, .. } = &mut spec {
+            *auth = Some(AuthSpec::Oauth);
+        }
+        AuthIntent::Oauth
+    } else {
+        header_intent
+    };
+
+    Ok((spec, intent))
 }
 
 /// Strip any `Authorization: Bearer …` header out of an HTTP spec and
@@ -229,14 +324,14 @@ async fn install(args: ServerInstallArgs, ctx: &Ctx) -> Result<()> {
     let alias = args
         .alias
         .unwrap_or_else(|| default_alias(&server.name).into());
-    write_server(&ctx.config_path, &alias, spec)?;
+    write_server(&ctx.config_path, &alias, spec, false)?;
     eprintln!("installed {} as '{alias}'", server.name);
     Ok(())
 }
 
-fn write_server(path: &std::path::Path, alias: &str, spec: ServerSpec) -> Result<()> {
+fn write_server(path: &std::path::Path, alias: &str, spec: ServerSpec, force: bool) -> Result<()> {
     let mut cfg = Config::load(path)?;
-    if cfg.server.contains_key(alias) {
+    if cfg.server.contains_key(alias) && !force {
         bail!("server '{alias}' already exists");
     }
     cfg.server.insert(alias.into(), spec);
@@ -266,6 +361,125 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::*;
+
+    fn args(alias: &str) -> crate::cli::ServerAddArgs {
+        crate::cli::ServerAddArgs {
+            alias: alias.into(),
+            stdio: None,
+            args: vec![],
+            env: vec![],
+            http: None,
+            bearer: None,
+            bearer_env: None,
+            oauth: false,
+            header: vec![],
+            no_login: false,
+            force: false,
+            command: vec![],
+        }
+    }
+
+    #[test]
+    fn intent_none_when_no_auth_flags() {
+        let mut a = args("x");
+        a.http = Some("https://x".into());
+        let (spec, intent) = derive(a).expect("derive");
+        assert!(matches!(intent, AuthIntent::None));
+        assert!(matches!(spec, ServerSpec::Http { .. }));
+    }
+
+    #[test]
+    fn intent_literal_from_bearer_flag() {
+        let mut a = args("x");
+        a.http = Some("https://x".into());
+        a.bearer = Some("abc".into());
+        let (_, intent) = derive(a).expect("derive");
+        assert!(matches!(intent, AuthIntent::Literal(ref t) if t == "abc"));
+    }
+
+    #[test]
+    fn intent_env_from_bearer_env_flag() {
+        let mut a = args("x");
+        a.http = Some("https://x".into());
+        a.bearer_env = Some("GH_TOKEN".into());
+        let (spec, intent) = derive(a).expect("derive");
+        assert!(matches!(intent, AuthIntent::Env(ref v) if v == "GH_TOKEN"));
+        if let ServerSpec::Http { auth, .. } = spec {
+            assert!(matches!(
+                auth,
+                Some(mcpal_core::AuthSpec::BearerEnv { env }) if env == "GH_TOKEN"
+            ));
+        } else {
+            panic!("expected http spec");
+        }
+    }
+
+    #[test]
+    fn intent_oauth_from_oauth_flag() {
+        let mut a = args("x");
+        a.http = Some("https://x".into());
+        a.oauth = true;
+        let (spec, intent) = derive(a).expect("derive");
+        assert!(matches!(intent, AuthIntent::Oauth));
+        if let ServerSpec::Http { auth, .. } = spec {
+            assert!(matches!(auth, Some(mcpal_core::AuthSpec::Oauth)));
+        }
+    }
+
+    #[test]
+    fn header_authorization_bearer_promotes_to_literal() {
+        let mut a = args("x");
+        a.http = Some("https://x".into());
+        a.header = vec!["Authorization: Bearer abc".into()];
+        let (spec, intent) = derive(a).expect("derive");
+        assert!(matches!(intent, AuthIntent::Literal(ref t) if t == "abc"));
+        if let ServerSpec::Http { headers, .. } = spec {
+            assert!(
+                !headers
+                    .keys()
+                    .any(|k| k.eq_ignore_ascii_case("authorization"))
+            );
+        }
+    }
+
+    #[test]
+    fn header_authorization_env_promotes_to_env() {
+        let mut a = args("x");
+        a.http = Some("https://x".into());
+        a.header = vec!["Authorization: Bearer ${GH_TOKEN}".into()];
+        let (_, intent) = derive(a).expect("derive");
+        assert!(matches!(intent, AuthIntent::Env(ref v) if v == "GH_TOKEN"));
+    }
+
+    #[test]
+    fn header_non_authorization_kept_in_spec() {
+        let mut a = args("x");
+        a.http = Some("https://x".into());
+        a.header = vec!["X-Api-Key: k1".into()];
+        let (spec, intent) = derive(a).expect("derive");
+        assert!(matches!(intent, AuthIntent::None));
+        if let ServerSpec::Http { headers, .. } = spec {
+            assert_eq!(headers.get("X-Api-Key").map(String::as_str), Some("k1"));
+        }
+    }
+
+    #[test]
+    fn stdio_with_bearer_is_rejected() {
+        let mut a = args("x");
+        a.command = vec!["echo".into(), "hi".into()];
+        a.bearer = Some("abc".into());
+        let err = derive(a).unwrap_err();
+        assert!(err.to_string().contains("--http"));
+    }
+
+    #[test]
+    fn header_missing_colon_is_rejected() {
+        let mut a = args("x");
+        a.http = Some("https://x".into());
+        a.header = vec!["NoColonHere".into()];
+        let err = derive(a).unwrap_err();
+        assert!(err.to_string().to_lowercase().contains("header"));
+    }
 
     fn http(authorization: Option<&str>) -> ServerSpec {
         let mut headers = BTreeMap::new();

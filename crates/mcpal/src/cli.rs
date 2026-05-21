@@ -324,6 +324,12 @@ pub struct ServerInstallArgs {
 }
 
 #[derive(clap::Args, Debug)]
+#[command(group(
+    clap::ArgGroup::new("auth-mode")
+        .args(["bearer", "bearer_env", "oauth"])
+        .multiple(false)
+        .required(false)
+))]
 pub struct ServerAddArgs {
     pub alias: String,
     #[arg(long, conflicts_with = "http")]
@@ -339,6 +345,24 @@ pub struct ServerAddArgs {
     pub env: Vec<String>,
     #[arg(long)]
     pub http: Option<String>,
+    /// Literal bearer token → OS keyring.
+    #[arg(long, value_name = "TOKEN")]
+    pub bearer: Option<String>,
+    /// Spec auth = bearer_env { env = VAR } — token read from env at runtime.
+    #[arg(long = "bearer-env", value_name = "VAR")]
+    pub bearer_env: Option<String>,
+    /// Run the OAuth 2.1 (PKCE + DCR) browser flow inline.
+    #[arg(long)]
+    pub oauth: bool,
+    /// Pass `K: V` to the HTTP server (repeatable).
+    #[arg(long = "header", value_name = "K: V", num_args = 1)]
+    pub header: Vec<String>,
+    /// With `--oauth`: write the spec but skip the browser handshake.
+    #[arg(long = "no-login")]
+    pub no_login: bool,
+    /// Overwrite an existing entry of the same name.
+    #[arg(long)]
+    pub force: bool,
     /// `mcpal server add ev -- npx -y @mcp/server-everything`.
     #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 0..)]
     pub command: Vec<String>,
