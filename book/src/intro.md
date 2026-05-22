@@ -10,6 +10,8 @@ OAuth, from one CLI.** The curl-equivalent for the
 > it at any server and call tools, read resources, get prompts, run raw
 > JSON-RPC, or stream notifications.
 
+New here? **[Install](./install.md) → [Your first MCP call](./getting-started.md) → [Concepts](./concepts.md)**.
+
 ```bash
 mcpal server list --all
 mcpal tool call cursor:linear get-issue --id ENG-123

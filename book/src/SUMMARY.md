@@ -1,10 +1,12 @@
 # Summary
 
 [Introduction](./intro.md)
+[Install](./install.md)
+[Your first MCP call](./getting-started.md)
 
-# Tutorial
+# Concepts
 
-- [Your first MCP call](./getting-started.md)
+- [Concepts](./concepts.md)
 
 # How-to guides
 
@@ -19,7 +21,4 @@
 
 - [Protocol compliance matrix](./protocol-matrix.md)
 - [Error codes](./error-codes.md)
-
-# Explanation
-
-- [Concepts](./concepts.md)
+- [Changelog](./changelog.md)
