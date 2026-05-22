@@ -512,5 +512,77 @@ it_no_grep 'no AWS-CLI in server add --help' 'AWS-CLI' \
 it_no_grep 'no AWS-CLI in tool call --help' 'AWS-CLI' \
     mc tool call --help
 
+# ---------- collection + mcpal run ----------
+section "collection + mcpal run"
+
+# Re-provision the reference server — cleanup above removed `$REF`.
+mc server add "$REF" -- npx -y @modelcontextprotocol/server-everything >/dev/null 2>&1 || true
+
+COLL_DIR="$(mktemp -d -t mcpal-coll.XXXXXX)"
+COLL="$COLL_DIR/mcpal.yml"
+cat > "$COLL" <<'YAML'
+default-profile: dev
+
+profiles:
+  dev:
+    msg: "hello-dev"
+  prod:
+    msg: "hello-prod"
+
+calls:
+  echo:
+    server: ev
+    tool: echo
+    params:
+      message: "{{profile.msg}}"
+
+  echo-env:
+    server: ev
+    tool: echo
+    params:
+      message: "{{env.MCPAL_RUN_TEST_VAR}}"
+YAML
+
+run_cmd() { "$BIN" --config "$CFG" --collection "$COLL" "$@"; }
+
+it_grep 'run --dry-run prints resolved params' 'hello-dev' \
+    run_cmd --output json run echo --dry-run
+it_grep 'run --dry-run dry_run flag present' 'dry_run' \
+    run_cmd --output json run echo --dry-run
+
+it_grep 'run --profile prod swaps the value' 'hello-prod' \
+    run_cmd --output json --profile prod run echo --dry-run
+
+it 'run echo end-to-end (live tool call)' \
+    run_cmd run echo
+it_grep 'run echo response contains hello-dev' 'hello-dev' \
+    run_cmd --query 'content[0].text' run echo
+
+it_exit 'unknown call name exits 3 (E0001)' 3 \
+    run_cmd run nope
+
+it_exit 'unknown profile exits 2 (E0016)' 2 \
+    run_cmd --profile missing run echo
+it_grep_err 'unknown profile shows E0016' 'E0016' \
+    run_cmd --profile missing run echo
+
+unset MCPAL_RUN_TEST_VAR
+it_exit 'missing env var exits 2 (E0014)' 2 \
+    run_cmd run echo-env
+it_grep_err 'missing env var shows E0014' 'E0014' \
+    run_cmd run echo-env
+
+it_exit 'missing collection exits 2 (E0015)' 2 \
+    "$BIN" --config "$CFG" --collection "$COLL_DIR/nope.yml" run echo
+it_grep_err 'missing collection shows E0015' 'E0015' \
+    "$BIN" --config "$CFG" --collection "$COLL_DIR/nope.yml" run echo
+
+it 'run --params-override overlays raw value' \
+    run_cmd --query 'content[0].text' run echo --params-override message=overridden
+it_grep 'override took effect' 'overridden' \
+    run_cmd --query 'content[0].text' run echo --params-override message=overridden
+
+rm -rf "$COLL_DIR"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 test "$fail" -eq 0
