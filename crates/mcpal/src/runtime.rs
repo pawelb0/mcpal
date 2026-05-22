@@ -20,17 +20,24 @@ pub struct Ctx {
     pub query: Option<String>,
     pub timeout: Option<u64>,
     pub config_path: PathBuf,
+    #[allow(dead_code)]
+    pub collection_override: Option<PathBuf>,
+    #[allow(dead_code)]
+    pub profile: String,
     pub handler: Handler,
     discovered: OnceCell<Vec<DiscoveredServer>>,
 }
 
 impl Ctx {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         cfg: Config,
         format: Format,
         query: Option<String>,
         timeout: Option<u64>,
         config_path: PathBuf,
+        collection_override: Option<PathBuf>,
+        profile: String,
         handler: Handler,
     ) -> Self {
         Self {
@@ -39,6 +46,8 @@ impl Ctx {
             query,
             timeout,
             config_path,
+            collection_override,
+            profile,
             handler,
             discovered: OnceCell::new(),
         }

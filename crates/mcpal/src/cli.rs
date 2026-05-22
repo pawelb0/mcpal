@@ -44,6 +44,9 @@ pub struct Cli {
     /// Overlay a Claude/Cursor-style `mcp.json`.
     #[arg(long, value_name = "PATH", global = true)]
     pub mcp_json: Option<PathBuf>,
+    /// Path to a collection file (`mcpal.yml`). Overrides walk-parents lookup.
+    #[arg(long, global = true, value_name = "PATH")]
+    pub collection: Option<PathBuf>,
     /// JMESPath filter applied to the response.
     #[arg(long, global = true, value_name = "JMESPATH")]
     pub query: Option<String>,
@@ -96,6 +99,20 @@ pub enum Command {
         ref_b: String,
         #[arg(long, value_enum)]
         only: Option<DiffCategory>,
+    },
+    /// Run a saved call from a collection file.
+    #[command(after_help = "Examples:\n  \
+        mcpal run get-issue --profile prod\n  \
+        mcpal --collection ./mcpal.yml run echo --dry-run\n  \
+        mcpal run echo --params-override message=override")]
+    Run {
+        name: String,
+        /// Resolve + print the call without opening a connection.
+        #[arg(long)]
+        dry_run: bool,
+        /// Overlay raw `K=V` params after templating (repeatable).
+        #[arg(long = "params-override", value_name = "K=V", num_args = 1)]
+        params_override: Vec<String>,
     },
     /// Send arbitrary JSON-RPC.
     #[command(after_help = "Examples:\n  \

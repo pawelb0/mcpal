@@ -73,7 +73,16 @@ async fn dispatch(cli: Cli) -> Result<()> {
             .filter(|v: &Vec<String>| !v.is_empty()),
         events: None,
     };
-    let ctx = Ctx::new(cfg, format, cli.query, cli.timeout, path, handler);
+    let ctx = Ctx::new(
+        cfg,
+        format,
+        cli.query,
+        cli.timeout,
+        path,
+        cli.collection.clone(),
+        cli.profile.clone(),
+        handler,
+    );
 
     use Command::*;
     match cli.command {
@@ -87,6 +96,7 @@ async fn dispatch(cli: Cli) -> Result<()> {
             method,
             params,
         } => commands::raw::run(&reference, &method, params.as_deref(), &ctx).await,
+        Run { .. } => Err(anyhow::anyhow!("mcpal run: wiring lands in Task 6")),
         Completion { shell } => commands::completion::run(shell),
         Auth { action } => commands::auth::run(action, &ctx).await,
         Logging { action } => commands::logging::run(action, &ctx).await,
