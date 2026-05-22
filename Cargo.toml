@@ -71,6 +71,7 @@ trycmd = "0.15"
 tempfile = "3"
 insta = { version = "1", features = ["json"] }
 serde_yaml = "0.9.34"
+regex = "1"
 json5 = "0.4"
 jsonschema = { version = "0.46", default-features = false }
 

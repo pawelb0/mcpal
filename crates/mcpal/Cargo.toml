@@ -38,6 +38,7 @@ webbrowser.workspace = true
 reqwest.workspace = true
 jsonschema.workspace = true
 serde_yaml.workspace = true
+regex.workspace = true
 jmespath.workspace = true
 futures.workspace = true
 base64.workspace = true
