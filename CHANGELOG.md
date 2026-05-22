@@ -4,6 +4,16 @@ All notable changes documented here. Format: [Keep a Changelog](https://keepacha
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-05-22
+
+### Added
+- `mcpal.yml` collection file. Define `profiles:` + `calls:`, then `mcpal run NAME --profile prod` to invoke a saved tool call. Source-first: commit the file, share with teammates.
+- `mcpal run` verb with `--dry-run` (resolve + print without opening a connection) and `--params-override K=V` (overlay raw values after templating).
+- `{{profile.X}}` + `{{env.X}}` substitution inside `params`; `{{{{` escapes a literal `{{`. Unresolved variables collected and reported in one error.
+- `E0014` (template variable not set), `E0015` (collection not found), `E0016` (profile not in collection) error codes.
+- Book chapter `Collections`; README Quickstart subsection for saved calls.
+- Windows install note in the book — DPAPI keyring; MSI / winget roadmap.
+
 ## [0.2.0] — 2026-05-22
 
 ### Added
