@@ -345,8 +345,8 @@ pub struct ServerAddArgs {
     pub env: Vec<String>,
     #[arg(long)]
     pub http: Option<String>,
-    /// Literal bearer token → OS keyring.
-    #[arg(long, value_name = "TOKEN")]
+    /// Literal token (or `-` for stdin) → OS keyring.
+    #[arg(long, value_name = "TOKEN|-")]
     pub bearer: Option<String>,
     /// Spec auth = bearer_env { env = VAR } — token read from env at runtime.
     #[arg(long = "bearer-env", value_name = "VAR")]

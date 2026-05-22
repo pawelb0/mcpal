@@ -134,14 +134,32 @@ fn auth_label(intent: &AuthIntent) -> &'static str {
 }
 
 async fn materialise_auth(
-    _alias: &str,
-    _intent: &AuthIntent,
-    _no_login: bool,
+    alias: &str,
+    intent: &AuthIntent,
+    no_login: bool,
     _ctx: &Ctx,
 ) -> Result<()> {
-    // Filled out in Task 2 + Task 3. Keeping a no-op stub here so the
-    // intent-derivation tests can run.
-    Ok(())
+    match intent {
+        AuthIntent::None => Ok(()),
+        AuthIntent::Literal(token) => {
+            let token = if token == "-" {
+                crate::commands::auth::read_stdin()?
+            } else {
+                token.clone()
+            };
+            if token.is_empty() {
+                bail!("--bearer - read an empty token from stdin");
+            }
+            keyring::put(alias, keyring::Kind::Bearer, &token)?;
+            Ok(())
+        }
+        AuthIntent::Env(_) => Ok(()), // spec already carries bearer_env
+        AuthIntent::Oauth => {
+            let _ = no_login;
+            // Filled out in Task 3.
+            Ok(())
+        }
+    }
 }
 
 fn import(args: ServerImportArgs, ctx: &Ctx) -> Result<()> {

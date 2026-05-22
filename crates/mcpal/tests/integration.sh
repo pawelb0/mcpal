@@ -91,6 +91,68 @@ it_grep     'server show prints transport'  'stdio'     mc server show "$REF"
 it_exit     'server add duplicate fails (E0000)' 1 \
             mc server add "$REF" -- npx -y @modelcontextprotocol/server-everything
 
+# ---------- server add — one-liner with auth ----------
+section "server add — one-liner with auth"
+
+it_no_grep() {
+    local label="$1" pattern="$2"; shift 2
+    local out; out="$("$@" 2>&1 || true)"
+    if printf '%s\n' "$out" | grep -q -- "$pattern"; then
+        echo "FAIL: $label (matched '$pattern')"; fail=$((fail+1))
+    else
+        echo "ok:   $label"; pass=$((pass+1))
+    fi
+}
+
+ADD_DIR="$(mktemp -d -t mcpal-add.XXXXXX)"
+ADD_CFG="$ADD_DIR/config.toml"
+add() { "$BIN" --config "$ADD_CFG" "$@"; }
+
+it 'add --bearer (literal) writes keyring + spec has no Authorization' \
+    add server add T1 --http http://example.invalid/mcp --bearer abc
+it_grep 'T1 spec keeps auth field absent' '^\[server\.T1\]' \
+    cat "$ADD_CFG"
+it_grep 'T1 spec is http' 'transport = "http"' \
+    cat "$ADD_CFG"
+it_no_grep 'T1 spec has no Authorization' 'Authorization' \
+    cat "$ADD_CFG"
+it 'auth status reports bearer present' \
+    add auth status T1
+add auth logout T1 >/dev/null 2>&1 || true
+
+it 'add --bearer-env sets bearer_env in spec' \
+    add server add T2 --http http://example.invalid/mcp --bearer-env GH_TOKEN
+it_grep 'T2 spec has bearer_env' 'type = "bearer_env"' \
+    cat "$ADD_CFG"
+it_grep 'T2 spec carries env var' 'env = "GH_TOKEN"' \
+    cat "$ADD_CFG"
+
+it 'add --header Authorization: Bearer literal == --bearer' \
+    add server add T3 --http http://example.invalid/mcp --header 'Authorization: Bearer xyz'
+it_grep 'T3 auth status bearer present' '"bearer": true' \
+    add --output json auth status T3
+add auth logout T3 >/dev/null 2>&1 || true
+
+it 'add --header X-Api-Key kept in spec, no auth' \
+    add server add T4 --http http://example.invalid/mcp --header 'X-Api-Key: k1'
+it_grep 'T4 spec has X-Api-Key' 'X-Api-Key' \
+    cat "$ADD_CFG"
+it_no_grep 'T4 spec has no bearer_env' 'bearer_env' \
+    add server show T4
+
+it 'add stdio (no auth flags)' \
+    add server add T5 -- echo hi
+it_exit 'add stdio + --bearer is rejected' 2 \
+    add server add T6 --bearer x -- echo hi
+
+it 'add --bearer - (stdin)' \
+    bash -c "echo stdintok | '$BIN' --config '$ADD_CFG' server add T7 --http http://example.invalid/mcp --bearer -"
+it_grep 'T7 bearer present via stdin' '"bearer": true' \
+    add --output json auth status T7
+add auth logout T7 >/dev/null 2>&1 || true
+
+rm -rf "$ADD_DIR"
+
 # ---------- server properties ----------
 section 'server properties'
 it_grep     'server info has serverInfo.name' 'mcp-servers/everything' mc server info "$REF"

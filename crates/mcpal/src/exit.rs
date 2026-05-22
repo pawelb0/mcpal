@@ -32,6 +32,7 @@ const ANYHOW_PATTERNS: &[(&str, i32, &str)] = &[
     ("expected --flag", 2, "E0002"),
     ("parse json from", 2, "E0010"),
     ("parse params as json", 2, "E0010"),
+    ("auth flags require", 2, "E0002"),
 ];
 
 pub fn classify(err: &anyhow::Error) -> Diagnostic {

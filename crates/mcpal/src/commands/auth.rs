@@ -92,7 +92,7 @@ fn http_url(reference: &str, override_url: Option<&str>, ctx: &Ctx) -> Result<St
     }
 }
 
-fn read_stdin() -> Result<String> {
+pub(crate) fn read_stdin() -> Result<String> {
     let mut buf = String::new();
     std::io::stdin()
         .read_to_string(&mut buf)
