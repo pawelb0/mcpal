@@ -8,6 +8,7 @@
 <p align="center">
   <a href="https://github.com/pawelb0/mcpal/actions/workflows/ci.yml"><img src="https://github.com/pawelb0/mcpal/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/pawelb0/mcpal/releases/latest"><img src="https://img.shields.io/github/v/release/pawelb0/mcpal" alt="Latest release"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/changelog-keep--a--changelog-blue" alt="Changelog"></a>
   <a href="https://github.com/pawelb0/mcpal/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License - MIT"></a>
   <a href="https://pawelb0.github.io/mcpal/"><img src="https://img.shields.io/badge/docs-manual-blue" alt="Manual"></a>
 </p>
@@ -78,23 +79,14 @@ mcpal tui                                   # split-pane MCP browser
 
 ## Install
 
-macOS / Linux via Homebrew:
+| Platform | One-liner |
+|---|---|
+| macOS / Linux | `brew install pawelb0/tap/mcpal` |
+| Debian / Ubuntu | `curl -fsSLO …/releases/latest/download/mcpal_amd64.deb && sudo dpkg -i mcpal_amd64.deb` |
+| Any (Rust) | `cargo install --git https://github.com/pawelb0/mcpal --path crates/mcpal` |
+| Windows | `cargo install --git https://github.com/pawelb0/mcpal --path crates/mcpal` |
 
-    brew tap pawelb0/tap
-    brew install pawelb0/tap/mcpal
-
-Debian / Ubuntu:
-
-    curl -fsSLO https://github.com/pawelb0/mcpal/releases/latest/download/mcpal_amd64.deb
-    sudo dpkg -i mcpal_amd64.deb
-
-From source:
-
-    cargo install --git https://github.com/pawelb0/mcpal --path crates/mcpal
-
-Prebuilt binary into `$HOME/.local/bin`:
-
-    curl -fsSL https://raw.githubusercontent.com/pawelb0/mcpal/main/dist/install.sh | sh
+Full guide — `.deb` URL, `curl | sh` installer, shell completions, verify — in the [Install chapter](https://pawelb0.github.io/mcpal/install.html).
 
 ## Synopsis
 
