@@ -56,9 +56,11 @@ mcpal tool call cursor:linear get-issue --id ENG-123
 mcpal server add ev -- npx -y @modelcontextprotocol/server-everything
 mcpal tool call ev echo --message hi
 
-# HTTP + OAuth 2.1 (PKCE + DCR)
-mcpal server add notion --http https://mcp.notion.com/v1
-mcpal auth login notion --oauth
+# HTTP + bearer (literal token → OS keyring)
+mcpal server add gh --http https://api.githubcopilot.com/mcp/ --bearer $GH_TOKEN
+
+# HTTP + OAuth 2.1 (PKCE + DCR) — browser opens inline
+mcpal server add notion --http https://mcp.notion.com/v1 --oauth
 mcpal tool list notion
 ```
 
@@ -126,8 +128,7 @@ Call a tool (flags, JSON, or stdin):
 
 HTTP with a bearer token:
 
-    mcpal server add github --http https://api.githubcopilot.com/mcp/
-    mcpal auth login github --bearer ghp_xxx
+    mcpal server add github --http https://api.githubcopilot.com/mcp/ --bearer ghp_xxx
     mcpal tool list github
 
 Resources, prompts, notifications:

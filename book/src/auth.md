@@ -1,5 +1,15 @@
 # Authenticate to an HTTP server
 
+## One-liner
+
+```bash
+mcpal server add gh --http https://api.githubcopilot.com/mcp/ --bearer $GH_TOKEN
+mcpal server add notion --http https://mcp.notion.com/v1 --oauth
+```
+
+`mcpal auth login` is for rotating a token later or recovering from a
+mid-OAuth failure — see below.
+
 How to attach credentials to a remote MCP server, by mode. Stdio
 servers inherit the parent shell's env and don't take credentials;
 this page is HTTP only.
