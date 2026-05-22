@@ -4,7 +4,7 @@ All notable changes documented here. Format: [Keep a Changelog](https://keepacha
 
 ## [Unreleased]
 
-## [0.3.0] — 2026-05-22
+## [0.3.0]
 
 ### Added
 - `mcpal.yml` collection file. Define `profiles:` + `calls:`, then `mcpal run NAME --profile prod` to invoke a saved tool call. Source-first: commit the file, share with teammates.
@@ -14,7 +14,7 @@ All notable changes documented here. Format: [Keep a Changelog](https://keepacha
 - Book chapter `Collections`; README Quickstart subsection for saved calls.
 - Windows install note in the book — DPAPI keyring; MSI / winget roadmap.
 
-## [0.2.0] — 2026-05-22
+## [0.2.0]
 
 ### Added
 - `mcpal server add` one-liner: `--bearer / --bearer-env / --oauth / --header / --force / --no-login` accepted alongside the transport flags. Writes spec + materialises the credential (keyring for literal bearers, `bearer_env` in the spec for env refs, inline browser flow for OAuth) in one command.
@@ -38,12 +38,12 @@ All notable changes documented here. Format: [Keep a Changelog](https://keepacha
 - Control bytes in server-supplied strings sanitised before render.
 - Esc inside the TUI preserves detail context; `h` / Left navigates to the previous tab.
 
-## [0.1.1] — 2026-05-16
+## [0.1.1]
 
 ### Fixed
 - Homebrew tap formula naming. Renamed crate `mcpal-cli` → `mcpal` so cargo-dist publishes `Formula/mcpal.rb` and `brew install pawelb0/tap/mcpal` works.
 
-## [0.1.0] — 2026-05-16
+## [0.1.0]
 
 ### Added
 - Initial release. CLI client for the Model Context Protocol: stdio + Streamable HTTP transports; OAuth 2.1 (PKCE + DCR); discovery from Claude Desktop / Cursor / opencode `mcp.json`; tool, resource, prompt commands; JSON-RPC `raw` escape hatch; `watch` for notifications; JMESPath `--query`; OS-keyring credentials.

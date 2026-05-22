@@ -12,7 +12,7 @@ mcpal follows [SemVer](https://semver.org/).
 
 ## Release ritual
 
-1. Move `## [Unreleased]` block in `CHANGELOG.md` to a new `## [X.Y.Z] — YYYY-MM-DD` heading; leave a fresh empty `## [Unreleased]` on top.
+1. Move `## [Unreleased]` block in `CHANGELOG.md` to a new `## [X.Y.Z]` heading; leave a fresh empty `## [Unreleased]` on top. (Git tag carries the date.)
 2. Bump the workspace version in `Cargo.toml` (one line under `[workspace.package]`).
 3. `cargo fmt --all && cargo clippy -p mcpal --all-targets -- -D warnings && cargo test -p mcpal --bin mcpal` — all clean.
 4. `MCPAL_INTEGRATION_TESTS=1 cargo test -p mcpal --test integration` — passes.
