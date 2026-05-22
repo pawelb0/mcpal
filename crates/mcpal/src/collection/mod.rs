@@ -1,4 +1,5 @@
 pub mod parse;
+pub mod template;
 
 #[allow(unused_imports)]
 pub use parse::{Call, Collection};
