@@ -1,4 +1,5 @@
 mod cli;
+mod collection;
 mod commands;
 mod config;
 mod exit;
