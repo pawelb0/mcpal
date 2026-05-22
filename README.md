@@ -71,6 +71,13 @@ mcpal tool list notion
 mcpal tui                                   # split-pane MCP browser
 ```
 
+### Run a saved call
+
+```bash
+# Repo has mcpal.yml at root
+mcpal run get-issue --profile prod
+```
+
 ![cli](assets/cli.gif)
 
 ![scripting](assets/scripting.gif)

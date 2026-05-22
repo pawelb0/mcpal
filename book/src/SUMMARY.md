@@ -11,6 +11,7 @@
 # How-to guides
 
 - [Recipes](./recipes.md)
+- [Collections](./collection.md)
 - [Authenticate to an HTTP server](./auth.md)
 - [Interactive TUI](./tui.md)
 - [UI-rich MCP servers](./ui.md)
