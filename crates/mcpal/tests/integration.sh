@@ -127,11 +127,13 @@ add() { "$BIN" --config "$ADD_CFG" "$@"; }
 
 it 'add --bearer (literal) writes keyring + spec has no Authorization' \
     add server add T1 --http http://example.invalid/mcp --bearer abc
-it_grep 'T1 spec keeps auth field absent' '^\[server\.T1\]' \
+it_grep 'T1 spec has [server.T1] section' '^\[server\.T1\]' \
     cat "$ADD_CFG"
 it_grep 'T1 spec is http' 'transport = "http"' \
     cat "$ADD_CFG"
-it_no_grep 'T1 spec has no Authorization' 'Authorization' \
+it_no_grep 'T1 spec has no Authorization header' 'Authorization' \
+    cat "$ADD_CFG"
+it_no_grep 'T1 spec has no auth = key' '^auth' \
     cat "$ADD_CFG"
 it 'auth status reports bearer present' \
     add auth status T1
@@ -161,6 +163,8 @@ it 'add stdio (no auth flags)' \
     add server add T5 -- echo hi
 it_exit 'add stdio + --bearer is rejected' 2 \
     add server add T6 --bearer x -- echo hi
+it_grep_err 'add stdio + --bearer shows E0002' 'E0002' \
+    add server add T6b --bearer x -- echo hi
 
 it 'add --bearer - (stdin)' \
     bash -c "echo stdintok | '$BIN' --config '$ADD_CFG' server add T7 --http http://example.invalid/mcp --bearer -"
