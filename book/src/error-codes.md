@@ -203,3 +203,22 @@ Exit code **130**.
 config. Pick a different name, run `mcpal server remove <name>` first,
 or re-run with `--force` to overwrite. `mcpal server list` shows the
 current entries.
+
+## E0014 — template variable not set
+
+`mcpal run` couldn't resolve a `{{profile.X}}` or `{{env.X}}` placeholder.
+The error lists the unset variables. Fix by adding the key to the active profile
+(`profiles.<name>.<key>:`) in `mcpal.yml`, exporting the env var, or passing
+`--params-override KEY=VAL` to bypass.
+
+## E0015 — collection not found
+
+`mcpal run` walked from the current directory up to the filesystem root looking
+for `mcpal.yml` and didn't find one. Drop a `mcpal.yml` at your project root or
+pass `--collection PATH` to point at an explicit file.
+
+## E0016 — profile not in collection
+
+The active profile (`--profile NAME`, `MCPAL_PROFILE`, or `default-profile:`)
+isn't declared in the collection's `profiles:` block. Add it, pick a different
+profile, or remove the `default-profile:` key.

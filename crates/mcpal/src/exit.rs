@@ -21,6 +21,9 @@ fn d(code: i32, ec: &'static str, title: impl Into<String>) -> Diagnostic {
 /// Substring → (exit code, error code). First match wins. Patterns are
 /// matched against the lowercased anyhow chain.
 const ANYHOW_PATTERNS: &[(&str, i32, &str)] = &[
+    ("template variable not set", 2, "E0014"),
+    ("collection not found", 2, "E0015"),
+    ("not in collection", 2, "E0016"),
     ("' already exists", 2, "E0013"),
     ("interrupted by ctrl-c", 130, "E0011"),
     ("iserror: true", 7, "E0006"),
@@ -175,6 +178,24 @@ const EXPLAIN: &[(&str, &str)] = &[
         "Server name already registered. Run `mcpal server list` to see what \
         you have, or re-run with `--force` to overwrite. `mcpal server remove \
         <name>` deletes the entry first.\n",
+    ),
+    (
+        "E0014",
+        "Template variable not set. `mcpal.yml` references `{{profile.X}}` or \
+        `{{env.X}}` that didn't resolve. Add the key to the active profile, set \
+        the env var, or pass `--params-override KEY=VAL` to bypass.\n",
+    ),
+    (
+        "E0015",
+        "Collection not found. `mcpal run` looked for `mcpal.yml` in the current \
+        directory and every parent, found none. Create one at your project root \
+        or pass `--collection PATH` to point at a specific file.\n",
+    ),
+    (
+        "E0016",
+        "Active profile isn't declared in the collection. Either add a `profiles.<name>:` \
+        block to `mcpal.yml`, pick a different `--profile`, or set `MCPAL_PROFILE`. \
+        `default-profile:` at the top of `mcpal.yml` sets the fallback.\n",
     ),
 ];
 
