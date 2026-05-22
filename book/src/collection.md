@@ -67,6 +67,11 @@ Pick which one is active with (in precedence order):
 
 If the active name isn't a profile in the file, `E0016`.
 
+Naming caveat: don't name a profile `default`. The literal string
+`default` is the fallback marker — if both your `--profile` resolves
+to `default` *and* the file declares `default-profile: dev`, the
+file's `dev` wins. Pick any other name for the dev/staging baseline.
+
 ## Templating
 
 Two namespaces, nothing else:

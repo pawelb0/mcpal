@@ -76,19 +76,13 @@ fn walk(value: &mut Value, profile: &BTreeMap<String, String>, misses: &mut Vec<
     }
 }
 
-fn push_literal(out: &mut String, s: &str) {
-    // Collapse `}}}}` -> `}}` in literal (non-substituted) segments.
-    out.push_str(&s.replace("}}}}", "}}"));
-}
-
 fn render_string(
     input: &str,
     profile: &BTreeMap<String, String>,
     misses: &mut Vec<Miss>,
 ) -> String {
-    // Handle the `{{{{` -> `{{` escape by splitting on the literal token
-    // first, rendering each piece, then re-joining with `{{`.
-    // Within each piece, `}}}}` in literal segments collapses to `}}`.
+    // `{{{{` is the literal-`{{` escape. Split on it, render each piece,
+    // re-join with `{{`. `}}` carries no special meaning in the grammar.
     let mut out = String::with_capacity(input.len());
     for (i, piece) in input.split("{{{{").enumerate() {
         if i > 0 {
@@ -97,7 +91,7 @@ fn render_string(
         let mut cursor = 0;
         for m in pattern().captures_iter(piece) {
             let whole = m.get(0).unwrap();
-            push_literal(&mut out, &piece[cursor..whole.start()]);
+            out.push_str(&piece[cursor..whole.start()]);
             let ns = match &m[1] {
                 "profile" => Ns::Profile,
                 "env" => Ns::Env,
@@ -114,7 +108,7 @@ fn render_string(
             }
             cursor = whole.end();
         }
-        push_literal(&mut out, &piece[cursor..]);
+        out.push_str(&piece[cursor..]);
     }
     out
 }
@@ -201,7 +195,7 @@ mod tests {
 
     #[test]
     fn escape_literal_braces() {
-        let mut v = json!("{{{{not a template}}}}");
+        let mut v = json!("{{{{not a template}}");
         render(&mut v, &profile()).unwrap();
         assert_eq!(v, json!("{{not a template}}"));
     }
