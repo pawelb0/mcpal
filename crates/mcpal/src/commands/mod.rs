@@ -8,6 +8,7 @@ pub mod logging;
 pub mod prompt;
 pub mod raw;
 pub mod resource;
+pub mod run;
 pub mod server;
 pub mod tool;
 pub mod ui;

@@ -96,7 +96,11 @@ async fn dispatch(cli: Cli) -> Result<()> {
             method,
             params,
         } => commands::raw::run(&reference, &method, params.as_deref(), &ctx).await,
-        Run { .. } => Err(anyhow::anyhow!("mcpal run: wiring lands in Task 6")),
+        Run {
+            name,
+            dry_run,
+            params_override,
+        } => commands::run::run(name, dry_run, params_override, &ctx).await,
         Completion { shell } => commands::completion::run(shell),
         Auth { action } => commands::auth::run(action, &ctx).await,
         Logging { action } => commands::logging::run(action, &ctx).await,

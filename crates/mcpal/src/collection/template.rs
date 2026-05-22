@@ -1,8 +1,6 @@
 //! Substitute `{{profile.X}}` and `{{env.X}}` into a JSON Value tree.
 //! `{{{{` is the literal-`{{` escape.
 
-#![allow(dead_code)]
-
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 

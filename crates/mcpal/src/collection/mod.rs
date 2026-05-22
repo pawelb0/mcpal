@@ -1,7 +1,6 @@
 pub mod parse;
 pub mod template;
 
-#[allow(unused_imports)]
 pub use parse::{Call, Collection};
 
 use std::path::{Path, PathBuf};
@@ -12,7 +11,6 @@ use anyhow::{Result, bail};
 /// or fail with a "collection not found" error. Otherwise walk from `start`
 /// up to filesystem root looking for `mcpal.yml`; first hit wins.
 /// `Ok(None)` if nothing is found.
-#[allow(dead_code)]
 pub fn find_collection(start: &Path, override_: Option<&Path>) -> Result<Option<PathBuf>> {
     if let Some(p) = override_ {
         if p.is_file() {

@@ -9,7 +9,6 @@ use serde_json::Value;
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
-#[allow(dead_code)]
 pub struct Collection {
     #[serde(default, rename = "default-profile")]
     pub default_profile: Option<String>,
@@ -21,7 +20,6 @@ pub struct Collection {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[allow(dead_code)]
 pub struct Call {
     pub server: String,
     pub tool: String,
@@ -30,7 +28,6 @@ pub struct Call {
 }
 
 impl Collection {
-    #[allow(dead_code)]
     pub fn load(path: &Path) -> Result<Self> {
         let text = std::fs::read_to_string(path)
             .with_context(|| format!("read collection: {}", path.display()))?;
