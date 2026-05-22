@@ -21,6 +21,7 @@ fn d(code: i32, ec: &'static str, title: impl Into<String>) -> Diagnostic {
 /// Substring → (exit code, error code). First match wins. Patterns are
 /// matched against the lowercased anyhow chain.
 const ANYHOW_PATTERNS: &[(&str, i32, &str)] = &[
+    ("' already exists", 2, "E0013"),
     ("interrupted by ctrl-c", 130, "E0011"),
     ("iserror: true", 7, "E0006"),
     ("schema validation", 2, "E0012"),
@@ -168,6 +169,12 @@ const EXPLAIN: &[(&str, &str)] = &[
         "E0012",
         "Schema validation failed. `tool describe <ref> <name>` shows the schema; \
         `tool template` prints a skeleton. `--skip-validation` bypasses the check.\n",
+    ),
+    (
+        "E0013",
+        "Server name already registered. Run `mcpal server list` to see what \
+        you have, or re-run with `--force` to overwrite. `mcpal server remove \
+        <name>` deletes the entry first.\n",
     ),
 ];
 

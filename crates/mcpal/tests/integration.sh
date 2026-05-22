@@ -46,6 +46,19 @@ it_grep() {
     fi
 }
 
+it_grep_err() {
+    local name="$1" pat="$2"; shift 2
+    "$@" >"$OUT" 2>"$ERR" || true
+    if grep -iqE -- "$pat" "$ERR"; then
+        printf '  ok   %s\n' "$name"
+        pass=$((pass + 1))
+    else
+        printf '  FAIL %s (no /%s/ in stderr)\n' "$name" "$pat"
+        sed 's/^/      | /' "$ERR" >&2
+        fail=$((fail + 1))
+    fi
+}
+
 # Pipe a literal payload via stdin to the wrapped command.
 it_grep_stdin() {
     local name="$1" pat="$2" payload="$3"; shift 3
@@ -88,8 +101,12 @@ it          'server add stdio via `-- cmd`' \
             mc server add "$REF" -- npx -y @modelcontextprotocol/server-everything
 it_grep     'server list shows the alias'   "$REF"      mc server list
 it_grep     'server show prints transport'  'stdio'     mc server show "$REF"
-it_exit     'server add duplicate fails (E0000)' 1 \
+it_exit     'server add duplicate fails (E0013)' 2 \
             mc server add "$REF" -- npx -y @modelcontextprotocol/server-everything
+it_grep_err 'server add duplicate names E0013' 'E0013' \
+            mc server add "$REF" -- npx -y @modelcontextprotocol/server-everything
+it          'server add --force overwrites existing' \
+            mc server add "$REF" --force -- npx -y @modelcontextprotocol/server-everything
 
 # ---------- server add — one-liner with auth ----------
 section "server add — one-liner with auth"

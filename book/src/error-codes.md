@@ -196,3 +196,10 @@ mind" once the request is in flight. For a hard deadline instead, pass
 `--timeout <SECS>`.
 
 Exit code **130**.
+
+## E0013 — server already exists
+
+`mcpal server add <name>` failed because `<name>` is already in the
+config. Pick a different name, run `mcpal server remove <name>` first,
+or re-run with `--force` to overwrite. `mcpal server list` shows the
+current entries.
