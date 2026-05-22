@@ -44,7 +44,7 @@ pub struct Cli {
     /// Overlay a Claude/Cursor-style `mcp.json`.
     #[arg(long, value_name = "PATH", global = true)]
     pub mcp_json: Option<PathBuf>,
-    /// AWS-CLI JMESPath filter.
+    /// JMESPath filter applied to the response.
     #[arg(long, global = true, value_name = "JMESPATH")]
     pub query: Option<String>,
     /// Abort after N seconds.
@@ -98,6 +98,11 @@ pub enum Command {
         only: Option<DiffCategory>,
     },
     /// Send arbitrary JSON-RPC.
+    #[command(after_help = "Examples:\n  \
+        mcpal raw ev tools/list\n  \
+        mcpal raw ev some/method --params '{\"k\":\"v\"}'\n  \
+        mcpal raw ev some/method --params @payload.json\n  \
+        cat payload.json | mcpal raw ev some/method --params -")]
     Raw {
         reference: String,
         method: String,
@@ -204,6 +209,10 @@ impl From<LogLevel> for LoggingLevel {
 #[derive(Subcommand, Debug)]
 pub enum AuthAction {
     /// Store a bearer or run the OAuth 2.1 flow.
+    #[command(after_help = "Examples:\n  \
+        mcpal auth login gh --bearer $GH_TOKEN\n  \
+        echo $TOKEN | mcpal auth login gh --bearer -\n  \
+        mcpal auth login notion --oauth\n\nMost users want `mcpal server add … --bearer` instead — this is the rotation entry-point.")]
     Login {
         reference: String,
         /// Bearer token; `-` reads stdin.
@@ -324,12 +333,21 @@ pub struct ServerInstallArgs {
 }
 
 #[derive(clap::Args, Debug)]
-#[command(group(
-    clap::ArgGroup::new("auth-mode")
-        .args(["bearer", "bearer_env", "oauth"])
-        .multiple(false)
-        .required(false)
-))]
+#[command(
+    after_help = "Examples:\n  \
+        mcpal server add ev -- npx -y @modelcontextprotocol/server-everything\n  \
+        mcpal server add gh --http https://api.githubcopilot.com/mcp/ --bearer $GH_TOKEN\n  \
+        mcpal server add gh --http https://api.githubcopilot.com/mcp/ --bearer-env GH_TOKEN\n  \
+        mcpal server add notion --http https://mcp.notion.com/v1 --oauth\n  \
+        mcpal server add aws-api --env AWS_PROFILE=default -- uvx awslabs.aws-api-mcp-server@latest\n  \
+        echo $TOKEN | mcpal server add gh --http https://api.githubcopilot.com/mcp/ --bearer -",
+    group(
+        clap::ArgGroup::new("auth-mode")
+            .args(["bearer", "bearer_env", "oauth"])
+            .multiple(false)
+            .required(false)
+    ),
+)]
 pub struct ServerAddArgs {
     pub alias: String,
     #[arg(long, conflicts_with = "http")]
@@ -382,6 +400,12 @@ pub enum ToolAction {
     /// Print an example JSON body for the tool.
     Template { reference: String, name: String },
     /// Call a tool.
+    #[command(after_help = "Examples:\n  \
+        mcpal tool call ev echo --message hi\n  \
+        mcpal tool call ev echo --params '{\"message\":\"hi\"}'\n  \
+        echo '{\"message\":\"hi\"}' | mcpal tool call ev echo --params -\n  \
+        mcpal tool call ev echo --cli-input-json @body.json\n  \
+        mcpal --query 'content[0].text' tool call ev echo --message hi")]
     Call {
         reference: String,
         name: String,

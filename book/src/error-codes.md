@@ -40,7 +40,7 @@ mcpal couldn't parse the arguments. Most commonly a malformed
 
 Fixes:
 
-- Pass `--key value` pairs (AWS-CLI style): `mcpal tool call ev echo
+- Pass `--key value` pairs: `mcpal tool call ev echo
   --message hi`.
 - For nested JSON, use `--cli-input-json @args.json` (or `-` for stdin).
 - `mcpal tool template <ref> <name>` prints a valid skeleton.

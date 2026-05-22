@@ -87,6 +87,16 @@ it_exit() {
     fi
 }
 
+it_no_grep() {
+    local label="$1" pattern="$2"; shift 2
+    local out; out="$("$@" 2>&1 || true)"
+    if printf '%s\n' "$out" | grep -q -- "$pattern"; then
+        echo "FAIL: $label (matched '$pattern')"; fail=$((fail+1))
+    else
+        echo "ok:   $label"; pass=$((pass+1))
+    fi
+}
+
 section() { printf '\n# %s\n' "$1"; }
 
 # ---------- config ----------
@@ -110,16 +120,6 @@ it          'server add --force overwrites existing' \
 
 # ---------- server add — one-liner with auth ----------
 section "server add — one-liner with auth"
-
-it_no_grep() {
-    local label="$1" pattern="$2"; shift 2
-    local out; out="$("$@" 2>&1 || true)"
-    if printf '%s\n' "$out" | grep -q -- "$pattern"; then
-        echo "FAIL: $label (matched '$pattern')"; fail=$((fail+1))
-    else
-        echo "ok:   $label"; pass=$((pass+1))
-    fi
-}
 
 ADD_DIR="$(mktemp -d -t mcpal-add.XXXXXX)"
 ADD_CFG="$ADD_DIR/config.toml"
@@ -494,6 +494,19 @@ rm -f "$WATCH_OUT"
 section cleanup
 rm -f "$ARGS_JSON" "$MCPJ"
 it          'server remove'                  mc server remove "$REF"
+
+# ---------- help text ----------
+section "help text contains key examples"
+it_grep 'server add --help shows --bearer example' 'mcpal server add gh --http' \
+    mc server add --help
+it_grep 'tool call --help shows --params example' '--params' \
+    mc tool call --help
+
+# No AWS-CLI mentions in user-visible help text.
+it_no_grep 'no AWS-CLI in server add --help' 'AWS-CLI' \
+    mc server add --help
+it_no_grep 'no AWS-CLI in tool call --help' 'AWS-CLI' \
+    mc tool call --help
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 test "$fail" -eq 0

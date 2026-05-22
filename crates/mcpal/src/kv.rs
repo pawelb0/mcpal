@@ -7,7 +7,7 @@ pub fn parse_value(raw: &str) -> Value {
     serde_json::from_str(raw).unwrap_or_else(|_| Value::String(raw.into()))
 }
 
-/// Walk `--key value` pairs (AWS-CLI style) into a typed JSON object.
+/// Walk `--key value` pairs into a typed JSON object.
 /// Each token starting with `--` opens a new field; the very next token is
 /// its value. Values parse via `parse_value` (typed JSON, string fallback).
 pub fn parse_flag_args<I, S>(tokens: I) -> Result<Map<String, Value>>

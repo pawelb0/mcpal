@@ -6,7 +6,7 @@ GIFs under `../assets/`:
 | Tape | Output | What it shows |
 |---|---|---|
 | `tui.tape` | `assets/tui.gif` | TUI flythrough: sidebar → tools → filter → call form (auto-filled from schema) → result + output log |
-| `cli.tape` | `assets/cli.gif` | "AWS CLI for MCP": register a stdio server, list tools, call one with JMESPath |
+| `cli.tape` | `assets/cli.gif` | "CLI for MCP": register a stdio server, list tools, call one with JMESPath |
 | `scripting.tape` | `assets/scripting.gif` | Pipe `--output json` into `jq`, branch on `$?`, extract with `--query` |
 
 ## Regenerating

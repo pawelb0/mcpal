@@ -195,7 +195,7 @@ echo '{"message":"hi"}' | mcpal tool call ev some-tool --params -
 mcpal tool call ev some-tool --params @args.json
 ```
 
-`--cli-input-json` is the AWS-CLI-compatible alias. Mix `--params` with
+`--cli-input-json` accepts a base body from a path or `-` (stdin). Mix `--params` with
 `--key value` overrides; flag values win:
 
 ```bash

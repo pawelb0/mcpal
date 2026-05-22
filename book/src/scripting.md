@@ -48,7 +48,7 @@ mcpal --query '[].name' tool list ev
 mcpal --query 'peerInfo.serverInfo.{name:name,version:version}' server ping ev
 ```
 
-Same syntax as AWS-CLI `--query`.
+Standard JMESPath.
 [Tutorial](https://jmespath.org/tutorial.html).
 
 ## Reading args from stdin or files

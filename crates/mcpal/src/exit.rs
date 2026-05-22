@@ -114,7 +114,7 @@ const EXPLAIN: &[(&str, &str)] = &[
     ),
     (
         "E0002",
-        "Bad arguments. Use AWS-CLI style `--key value`; for nested JSON pass \
+        "Bad arguments. Pass `--key value` pairs; for nested JSON pass \
         `--cli-input-json @args.json` or `--params '{…}'`. `tool template <ref> <name>` \
         prints a skeleton.\n",
     ),
