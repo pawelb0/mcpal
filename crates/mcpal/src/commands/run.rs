@@ -1,5 +1,3 @@
-//! `mcpal run <NAME>` — execute a saved call from `mcpal.yml`.
-
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -25,13 +23,16 @@ pub async fn run(
     let coll = Collection::load(&path)?;
 
     let call: &Call = coll.calls.get(&name).ok_or_else(|| {
-        let avail: Vec<&String> = coll.calls.keys().collect();
-        anyhow!("not found in mcpal config: call '{name}' (available: {avail:?})")
+        let names: Vec<&str> = coll.calls.keys().map(String::as_str).collect();
+        anyhow!(
+            "not found in mcpal config: call '{name}' (available: {})",
+            names.join(", ")
+        )
     })?;
 
     let profile_name = select_profile(ctx, &coll);
     let empty: BTreeMap<String, String> = BTreeMap::new();
-    let profile_vars = match coll.profiles.get(&profile_name) {
+    let profile_vars = match coll.profiles.get(profile_name) {
         Some(p) => p,
         None if coll.profiles.is_empty() => &empty,
         None => bail!("profile '{profile_name}' not in collection"),
@@ -89,15 +90,11 @@ pub async fn run(
     Ok(())
 }
 
-/// `--profile NAME` > `MCPAL_PROFILE` (handled by clap default) > `default-profile:` > "default".
-/// `ctx.profile` already collapses the first two (clap reads MCPAL_PROFILE via `env` attr).
-/// Empty/"default" + a `default-profile:` in the file means the collection's default wins.
-fn select_profile(ctx: &Ctx, coll: &Collection) -> String {
+// "default" is clap's sentinel — when ctx.profile equals it, defer to the
+// collection's `default-profile:` key.
+fn select_profile<'a>(ctx: &'a Ctx, coll: &'a Collection) -> &'a str {
     if ctx.profile != "default" {
-        return ctx.profile.clone();
+        return &ctx.profile;
     }
-    if let Some(default) = &coll.default_profile {
-        return default.clone();
-    }
-    "default".to_string()
+    coll.default_profile.as_deref().unwrap_or("default")
 }

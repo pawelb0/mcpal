@@ -1,5 +1,3 @@
-//! Parse the `mcpal.yml` collection format.
-
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -9,7 +7,7 @@ use serde_json::Value;
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
-pub struct Collection {
+pub(crate) struct Collection {
     #[serde(default, rename = "default-profile")]
     pub default_profile: Option<String>,
     #[serde(default)]
@@ -20,7 +18,7 @@ pub struct Collection {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Call {
+pub(crate) struct Call {
     pub server: String,
     pub tool: String,
     #[serde(default)]
@@ -28,7 +26,7 @@ pub struct Call {
 }
 
 impl Collection {
-    pub fn load(path: &Path) -> Result<Self> {
+    pub(crate) fn load(path: &Path) -> Result<Self> {
         let text = std::fs::read_to_string(path)
             .with_context(|| format!("read collection: {}", path.display()))?;
         serde_yaml::from_str(&text)

@@ -38,7 +38,7 @@ Drops the binary into `$HOME/.local/bin`. Read the script first if you're cautio
 cargo install --git https://github.com/pawelb0/mcpal --path crates/mcpal
 ```
 
-A prebuilt MSI is on the roadmap. Until then, `cargo install` is the supported path.
+Tested on Windows 11 + Windows Terminal. Credentials persist via DPAPI (the OS-native secret store). A prebuilt MSI and `winget` / Scoop manifests are on the roadmap.
 
 ## Shell completions
 

@@ -1,17 +1,15 @@
-pub mod parse;
-pub mod template;
+pub(crate) mod parse;
+pub(crate) mod template;
 
-pub use parse::{Call, Collection};
+pub(crate) use parse::{Call, Collection};
 
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, bail};
 
-/// Locate `mcpal.yml`. If `override_` is `Some(p)`, return `p` if it exists
-/// or fail with a "collection not found" error. Otherwise walk from `start`
-/// up to filesystem root looking for `mcpal.yml`; first hit wins.
-/// `Ok(None)` if nothing is found.
-pub fn find_collection(start: &Path, override_: Option<&Path>) -> Result<Option<PathBuf>> {
+/// Walk up from `start` looking for `mcpal.yml`; first hit wins.
+/// `override_` short-circuits the walk and is required to exist.
+pub(crate) fn find_collection(start: &Path, override_: Option<&Path>) -> Result<Option<PathBuf>> {
     if let Some(p) = override_ {
         if p.is_file() {
             return Ok(Some(p.to_path_buf()));

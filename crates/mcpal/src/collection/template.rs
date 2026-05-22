@@ -1,5 +1,4 @@
-//! Substitute `{{profile.X}}` and `{{env.X}}` into a JSON Value tree.
-//! `{{{{` is the literal-`{{` escape.
+//! `{{profile.X}}` / `{{env.X}}` substitution; `{{{{` escapes a literal `{{`.
 
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
@@ -8,19 +7,19 @@ use regex::Regex;
 use serde_json::Value;
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum Ns {
+pub(crate) enum Ns {
     Profile,
     Env,
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct Miss {
+pub(crate) struct Miss {
     pub ns: Ns,
     pub key: String,
 }
 
 #[derive(Debug)]
-pub struct TemplateError {
+pub(crate) struct TemplateError {
     pub misses: Vec<Miss>,
 }
 
@@ -47,7 +46,10 @@ fn pattern() -> &'static Regex {
     R.get_or_init(|| Regex::new(r"\{\{\s*(profile|env)\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}").unwrap())
 }
 
-pub fn render(value: &mut Value, profile: &BTreeMap<String, String>) -> Result<(), TemplateError> {
+pub(crate) fn render(
+    value: &mut Value,
+    profile: &BTreeMap<String, String>,
+) -> Result<(), TemplateError> {
     let mut misses = Vec::new();
     walk(value, profile, &mut misses);
     if misses.is_empty() {
@@ -81,8 +83,6 @@ fn render_string(
     profile: &BTreeMap<String, String>,
     misses: &mut Vec<Miss>,
 ) -> String {
-    // `{{{{` is the literal-`{{` escape. Split on it, render each piece,
-    // re-join with `{{`. `}}` carries no special meaning in the grammar.
     let mut out = String::with_capacity(input.len());
     for (i, piece) in input.split("{{{{").enumerate() {
         if i > 0 {
@@ -97,14 +97,22 @@ fn render_string(
                 "env" => Ns::Env,
                 _ => unreachable!(),
             };
-            let key = m[2].to_string();
-            let resolved = match ns {
-                Ns::Profile => profile.get(&key).cloned(),
-                Ns::Env => std::env::var(&key).ok(),
-            };
-            match resolved {
-                Some(v) => out.push_str(&v),
-                None => misses.push(Miss { ns, key }),
+            let key = &m[2];
+            match ns {
+                Ns::Profile => match profile.get(key) {
+                    Some(v) => out.push_str(v),
+                    None => misses.push(Miss {
+                        ns,
+                        key: key.to_string(),
+                    }),
+                },
+                Ns::Env => match std::env::var(key) {
+                    Ok(v) => out.push_str(&v),
+                    Err(_) => misses.push(Miss {
+                        ns,
+                        key: key.to_string(),
+                    }),
+                },
             }
             cursor = whole.end();
         }

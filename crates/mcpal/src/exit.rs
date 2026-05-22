@@ -102,7 +102,7 @@ pub fn render(d: &Diagnostic) -> String {
     }
 }
 
-/// Long-form prose per error code. Mirrors `rustc --explain Exxxx`.
+/// Mirrors `rustc --explain Exxxx`.
 const EXPLAIN: &[(&str, &str)] = &[
     (
         "E0000",

@@ -102,5 +102,4 @@ mcpal run echo --params-override message="custom value"
 ```
 
 `--params-override` overlays raw `K=V` pairs onto the rendered params
-*after* templating. Repeatable. Useful for tweaking a saved call
-without editing the file.
+*after* templating. Repeatable.
