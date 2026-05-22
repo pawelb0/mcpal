@@ -55,6 +55,17 @@ pub async fn run(action: AuthAction, ctx: &Ctx) -> Result<()> {
     }
 }
 
+pub(crate) async fn oauth_login_inline(
+    reference: &str,
+    override_url: Option<&str>,
+    no_browser: bool,
+    ctx: &Ctx,
+) -> Result<()> {
+    let url = http_url(reference, override_url, ctx)?;
+    oauth::login(reference, &url, !no_browser).await?;
+    Ok(())
+}
+
 async fn login(
     reference: &str,
     bearer: Option<&str>,
@@ -64,8 +75,7 @@ async fn login(
     ctx: &Ctx,
 ) -> Result<()> {
     if oauth_flag {
-        let url = http_url(reference, url, ctx)?;
-        oauth::login(reference, &url, !no_browser).await?;
+        oauth_login_inline(reference, url, no_browser, ctx).await?;
         ctx.render_one(&json!({"ok": true, "ref": reference, "method": "oauth"}))?;
         return Ok(());
     }

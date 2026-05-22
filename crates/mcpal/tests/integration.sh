@@ -151,6 +151,11 @@ it_grep 'T7 bearer present via stdin' '"bearer": true' \
     add --output json auth status T7
 add auth logout T7 >/dev/null 2>&1 || true
 
+it 'add --oauth --no-login writes spec only (no browser)' \
+    add server add T8 --http http://example.invalid/mcp --oauth --no-login
+it_grep 'T8 spec has auth = oauth' 'type = "oauth"' \
+    cat "$ADD_CFG"
+
 rm -rf "$ADD_DIR"
 
 # ---------- server properties ----------

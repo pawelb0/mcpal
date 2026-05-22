@@ -137,7 +137,7 @@ async fn materialise_auth(
     alias: &str,
     intent: &AuthIntent,
     no_login: bool,
-    _ctx: &Ctx,
+    ctx: &Ctx,
 ) -> Result<()> {
     match intent {
         AuthIntent::None => Ok(()),
@@ -155,9 +155,10 @@ async fn materialise_auth(
         }
         AuthIntent::Env(_) => Ok(()), // spec already carries bearer_env
         AuthIntent::Oauth => {
-            let _ = no_login;
-            // Filled out in Task 3.
-            Ok(())
+            if no_login {
+                return Ok(());
+            }
+            crate::commands::auth::oauth_login_inline(alias, None, false, ctx).await
         }
     }
 }
