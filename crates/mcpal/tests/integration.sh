@@ -110,6 +110,9 @@ section server
 it          'server add stdio via `-- cmd`' \
             mc server add "$REF" -- npx -y @modelcontextprotocol/server-everything
 it_grep     'server list shows the alias'   "$REF"      mc server list
+it          'server list --owned still works'           mc server list --owned
+it_grep     'server list --owned shows alias'  "$REF"   mc server list --owned
+it          'server list --all kept for back-compat'    mc server list --all
 it_grep     'server show prints transport'  'stdio'     mc server show "$REF"
 it_exit     'server add duplicate fails (E0013)' 2 \
             mc server add "$REF" -- npx -y @modelcontextprotocol/server-everything

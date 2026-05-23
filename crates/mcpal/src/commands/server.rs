@@ -64,8 +64,11 @@ struct Row {
 }
 
 fn list(args: ServerListArgs, ctx: &Ctx) -> Result<()> {
+    // Default: owned + discovered. `--owned` or `--discovered` narrow the view.
+    let show_owned = !args.discovered;
+    let show_discovered = !args.owned;
     let mut rows: Vec<Row> = Vec::new();
-    if !args.discovered {
+    if show_owned {
         for (alias, spec) in &ctx.cfg.server {
             rows.push(Row {
                 source: "mcpal".into(),
@@ -75,7 +78,7 @@ fn list(args: ServerListArgs, ctx: &Ctx) -> Result<()> {
             });
         }
     }
-    if args.discovered || args.all {
+    if show_discovered {
         for s in ctx.discovered()? {
             if let Some(f) = args.source.as_deref()
                 && s.source != f

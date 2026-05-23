@@ -60,6 +60,7 @@ enum AsyncMsg {
     Connected {
         client: Client,
         loaded: Loaded,
+        warnings: Vec<String>,
     },
     ConnectFailed {
         reference: String,
@@ -391,7 +392,11 @@ impl<'a> App<'a> {
         self.pending.push(
             async move {
                 match detail::open(reference.clone(), spec, handler).await {
-                    Ok((client, loaded)) => AsyncMsg::Connected { client, loaded },
+                    Ok((client, loaded, warnings)) => AsyncMsg::Connected {
+                        client,
+                        loaded,
+                        warnings,
+                    },
                     Err(e) => AsyncMsg::ConnectFailed {
                         reference,
                         err: e.to_string(),
@@ -442,12 +447,19 @@ impl<'a> App<'a> {
 
     fn on_async(&mut self, msg: AsyncMsg) {
         match msg {
-            AsyncMsg::Connected { client, loaded } => {
+            AsyncMsg::Connected {
+                client,
+                loaded,
+                warnings,
+            } => {
                 self.output.ok(format!(
                     "connected to {} ({} tools)",
                     loaded.reference,
                     loaded.tools.len()
                 ));
+                for w in warnings {
+                    self.output.err(format!("{}: {}", loaded.reference, w));
+                }
                 self.services
                     .insert(loaded.reference.clone(), Arc::new(client));
                 self.detail = View::Server(ServerView::new(loaded));

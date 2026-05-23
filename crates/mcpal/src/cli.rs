@@ -321,10 +321,14 @@ pub enum ServerAction {
 
 #[derive(clap::Args, Debug)]
 pub struct ServerListArgs {
+    /// Only entries registered via `server add` / `server import` — skip discovery.
+    #[arg(long, conflicts_with_all = ["all", "discovered"])]
+    pub owned: bool,
+    /// Only entries from `server discover`.
     #[arg(long, conflicts_with = "all")]
     pub discovered: bool,
-    /// Owned + discovered.
-    #[arg(long)]
+    /// Kept for back-compat — owned + discovered is now the default.
+    #[arg(long, hide = true)]
     pub all: bool,
     #[arg(long)]
     pub source: Option<String>,

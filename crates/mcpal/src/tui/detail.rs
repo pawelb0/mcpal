@@ -315,12 +315,31 @@ pub async fn open(
     reference: String,
     mut spec: mcpal_core::ServerSpec,
     handler: mcpal_core::Handler,
-) -> anyhow::Result<(Client, Loaded)> {
+) -> anyhow::Result<(Client, Loaded, Vec<String>)> {
     crate::runtime::attach_bearer(&mut spec, &reference, &reference).await;
     let client = mcpal_core::connect(&spec, handler).await?;
-    let tools = client.list_all_tools().await.unwrap_or_default();
-    let resources = client.list_all_resources().await.unwrap_or_default();
-    let prompts = client.list_all_prompts().await.unwrap_or_default();
+    let mut warnings = Vec::new();
+    let tools = match client.list_all_tools().await {
+        Ok(t) => t,
+        Err(e) => {
+            warnings.push(format!("tools/list failed: {e}"));
+            Vec::new()
+        }
+    };
+    let resources = match client.list_all_resources().await {
+        Ok(r) => r,
+        Err(e) => {
+            warnings.push(format!("resources/list failed: {e}"));
+            Vec::new()
+        }
+    };
+    let prompts = match client.list_all_prompts().await {
+        Ok(p) => p,
+        Err(e) => {
+            warnings.push(format!("prompts/list failed: {e}"));
+            Vec::new()
+        }
+    };
     Ok((
         client,
         Loaded {
@@ -329,5 +348,6 @@ pub async fn open(
             resources,
             prompts,
         },
+        warnings,
     ))
 }
