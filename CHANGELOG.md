@@ -4,6 +4,14 @@ All notable changes documented here. Format: [Keep a Changelog](https://keepacha
 
 ## [Unreleased]
 
+## [0.3.1]
+
+### Changed
+- `mcpal server list` now shows owned + discovered entries by default. `--owned` narrows to mcpal-registered; `--discovered` narrows to discovery-imported. `--all` is kept (hidden) for back-compat with scripts.
+
+### Fixed
+- TUI no longer silently swallows `tools/list`, `resources/list`, or `prompts/list` failures. Errors surface to the output pane (`<ref>: tools/list failed: …`) so an empty tab has a visible explanation.
+
 ## [0.3.0]
 
 ### Added

@@ -15,7 +15,7 @@ categories = ["development-tools", "config"]
 workspace = true
 
 [dependencies]
-mcpal-core = { path = "../mcpal-core", version = "0.3.0" }
+mcpal-core = { path = "../mcpal-core", version = "0.3.1" }
 
 anyhow.workspace = true
 serde.workspace = true
