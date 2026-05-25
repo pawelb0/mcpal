@@ -37,6 +37,7 @@ axum.workspace = true
 webbrowser.workspace = true
 reqwest.workspace = true
 jsonschema.workspace = true
+semver.workspace = true
 serde_yaml.workspace = true
 regex.workspace = true
 jmespath.workspace = true

@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, bail};
 use mcpal_core::ServerSpec;
 use serde::Deserialize;
 
@@ -108,17 +108,32 @@ pub async fn search(query: &str, limit: u32) -> Result<Envelope> {
 }
 
 /// Registry's `?name=` doesn't actually filter, so we search and pick the
-/// exact-name match.
+/// exact-name match with the highest semver.
 pub async fn fetch(name: &str) -> Result<Server> {
-    search(name, 20)
-        .await?
-        .servers
-        .into_iter()
-        .map(|w| w.server)
-        .find(|s| s.name == name)
-        .ok_or_else(|| {
-            anyhow!("registry: no exact match for '{name}' (try `mcpal server search {name}`)")
-        })
+    let env = search(name, 20).await?;
+    let candidates: Vec<Server> = env.servers.into_iter().map(|w| w.server).collect();
+    pick_latest(name, candidates)
+}
+
+fn pick_latest(name: &str, candidates: Vec<Server>) -> Result<Server> {
+    let mut hits: Vec<Server> = candidates.into_iter().filter(|s| s.name == name).collect();
+    if hits.is_empty() {
+        return Err(anyhow::anyhow!(
+            "registry: no exact match for '{name}' (try `mcpal server search {name}`)"
+        ));
+    }
+    hits.sort_by(|a, b| {
+        let av = a
+            .version
+            .as_deref()
+            .and_then(|v| semver::Version::parse(v).ok());
+        let bv = b
+            .version
+            .as_deref()
+            .and_then(|v| semver::Version::parse(v).ok());
+        av.cmp(&bv)
+    });
+    Ok(hits.pop().unwrap())
 }
 
 pub fn to_spec(server: &Server, extra_env: &BTreeMap<String, String>) -> Result<ServerSpec> {
@@ -254,5 +269,45 @@ mod tests {
                 .to_string()
                 .contains("NEEDED")
         );
+    }
+}
+
+#[cfg(test)]
+mod fetch_tests {
+    use super::*;
+
+    fn srv(name: &str, ver: &str) -> Server {
+        Server {
+            name: name.into(),
+            version: Some(ver.into()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn picks_max_semver() {
+        let candidates = vec![
+            srv("io.github.x/y", "0.1.0"),
+            srv("io.github.x/y", "0.1.4"),
+            srv("io.github.x/y", "0.1.2"),
+            srv("io.github.other/z", "9.9.9"),
+            srv("io.github.x/y", "0.1.3"),
+            srv("io.github.x/y", "0.1.1"),
+        ];
+        let chosen = pick_latest("io.github.x/y", candidates).unwrap();
+        assert_eq!(chosen.version.as_deref(), Some("0.1.4"));
+    }
+
+    #[test]
+    fn unparseable_version_loses_to_real() {
+        let candidates = vec![srv("p", "not-semver"), srv("p", "0.0.1")];
+        let chosen = pick_latest("p", candidates).unwrap();
+        assert_eq!(chosen.version.as_deref(), Some("0.0.1"));
+    }
+
+    #[test]
+    fn no_match_returns_err() {
+        let candidates = vec![srv("a", "0.1.0")];
+        assert!(pick_latest("b", candidates).is_err());
     }
 }
