@@ -123,3 +123,29 @@ mcpal --output json doctor
 
 Include the failing command and its `-vv` trace. The `error[E####]`
 prefix is stable; quote it verbatim.
+
+## Server dies on initialize — read its stderr
+
+`mcpal tool list <ref>` failing with
+`E0006: connection closed: initialize response` means the stdio child
+exited before completing the MCP handshake. The error chain now
+includes the last lines of the child's stderr — read it.
+
+If the chain is still empty, the child died silently or printed to
+stdout (a protocol violation). Run it in inherit mode to stream
+stderr live:
+
+```bash
+MCPAL_CHILD_STDERR=inherit mcpal tool list <ref>
+```
+
+The TUI always nulls child stderr to keep its alt-screen clean. Use
+the CLI for diagnosis.
+
+The relevant env var values are:
+
+| Value | Effect |
+|---|---|
+| (unset) / `capture` | Default. Stderr piped into a 64-line tail; flushed into the error chain on failure. |
+| `inherit` | Stream child stderr live to the parent's stderr. Best for diagnosis. |
+| `null` | Discard. Used by `mcpal tui` automatically. |

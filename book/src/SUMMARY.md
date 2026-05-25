@@ -7,6 +7,7 @@
 # Concepts
 
 - [Concepts](./concepts.md)
+- [Discovery](./discovery.md)
 
 # How-to guides
 
