@@ -12,62 +12,68 @@ mod opencode;
 pub use claude_code::ClaudeCode;
 pub use opencode::Opencode;
 
-/// Declarative spec for clients whose mcp config is a single JSON(C) file with
-/// a `{ "<key>": { "<name>": entry, ... } }` map. Most clients fit this shape.
+pub enum SourceFormat {
+    Json,
+    Jsonc,
+    Toml,
+}
+
+/// Declarative spec for clients whose mcp config is a single file with
+/// a nested key path leading to a `{ "<name>": entry, ... }` map.
 pub struct SimpleSource {
     pub id: &'static str,
-    pub key: &'static str,
+    pub key_path: &'static [&'static str],
     pub global: &'static [(Location, &'static str)],
     pub project: &'static [&'static str],
-    pub jsonc: bool,
+    pub format: SourceFormat,
 }
 
 const SIMPLE_SOURCES: &[SimpleSource] = &[
     SimpleSource {
         id: "claude-desktop",
-        key: "mcpServers",
+        key_path: &["mcpServers"],
         global: &[(Location::Config, "Claude/claude_desktop_config.json")],
         project: &[],
-        jsonc: false,
+        format: SourceFormat::Json,
     },
     SimpleSource {
         id: "cursor",
-        key: "mcpServers",
+        key_path: &["mcpServers"],
         global: &[(Location::Home, ".cursor/mcp.json")],
         project: &[".cursor/mcp.json"],
-        jsonc: false,
+        format: SourceFormat::Json,
     },
     SimpleSource {
         id: "lm-studio",
-        key: "mcpServers",
+        key_path: &["mcpServers"],
         global: &[(Location::Home, ".lmstudio/mcp.json")],
         project: &[],
-        jsonc: false,
+        format: SourceFormat::Json,
     },
     SimpleSource {
         id: "windsurf",
-        key: "mcpServers",
+        key_path: &["mcpServers"],
         global: &[(Location::Home, ".codeium/windsurf/mcp_config.json")],
         project: &[],
-        jsonc: false,
+        format: SourceFormat::Json,
     },
     SimpleSource {
         id: "cline",
-        key: "mcpServers",
+        key_path: &["mcpServers"],
         // VS Code globalStorage lives under Application Support / .config / AppData per platform.
         global: &[(
             Location::Config,
             "Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
         )],
         project: &[],
-        jsonc: false,
+        format: SourceFormat::Json,
     },
     SimpleSource {
         id: "zed",
-        key: "context_servers",
+        key_path: &["context_servers"],
         global: &[(Location::Home, ".config/zed/settings.json")],
         project: &[],
-        jsonc: true,
+        format: SourceFormat::Jsonc,
     },
 ];
 
@@ -90,12 +96,16 @@ impl Source for &'static SimpleSource {
         out
     }
     fn parse(&self, path: &Path, scope: Scope, bytes: &[u8]) -> Result<Vec<DiscoveredServer>> {
-        let v: Value = if self.jsonc {
-            json5::from_str(std::str::from_utf8(bytes)?)?
-        } else {
-            serde_json::from_slice(bytes)?
+        let v: Value = match self.format {
+            SourceFormat::Json => serde_json::from_slice(bytes)?,
+            SourceFormat::Jsonc => json5::from_str(std::str::from_utf8(bytes)?)?,
+            SourceFormat::Toml => {
+                let s = std::str::from_utf8(bytes)?;
+                let t: toml::Value = toml::from_str(s)?;
+                serde_json::to_value(t)?
+            }
         };
-        let Some(map) = v.get(self.key).and_then(Value::as_object) else {
+        let Some(map) = crate::parse::walk_key_path(&v, self.key_path) else {
             return Ok(Vec::new());
         };
         Ok(servers_map(map, self.id, path, scope))

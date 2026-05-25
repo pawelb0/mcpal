@@ -47,6 +47,18 @@ impl Entry {
     }
 }
 
+/// Walk a nested key path against a JSON value, returning the final object map.
+pub(crate) fn walk_key_path<'a>(
+    root: &'a Value,
+    path: &[&str],
+) -> Option<&'a serde_json::Map<String, Value>> {
+    let mut cur = root;
+    for k in path {
+        cur = cur.get(*k)?;
+    }
+    cur.as_object()
+}
+
 /// Parse the common `{ "<name>": { command|url, ... } }` map shape into a list
 /// of `DiscoveredServer`. Entries that don't match either variant are dropped.
 pub fn servers_map(
@@ -67,4 +79,36 @@ pub fn servers_map(
             })
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn walks_single_level() {
+        let v = json!({ "mcpServers": { "a": {} } });
+        let m = walk_key_path(&v, &["mcpServers"]).unwrap();
+        assert!(m.contains_key("a"));
+    }
+
+    #[test]
+    fn walks_three_levels() {
+        let v = json!({ "chat": { "mcp": { "servers": { "a": {} } } } });
+        let m = walk_key_path(&v, &["chat", "mcp", "servers"]).unwrap();
+        assert!(m.contains_key("a"));
+    }
+
+    #[test]
+    fn missing_segment_returns_none() {
+        let v = json!({ "chat": { } });
+        assert!(walk_key_path(&v, &["chat", "mcp", "servers"]).is_none());
+    }
+
+    #[test]
+    fn non_object_terminal_returns_none() {
+        let v = json!({ "k": 7 });
+        assert!(walk_key_path(&v, &["k"]).is_none());
+    }
 }
