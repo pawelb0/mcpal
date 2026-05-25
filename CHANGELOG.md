@@ -4,6 +4,21 @@ All notable changes documented here. Format: [Keep a Changelog](https://keepacha
 
 ## [Unreleased]
 
+## [0.4.0]
+
+### Added
+- Discovery sources for VS Code (workspace `.vscode/mcp.json` + user `settings.json` `chat.mcp.servers` + Continue extension storage) and Codex CLI (`~/.codex/config.toml`).
+- `--discover-from PATH` global flag for ad-hoc `mcp.json` files (repeatable).
+- Book `Discovery` chapter listing every supported client; troubleshooting section for stdio servers that die on `initialize`.
+
+### Changed
+- `mcpal server install` picks the highest semver-compatible version from the registry instead of the first match.
+- Stdio child stderr is captured by default into a 64-line ring buffer; on connect failure the tail is attached to the error chain. `MCPAL_CHILD_STDERR=null|inherit|capture` controls the mode; the TUI pins `null` to keep its alt-screen clean.
+
+### Fixed
+- `mcpal server install io.github.<owner>/<name>` silently picked the lowest version when multiple existed.
+- `mcpal tool list <stdio-ref>` failing with `connection closed: initialize response` now includes the child's stderr instead of empty context.
+
 ## [0.3.1]
 
 ### Changed
