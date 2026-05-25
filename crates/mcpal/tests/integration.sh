@@ -182,6 +182,16 @@ it_grep 'T8 spec has auth = oauth' 'type = "oauth"' \
 
 rm -rf "$ADD_DIR"
 
+# ---------- stderr surfaced on stdio failure ----------
+section "stderr surfaced on stdio failure"
+
+mc server add boom --force -- bash -c 'echo "kaboom-marker" >&2; exit 2'
+it_exit 'boom server fails (service error exit 7)' 7 \
+    mc tool list boom
+it_grep_err 'failure error chain contains stderr marker' 'kaboom-marker' \
+    mc tool list boom
+mc server remove boom >/dev/null 2>&1 || true
+
 # ---------- server properties ----------
 section 'server properties'
 it_grep     'server info has serverInfo.name' 'mcp-servers/everything' mc server info "$REF"

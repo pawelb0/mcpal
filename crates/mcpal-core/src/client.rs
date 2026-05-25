@@ -29,6 +29,12 @@ async fn connect_stdio(
     env: &std::collections::BTreeMap<String, String>,
     handler: Handler,
 ) -> Result<Client> {
+    use std::collections::VecDeque;
+    use std::process::Stdio;
+    use std::sync::{Arc, Mutex};
+
+    use tokio::io::{AsyncBufReadExt, BufReader};
+
     let mut cmd = Command::new(command);
     cmd.args(args);
     for (k, v) in env {
@@ -38,21 +44,59 @@ async fn connect_stdio(
     // installers can't write progress UI to /dev/tty over our alt-screen.
     #[cfg(unix)]
     detach_session(&mut cmd);
-    // TokioChildProcess defaults stderr to inherit(); use the builder so we
-    // can null it (or pipe it for MCPAL_CHILD_STDERR=inherit/capture).
-    use std::process::Stdio;
+
+    // Three modes (env var `MCPAL_CHILD_STDERR`):
+    //   `inherit` — pipe straight to parent's stderr (best for diagnosis).
+    //   `null`    — discard. Set by the TUI to keep its alt-screen clean.
+    //   default   — pipe + capture into a 64-line tail; flushed into the
+    //               error chain on connect failure.
     let stderr_mode = std::env::var("MCPAL_CHILD_STDERR").unwrap_or_default();
-    let stderr_stdio = match stderr_mode.as_str() {
-        "inherit" => Stdio::inherit(),
-        _ => Stdio::null(),
+    let (stderr_stdio, want_capture) = match stderr_mode.as_str() {
+        "inherit" => (Stdio::inherit(), false),
+        "null" => (Stdio::null(), false),
+        _ => (Stdio::piped(), true),
     };
-    let (transport, _stderr) = rmcp::transport::TokioChildProcess::builder(cmd)
+
+    let (transport, child_stderr) = rmcp::transport::TokioChildProcess::builder(cmd)
         .stderr(stderr_stdio)
         .spawn()?;
-    handler
-        .serve(transport)
-        .await
-        .map_err(|e| Error::Service(e.to_string()))
+
+    let tail: Option<Arc<Mutex<VecDeque<String>>>> = if want_capture {
+        let buf = Arc::new(Mutex::new(VecDeque::<String>::with_capacity(64)));
+        if let Some(err) = child_stderr {
+            let buf2 = Arc::clone(&buf);
+            tokio::spawn(async move {
+                let mut reader = BufReader::new(err).lines();
+                while let Ok(Some(line)) = reader.next_line().await {
+                    let mut q = buf2.lock().expect("stderr buffer mutex poisoned");
+                    if q.len() == 64 {
+                        q.pop_front();
+                    }
+                    q.push_back(line);
+                }
+            });
+        }
+        Some(buf)
+    } else {
+        None
+    };
+
+    match handler.serve(transport).await {
+        Ok(client) => Ok(client),
+        Err(e) => {
+            let mut msg = e.to_string();
+            if let Some(buf) = tail {
+                // Give the drain task a tick to catch up.
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                let q = buf.lock().expect("stderr buffer mutex poisoned");
+                if !q.is_empty() {
+                    let lines: Vec<&str> = q.iter().map(String::as_str).collect();
+                    msg = format!("{msg} (child stderr: {})", lines.join(" | "));
+                }
+            }
+            Err(Error::Service(msg))
+        }
+    }
 }
 
 #[cfg(unix)]
