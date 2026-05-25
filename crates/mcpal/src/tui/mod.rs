@@ -18,6 +18,12 @@ use ratatui::backend::CrosstermBackend;
 use crate::runtime::Ctx;
 
 pub async fn run(ctx: &Ctx) -> Result<()> {
+    // Child stderr would corrupt the alt-screen. Pin null for our scope.
+    // SAFETY: process-wide env mutation; called once at TUI entry.
+    #[allow(unsafe_code)]
+    unsafe {
+        std::env::set_var("MCPAL_CHILD_STDERR", "null");
+    }
     let _guard = TerminalGuard::enter()?;
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend)?;
