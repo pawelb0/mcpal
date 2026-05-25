@@ -131,3 +131,22 @@ fn custom_paths_pick_up_extra_files() {
         "expected custom/team in {servers:?}"
     );
 }
+
+/// Every built-in source produces at least one path against a synthetic
+/// `DiscoveryCtx`. Catches typos / missing roots. `custom` is skipped
+/// because it depends on `ctx.custom_paths`.
+#[test]
+fn all_sources_produce_paths() {
+    let d = tempfile::tempdir().unwrap();
+    let ctx = fake_ctx(&d);
+    let mut missing = Vec::new();
+    for src in mcpal_discovery::sources::registry() {
+        if src.id() == "custom" {
+            continue;
+        }
+        if src.paths(&ctx).is_empty() {
+            missing.push(src.id());
+        }
+    }
+    assert!(missing.is_empty(), "sources with no paths: {missing:?}");
+}
