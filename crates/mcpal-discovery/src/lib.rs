@@ -33,6 +33,7 @@ pub struct DiscoveryCtx {
     pub config_dir: PathBuf,
     pub data_dir: PathBuf,
     pub cwd: PathBuf,
+    pub custom_paths: Vec<PathBuf>,
 }
 
 impl DiscoveryCtx {
@@ -44,6 +45,7 @@ impl DiscoveryCtx {
             config_dir: base.config_dir().to_path_buf(),
             data_dir: base.data_dir().to_path_buf(),
             cwd: std::env::current_dir()?,
+            custom_paths: Vec::new(),
         })
     }
 

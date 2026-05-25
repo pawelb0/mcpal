@@ -75,6 +75,37 @@ const SIMPLE_SOURCES: &[SimpleSource] = &[
         project: &[],
         format: SourceFormat::Jsonc,
     },
+    SimpleSource {
+        id: "vscode",
+        key_path: &["servers"],
+        global: &[(Location::Config, "Code/User/mcp.json")],
+        project: &[".vscode/mcp.json"],
+        format: SourceFormat::Jsonc,
+    },
+    SimpleSource {
+        id: "vscode-user",
+        key_path: &["chat", "mcp", "servers"],
+        global: &[(Location::Config, "Code/User/settings.json")],
+        project: &[],
+        format: SourceFormat::Jsonc,
+    },
+    SimpleSource {
+        id: "continue",
+        key_path: &["mcpServers"],
+        global: &[(
+            Location::Config,
+            "Code/User/globalStorage/continue.continue/config.json",
+        )],
+        project: &[],
+        format: SourceFormat::Json,
+    },
+    SimpleSource {
+        id: "codex",
+        key_path: &["mcp_servers"],
+        global: &[(Location::Home, ".codex/config.toml")],
+        project: &[],
+        format: SourceFormat::Toml,
+    },
 ];
 
 impl Source for &'static SimpleSource {
