@@ -7,9 +7,11 @@ use crate::parse::servers_map;
 use crate::{DiscoveredServer, DiscoveryCtx, Location, Scope, Source};
 
 mod claude_code;
+mod custom;
 mod opencode;
 
 pub use claude_code::ClaudeCode;
+pub use custom::CustomFile;
 pub use opencode::Opencode;
 
 pub enum SourceFormat {
@@ -144,7 +146,11 @@ impl Source for &'static SimpleSource {
 }
 
 pub fn registry() -> Vec<Box<dyn Source>> {
-    let mut v: Vec<Box<dyn Source>> = vec![Box::new(ClaudeCode), Box::new(Opencode)];
+    let mut v: Vec<Box<dyn Source>> = vec![
+        Box::new(ClaudeCode),
+        Box::new(Opencode),
+        Box::new(CustomFile),
+    ];
     for s in SIMPLE_SOURCES {
         v.push(Box::new(s));
     }

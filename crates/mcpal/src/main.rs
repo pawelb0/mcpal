@@ -81,6 +81,7 @@ async fn dispatch(cli: Cli) -> Result<()> {
         path,
         cli.collection.clone(),
         cli.profile.clone(),
+        cli.discover_from.clone(),
         handler,
     );
 

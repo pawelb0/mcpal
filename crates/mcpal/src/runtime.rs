@@ -22,6 +22,7 @@ pub struct Ctx {
     pub config_path: PathBuf,
     pub collection_override: Option<PathBuf>,
     pub profile: String,
+    pub discover_from: Vec<PathBuf>,
     pub handler: Handler,
     discovered: OnceCell<Vec<DiscoveredServer>>,
 }
@@ -36,6 +37,7 @@ impl Ctx {
         config_path: PathBuf,
         collection_override: Option<PathBuf>,
         profile: String,
+        discover_from: Vec<PathBuf>,
         handler: Handler,
     ) -> Self {
         Self {
@@ -46,6 +48,7 @@ impl Ctx {
             config_path,
             collection_override,
             profile,
+            discover_from,
             handler,
             discovered: OnceCell::new(),
         }
@@ -93,7 +96,7 @@ impl Ctx {
 
     pub fn discovered(&self) -> Result<&[DiscoveredServer]> {
         if self.discovered.get().is_none() {
-            let dctx = DiscoveryCtx::current()?;
+            let dctx = DiscoveryCtx::current()?.with_custom_paths(self.discover_from.clone());
             let _ = self.discovered.set(discover(&dctx));
         }
         Ok(self.discovered.get().expect("just initialized").as_slice())

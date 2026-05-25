@@ -111,3 +111,23 @@ fn empty_nested_key_yields_zero_not_error() {
         "vscode-user entries should be empty"
     );
 }
+
+#[test]
+fn custom_paths_pick_up_extra_files() {
+    let d = tempfile::tempdir().unwrap();
+    let mut ctx = fake_ctx(&d);
+    let extra = d.path().join("team-mcp.json");
+    write(
+        extra.clone(),
+        r#"{ "mcpServers": { "team": { "command": "uvx", "args": ["mcp-team"] } } }"#,
+    );
+    let missing = d.path().join("does-not-exist.json");
+    ctx.custom_paths = vec![extra, missing];
+    let servers = discover(&ctx);
+    assert!(
+        servers
+            .iter()
+            .any(|s| s.source == "custom" && s.name == "team"),
+        "expected custom/team in {servers:?}"
+    );
+}

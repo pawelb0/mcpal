@@ -56,6 +56,11 @@ impl DiscoveryCtx {
             Location::Data => &self.data_dir,
         }
     }
+
+    pub fn with_custom_paths(mut self, paths: Vec<PathBuf>) -> Self {
+        self.custom_paths = paths;
+        self
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -47,6 +47,9 @@ pub struct Cli {
     /// Path to a collection file (`mcpal.yml`). Overrides walk-parents lookup.
     #[arg(long, global = true, value_name = "PATH")]
     pub collection: Option<PathBuf>,
+    /// Additional `mcp.json` file to include in discovery (repeatable).
+    #[arg(long = "discover-from", global = true, value_name = "PATH")]
+    pub discover_from: Vec<PathBuf>,
     /// JMESPath filter applied to the response.
     #[arg(long, global = true, value_name = "JMESPATH")]
     pub query: Option<String>,
