@@ -4,6 +4,20 @@ All notable changes documented here. Format: [Keep a Changelog](https://keepacha
 
 ## [Unreleased]
 
+## [0.4.1]
+
+### Added
+- `mcpal server install` prompts for declared environment variables on a TTY using each variable's registry-provided description as the hint. Non-TTY (or `--no-prompt`) bails with the new `E0017` error.
+- TUI: connecting to a server whose stored spec carries empty env values pops a `Configure '<server>'` modal — fill in, save (writes to `config.toml`), connect.
+- `book/src/test-corpus.md` — curated list of tricky MCP servers exercised on every release.
+
+### Changed
+- Registry-declared `environmentVariables` default to required unless they carry a `default` value or explicitly set `isRequired: false`. Matches the official registry's actual schema.
+- `registry::to_spec` now returns `(ServerSpec, RequiredEnvHint)` so callers can prompt instead of bailing.
+
+### Fixed
+- `mcpal server install io.github.codeurali/dataverse` silently produced a spec without `DATAVERSE_ENV_URL`, then the server crashed on `initialize`. The prompt path or `--env DATAVERSE_ENV_URL=…` resolves this end-to-end.
+
 ## [0.4.0]
 
 ### Added
