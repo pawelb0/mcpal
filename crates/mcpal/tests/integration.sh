@@ -525,6 +525,11 @@ it_no_grep 'no AWS-CLI in server add --help' 'AWS-CLI' \
 it_no_grep 'no AWS-CLI in tool call --help' 'AWS-CLI' \
     mc tool call --help
 
+# ---------- E0017 explain ----------
+section "E0017 explain"
+it_grep 'debug explain E0017 prints prose' 'registry server' \
+    mc debug explain E0017
+
 # ---------- collection + mcpal run ----------
 section "collection + mcpal run"
 

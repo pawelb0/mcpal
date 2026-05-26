@@ -222,3 +222,11 @@ pass `--collection PATH` to point at an explicit file.
 The active profile (`--profile NAME`, `MCPAL_PROFILE`, or `default-profile:`)
 isn't declared in the collection's `profiles:` block. Add it, pick a different
 profile, or remove the `default-profile:` key.
+
+## E0017 — registry server requires env vars
+
+`mcpal server install` found the registry entry declares environment
+variables but none were supplied. Either re-run on a TTY (mcpal will
+prompt with the registry's description per variable), or pre-supply
+with `--env VAR=value` (repeatable). `mcpal server search <ref>` shows
+the entry's declared variables.

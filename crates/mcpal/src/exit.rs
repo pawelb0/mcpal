@@ -21,6 +21,7 @@ fn d(code: i32, ec: &'static str, title: impl Into<String>) -> Diagnostic {
 /// Substring → (exit code, error code). First match wins. Patterns are
 /// matched against the lowercased anyhow chain.
 const ANYHOW_PATTERNS: &[(&str, i32, &str)] = &[
+    ("requires env vars", 2, "E0017"),
     ("template variable not set", 2, "E0014"),
     ("collection not found", 2, "E0015"),
     ("not in collection", 2, "E0016"),
@@ -196,6 +197,12 @@ const EXPLAIN: &[(&str, &str)] = &[
         "Active profile isn't declared in the collection. Either add a `profiles.<name>:` \
         block to `mcpal.yml`, pick a different `--profile`, or set `MCPAL_PROFILE`. \
         `default-profile:` at the top of `mcpal.yml` sets the fallback.\n",
+    ),
+    (
+        "E0017",
+        "Registry server declares required environment variables that aren't set. \
+        Re-run `mcpal server install <ref>` on a TTY (mcpal will prompt) or pre-supply \
+        each via `--env VAR=value`. `mcpal server search <ref>` shows the entry.\n",
     ),
 ];
 
