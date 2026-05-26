@@ -106,7 +106,6 @@ pub struct EnvVarHint {
 /// Result of converting a registry server into a ServerSpec: the spec
 /// plus everything the caller needs to know about declared env vars.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct RequiredEnvHint {
     /// Every declared env var (satisfied or not).
     pub vars: Vec<EnvVarHint>,

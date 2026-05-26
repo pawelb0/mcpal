@@ -354,6 +354,9 @@ pub struct ServerInstallArgs {
     pub alias: Option<String>,
     #[arg(long = "env", value_name = "K=V", num_args = 1)]
     pub env: Vec<String>,
+    /// Skip the interactive env-var prompt; bail with E0017 instead.
+    #[arg(long = "no-prompt")]
+    pub no_prompt: bool,
 }
 
 #[derive(clap::Args, Debug)]

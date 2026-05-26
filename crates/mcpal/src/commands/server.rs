@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use mcpal_core::{AuthSpec, ServerSpec};
 
 use crate::keyring;
@@ -341,15 +341,45 @@ async fn search(keywords: &str, limit: u32, ctx: &Ctx) -> Result<()> {
 }
 
 async fn install(args: ServerInstallArgs, ctx: &Ctx) -> Result<()> {
+    use std::io::IsTerminal;
+
     let server = registry::fetch(&args.name).await?;
-    let extra = parse_env(&args.env)?;
-    let (spec, _hint) = registry::to_spec(&server, &extra)?;
+    let mut extra = parse_env(&args.env)?;
     let alias = args
         .alias
+        .clone()
         .unwrap_or_else(|| default_alias(&server.name).into());
-    write_server(&ctx.config_path, &alias, spec, false)?;
-    eprintln!("installed {} as '{alias}'", server.name);
-    Ok(())
+
+    loop {
+        let (spec, hint) = registry::to_spec(&server, &extra)?;
+        if hint.missing.is_empty() {
+            write_server(&ctx.config_path, &alias, spec, false)?;
+            eprintln!("installed {} as '{alias}'", server.name);
+            return Ok(());
+        }
+        if args.no_prompt || !std::io::stdin().is_terminal() {
+            bail!(
+                "registry server requires env vars: {} — re-run on a TTY or pass --env VAR=…",
+                hint.missing.join(", "),
+            );
+        }
+        eprintln!(
+            "{} needs {} environment variable{}:",
+            server.name,
+            hint.missing.len(),
+            if hint.missing.len() == 1 { "" } else { "s" },
+        );
+        for missing_name in &hint.missing {
+            let description = hint
+                .vars
+                .iter()
+                .find(|v| v.name == *missing_name)
+                .and_then(|v| v.description.clone())
+                .unwrap_or_default();
+            let value = prompt_for(missing_name, &description).context("prompt")?;
+            extra.insert(missing_name.clone(), value);
+        }
+    }
 }
 
 fn write_server(path: &std::path::Path, alias: &str, spec: ServerSpec, force: bool) -> Result<()> {
@@ -377,6 +407,20 @@ async fn peer_field(reference: &str, pointer: &str, ctx: &Ctx) -> Result<()> {
         .unwrap_or(json!(null));
     ctx.render_one(&v)?;
     Ok(())
+}
+
+fn prompt_for(name: &str, description: &str) -> std::io::Result<String> {
+    use std::io::{BufRead, Write};
+    let mut err = std::io::stderr();
+    if description.is_empty() {
+        write!(err, "  {name}\n> ")?;
+    } else {
+        write!(err, "  {name} — {description}\n> ")?;
+    }
+    err.flush()?;
+    let mut buf = String::new();
+    std::io::stdin().lock().read_line(&mut buf)?;
+    Ok(buf.trim_end_matches(['\r', '\n']).to_string())
 }
 
 #[cfg(test)]
