@@ -46,12 +46,29 @@ pub struct Transport {
     pub r#type: String,
 }
 
-#[derive(Deserialize, Clone, Default)]
+#[derive(Deserialize, Clone)]
 #[serde(default, rename_all = "camelCase")]
 pub struct EnvVar {
     pub name: String,
+    pub description: Option<String>,
+    #[serde(default = "default_required")]
     pub is_required: bool,
     pub default: Option<String>,
+}
+
+impl Default for EnvVar {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            description: None,
+            is_required: true,
+            default: None,
+        }
+    }
+}
+
+fn default_required() -> bool {
+    true
 }
 
 #[derive(Deserialize, Clone, Default)]
@@ -76,6 +93,26 @@ pub struct Hit<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<&'a str>,
     pub kind: &'static str,
+}
+
+/// Per-var info pulled from the registry, used to prompt or print hints.
+#[allow(dead_code)]
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct EnvVarHint {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+/// Result of converting a registry server into a ServerSpec: the spec
+/// plus everything the caller needs to know about declared env vars.
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub struct RequiredEnvHint {
+    /// Every declared env var (satisfied or not).
+    pub vars: Vec<EnvVarHint>,
+    /// Names of required vars that are unsatisfied — caller must prompt or bail.
+    pub missing: Vec<String>,
 }
 
 pub fn classify(s: &Server) -> &'static str {
@@ -269,6 +306,30 @@ mod tests {
                 .to_string()
                 .contains("NEEDED")
         );
+    }
+
+    #[test]
+    fn env_var_without_isrequired_is_required_by_default() {
+        let body = r#"{ "name": "X", "description": "the X" }"#;
+        let v: EnvVar = serde_json::from_str(body).unwrap();
+        assert_eq!(v.name, "X");
+        assert_eq!(v.description.as_deref(), Some("the X"));
+        assert!(v.is_required, "should default to required");
+    }
+
+    #[test]
+    fn explicit_is_required_false_is_honoured() {
+        let body = r#"{ "name": "X", "isRequired": false }"#;
+        let v: EnvVar = serde_json::from_str(body).unwrap();
+        assert!(!v.is_required);
+    }
+
+    #[test]
+    fn env_var_default_value_round_trips() {
+        let body = r#"{ "name": "X", "default": "yo" }"#;
+        let v: EnvVar = serde_json::from_str(body).unwrap();
+        assert_eq!(v.default.as_deref(), Some("yo"));
+        assert!(v.is_required); // default doesn't override requiredness
     }
 }
 
