@@ -96,7 +96,6 @@ pub struct Hit<'a> {
 }
 
 /// Per-var info pulled from the registry, used to prompt or print hints.
-#[allow(dead_code)]
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct EnvVarHint {
     pub name: String,
@@ -106,8 +105,8 @@ pub struct EnvVarHint {
 
 /// Result of converting a registry server into a ServerSpec: the spec
 /// plus everything the caller needs to know about declared env vars.
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct RequiredEnvHint {
     /// Every declared env var (satisfied or not).
     pub vars: Vec<EnvVarHint>,
@@ -173,7 +172,10 @@ fn pick_latest(name: &str, candidates: Vec<Server>) -> Result<Server> {
     Ok(hits.pop().unwrap())
 }
 
-pub fn to_spec(server: &Server, extra_env: &BTreeMap<String, String>) -> Result<ServerSpec> {
+pub fn to_spec(
+    server: &Server,
+    extra_env: &BTreeMap<String, String>,
+) -> Result<(ServerSpec, RequiredEnvHint)> {
     if let Some(pkg) = server
         .packages
         .iter()
@@ -186,11 +188,17 @@ pub fn to_spec(server: &Server, extra_env: &BTreeMap<String, String>) -> Result<
         .iter()
         .find(|r| r.r#type == "streamable-http")
     {
-        return Ok(ServerSpec::Http {
-            url: r.url.clone(),
-            headers: BTreeMap::new(),
-            auth: None,
-        });
+        return Ok((
+            ServerSpec::Http {
+                url: r.url.clone(),
+                headers: BTreeMap::new(),
+                auth: None,
+            },
+            RequiredEnvHint {
+                vars: Vec::new(),
+                missing: Vec::new(),
+            },
+        ));
     }
     bail!(
         "registry server '{}' has no stdio package or streamable-http remote",
@@ -198,7 +206,10 @@ pub fn to_spec(server: &Server, extra_env: &BTreeMap<String, String>) -> Result<
     )
 }
 
-fn stdio_from_package(pkg: &Package, extra_env: &BTreeMap<String, String>) -> Result<ServerSpec> {
+fn stdio_from_package(
+    pkg: &Package,
+    extra_env: &BTreeMap<String, String>,
+) -> Result<(ServerSpec, RequiredEnvHint)> {
     let id = &pkg.identifier;
     let ver = pkg.version.as_deref().filter(|v| !v.is_empty());
     let (command, mut args): (&str, Vec<String>) = match pkg.registry_type.as_str() {
@@ -230,23 +241,30 @@ fn stdio_from_package(pkg: &Package, extra_env: &BTreeMap<String, String>) -> Re
         .filter_map(|v| Some((v.name.clone(), v.default.clone()?)))
         .collect();
     env.extend(extra_env.iter().map(|(k, v)| (k.clone(), v.clone())));
-    let missing: Vec<&str> = pkg
+
+    let vars: Vec<EnvVarHint> = pkg
+        .environment_variables
+        .iter()
+        .map(|v| EnvVarHint {
+            name: v.name.clone(),
+            description: v.description.clone(),
+        })
+        .collect();
+    let missing: Vec<String> = pkg
         .environment_variables
         .iter()
         .filter(|v| v.is_required && !env.contains_key(&v.name))
-        .map(|v| v.name.as_str())
+        .map(|v| v.name.clone())
         .collect();
-    if !missing.is_empty() {
-        bail!(
-            "registry server requires env vars; pass `--env {}=…`",
-            missing.join("=… --env "),
-        );
-    }
-    Ok(ServerSpec::Stdio {
-        command: command.into(),
-        args,
-        env,
-    })
+
+    Ok((
+        ServerSpec::Stdio {
+            command: command.into(),
+            args,
+            env,
+        },
+        RequiredEnvHint { vars, missing },
+    ))
 }
 
 #[cfg(test)]
@@ -269,10 +287,8 @@ mod tests {
                 "name":"x/y","remotes":[{"type":"streamable-http","url":"https://a/mcp"}]}}]}"#,
         );
         assert_eq!(classify(&s), "http");
-        assert!(matches!(
-            to_spec(&s, &BTreeMap::new()).unwrap(),
-            ServerSpec::Http { .. }
-        ));
+        let (spec, _) = to_spec(&s, &BTreeMap::new()).unwrap();
+        assert!(matches!(spec, ServerSpec::Http { .. }));
     }
 
     #[test]
@@ -285,7 +301,8 @@ mod tests {
         );
         let mut extra = BTreeMap::new();
         extra.insert("API_KEY".into(), "k".into());
-        let ServerSpec::Stdio { command, args, env } = to_spec(&s, &extra).unwrap() else {
+        let (spec, _) = to_spec(&s, &extra).unwrap();
+        let ServerSpec::Stdio { command, args, env } = spec else {
             panic!("expected stdio");
         };
         assert_eq!(command, "npx");
@@ -300,12 +317,8 @@ mod tests {
                 "registryType":"npm","identifier":"@mcp/foo",
                 "environmentVariables":[{"name":"NEEDED","isRequired":true}]}]}}]}"#,
         );
-        assert!(
-            to_spec(&s, &BTreeMap::new())
-                .unwrap_err()
-                .to_string()
-                .contains("NEEDED")
-        );
+        let (_, hint) = to_spec(&s, &BTreeMap::new()).unwrap();
+        assert!(hint.missing.contains(&"NEEDED".to_string()));
     }
 
     #[test]
@@ -330,6 +343,61 @@ mod tests {
         let v: EnvVar = serde_json::from_str(body).unwrap();
         assert_eq!(v.default.as_deref(), Some("yo"));
         assert!(v.is_required); // default doesn't override requiredness
+    }
+
+    #[test]
+    fn to_spec_returns_missing_when_required_unsupplied() {
+        let body = r#"{"servers":[{"server":{"name":"x","packages":[{"registryType":"npm","identifier":"p","environmentVariables":[
+            {"name":"NEEDED","description":"the thing"}
+        ]}]}}]}"#;
+        let s = parse(body);
+        let (spec, hint) = to_spec(&s, &BTreeMap::new()).expect("to_spec");
+        assert!(matches!(spec, ServerSpec::Stdio { .. }));
+        assert_eq!(hint.missing, vec!["NEEDED"]);
+        assert_eq!(hint.vars.len(), 1);
+        assert_eq!(hint.vars[0].name, "NEEDED");
+        assert_eq!(hint.vars[0].description.as_deref(), Some("the thing"));
+    }
+
+    #[test]
+    fn to_spec_satisfied_by_extra_env() {
+        let body = r#"{"servers":[{"server":{"name":"x","packages":[{"registryType":"npm","identifier":"p","environmentVariables":[
+            {"name":"NEEDED"}
+        ]}]}}]}"#;
+        let s = parse(body);
+        let mut extra = BTreeMap::new();
+        extra.insert("NEEDED".to_string(), "abc".to_string());
+        let (_, hint) = to_spec(&s, &extra).unwrap();
+        assert!(hint.missing.is_empty());
+    }
+
+    #[test]
+    fn to_spec_satisfied_by_registry_default() {
+        let body = r#"{"servers":[{"server":{"name":"x","packages":[{"registryType":"npm","identifier":"p","environmentVariables":[
+            {"name":"NEEDED","default":"baked"}
+        ]}]}}]}"#;
+        let s = parse(body);
+        let (spec, hint) = to_spec(&s, &BTreeMap::new()).unwrap();
+        assert!(hint.missing.is_empty());
+        if let ServerSpec::Stdio { env, .. } = spec {
+            assert_eq!(env.get("NEEDED").map(String::as_str), Some("baked"));
+        } else {
+            panic!("expected stdio spec");
+        }
+    }
+
+    #[test]
+    fn to_spec_skips_non_required_when_missing() {
+        let body = r#"{"servers":[{"server":{"name":"x","packages":[{"registryType":"npm","identifier":"p","environmentVariables":[
+            {"name":"OPTIONAL","isRequired":false}
+        ]}]}}]}"#;
+        let s = parse(body);
+        let (_, hint) = to_spec(&s, &BTreeMap::new()).unwrap();
+        assert!(
+            hint.missing.is_empty(),
+            "isRequired:false should not appear in missing"
+        );
+        assert_eq!(hint.vars.len(), 1);
     }
 }
 

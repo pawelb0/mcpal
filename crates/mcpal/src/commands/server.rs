@@ -342,7 +342,8 @@ async fn search(keywords: &str, limit: u32, ctx: &Ctx) -> Result<()> {
 
 async fn install(args: ServerInstallArgs, ctx: &Ctx) -> Result<()> {
     let server = registry::fetch(&args.name).await?;
-    let spec = registry::to_spec(&server, &parse_env(&args.env)?)?;
+    let extra = parse_env(&args.env)?;
+    let (spec, _hint) = registry::to_spec(&server, &extra)?;
     let alias = args
         .alias
         .unwrap_or_else(|| default_alias(&server.name).into());
