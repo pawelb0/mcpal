@@ -23,4 +23,5 @@
 
 - [Protocol compliance matrix](./protocol-matrix.md)
 - [Error codes](./error-codes.md)
+- [Test corpus](./test-corpus.md)
 - [Changelog](./changelog.md)

@@ -149,3 +149,27 @@ The relevant env var values are:
 | (unset) / `capture` | Default. Stderr piped into a 64-line tail; flushed into the error chain on failure. |
 | `inherit` | Stream child stderr live to the parent's stderr. Best for diagnosis. |
 | `null` | Discard. Used by `mcpal tui` automatically. |
+
+## Registry install completes but the server crashes on first call
+
+If `mcpal server install <ref>` succeeded silently and then
+`mcpal tool list <ref>` reports `E0006: connection closed: initialize
+response`, the registry entry likely declares required environment
+variables that weren't set.
+
+mcpal v0.4.1+ prompts for these on a TTY. Re-install:
+
+```bash
+mcpal server remove <ref>
+mcpal server install <ref>
+# mcpal lists each declared env var and asks for a value
+```
+
+In CI or other non-TTY environments, pre-supply each variable:
+
+```bash
+mcpal server install <ref> --env VAR_A=… --env VAR_B=…
+```
+
+`mcpal server search <ref>` shows the entry's declared variables and
+their descriptions. See also [E0017](./error-codes.md#e0017--registry-server-requires-env-vars).
