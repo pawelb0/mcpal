@@ -53,7 +53,16 @@ impl Focus {
 
 enum Modal {
     Call(CallForm),
-    Bearer { reference: String, buf: String },
+    Bearer {
+        reference: String,
+        buf: String,
+    },
+    EnvSetup {
+        reference: String,
+        spec: mcpal_core::ServerSpec,
+        fields: Vec<(String, String)>,
+        cursor: usize,
+    },
 }
 
 enum AsyncMsg {
@@ -222,6 +231,31 @@ impl<'a> App<'a> {
                 KeyCode::Char(c) => buf.push(c),
                 _ => {}
             },
+            Modal::EnvSetup { fields, cursor, .. } => match key.code {
+                KeyCode::Esc => self.modal = None,
+                KeyCode::Tab | KeyCode::Down if !fields.is_empty() => {
+                    *cursor = (*cursor + 1) % fields.len();
+                }
+                KeyCode::BackTab | KeyCode::Up if !fields.is_empty() => {
+                    *cursor = if *cursor == 0 {
+                        fields.len() - 1
+                    } else {
+                        *cursor - 1
+                    };
+                }
+                KeyCode::Backspace => {
+                    if let Some((_, val)) = fields.get_mut(*cursor) {
+                        val.pop();
+                    }
+                }
+                KeyCode::Char(c) => {
+                    if let Some((_, val)) = fields.get_mut(*cursor) {
+                        val.push(c);
+                    }
+                }
+                KeyCode::Enter => self.save_env_setup(),
+                _ => {}
+            },
         }
     }
 
@@ -236,6 +270,61 @@ impl<'a> App<'a> {
             Ok(()) => self.output.ok(format!("bearer stored for {reference}")),
             Err(e) => self.output.err(format!("keyring: {e}")),
         }
+    }
+
+    fn save_env_setup(&mut self) {
+        let Some(Modal::EnvSetup {
+            reference,
+            mut spec,
+            fields,
+            ..
+        }) = self.modal.take()
+        else {
+            return;
+        };
+        // Patch the in-memory spec that will be passed to detail::open.
+        if let mcpal_core::ServerSpec::Stdio { ref mut env, .. } = spec {
+            for (k, v) in &fields {
+                env.insert(k.clone(), v.clone());
+            }
+        }
+        // Persist to disk so subsequent opens pick up the values.
+        match crate::config::Config::load(&self.ctx.config_path) {
+            Ok(mut cfg) => {
+                if let Some(mcpal_core::ServerSpec::Stdio { env, .. }) =
+                    cfg.server.get_mut(&reference)
+                {
+                    for (k, v) in &fields {
+                        env.insert(k.clone(), v.clone());
+                    }
+                }
+                if let Err(e) = cfg.save(&self.ctx.config_path) {
+                    self.output.err(format!("env save: {e}"));
+                }
+            }
+            Err(e) => self.output.err(format!("env save: load config: {e}")),
+        }
+        // Dispatch connect with the patched spec (bypasses stale sidebar entry).
+        let mut handler = self.ctx.handler.clone();
+        handler.events = Some(self.notif_tx.clone());
+        self.output.info(format!("$ connect {reference}"));
+        self.detail = crate::tui::detail::View::Connecting(reference.clone());
+        self.pending.push(
+            async move {
+                match crate::tui::detail::open(reference.clone(), spec, handler).await {
+                    Ok((client, loaded, warnings)) => AsyncMsg::Connected {
+                        client,
+                        loaded,
+                        warnings,
+                    },
+                    Err(e) => AsyncMsg::ConnectFailed {
+                        reference,
+                        err: e.to_string(),
+                    },
+                }
+            }
+            .boxed(),
+        );
     }
 
     fn on_global(&mut self, key: KeyEvent) -> bool {
@@ -260,8 +349,52 @@ impl<'a> App<'a> {
         }
     }
 
+    fn needs_env_setup(
+        &self,
+        reference: &str,
+        spec: &mcpal_core::ServerSpec,
+    ) -> Option<Vec<(String, String)>> {
+        let mcpal_core::ServerSpec::Stdio { env, .. } = spec else {
+            return None;
+        };
+        // Only ask for keys in `ctx.cfg` (not discovered entries) since we
+        // need to write them back; fall back to the entry's own env map.
+        let env_from_cfg = self
+            .ctx
+            .cfg
+            .server
+            .get(reference)
+            .and_then(|s| {
+                if let mcpal_core::ServerSpec::Stdio { env, .. } = s {
+                    Some(env)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(env);
+        let empty: Vec<(String, String)> = env_from_cfg
+            .iter()
+            .filter(|(_, v)| v.is_empty())
+            .map(|(k, _)| (k.clone(), String::new()))
+            .collect();
+        if empty.is_empty() { None } else { Some(empty) }
+    }
+
     fn on_sidebar_key(&mut self, key: KeyEvent) {
         if matches!(key.code, KeyCode::Enter) {
+            if let Some(entry) = self.sidebar.selected() {
+                let reference = entry.display.clone();
+                let spec = entry.spec.clone();
+                if let Some(fields) = self.needs_env_setup(&reference, &spec) {
+                    self.modal = Some(Modal::EnvSetup {
+                        reference,
+                        spec,
+                        fields,
+                        cursor: 0,
+                    });
+                    return;
+                }
+            }
             self.open_selected();
             return;
         }
@@ -510,6 +643,12 @@ impl<'a> App<'a> {
         match &self.modal {
             Some(Modal::Call(form)) => call::render(form, f, f.area()),
             Some(Modal::Bearer { reference, buf }) => render_bearer(reference, buf, f, f.area()),
+            Some(Modal::EnvSetup {
+                reference,
+                fields,
+                cursor,
+                ..
+            }) => render_env_setup(reference, fields, *cursor, f, f.area()),
             None => {}
         }
         if self.help {
@@ -556,6 +695,49 @@ fn render_bearer(reference: &str, buf: &str, f: &mut Frame, area: Rect) {
         ]),
         inner,
     );
+}
+
+fn render_env_setup(
+    reference: &str,
+    fields: &[(String, String)],
+    cursor: usize,
+    f: &mut Frame,
+    area: Rect,
+) {
+    let popup = centered(area, 65, 60);
+    f.render_widget(Clear, popup);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Yellow))
+        .title(format!("env setup for {reference}"));
+    let inner = block.inner(popup);
+    f.render_widget(block, popup);
+
+    let mut lines: Vec<Line> = Vec::new();
+    lines.push(Line::from("Fill required environment variables:"));
+    lines.push(Line::from(""));
+    for (i, (name, val)) in fields.iter().enumerate() {
+        let label_style = if i == cursor {
+            Style::default()
+                .add_modifier(Modifier::BOLD)
+                .fg(Color::Cyan)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        };
+        lines.push(Line::from(Span::styled(name.clone(), label_style)));
+        let input = if i == cursor {
+            format!("› {}▌", val)
+        } else {
+            format!("  {}", val)
+        };
+        lines.push(Line::from(input));
+        lines.push(Line::from(""));
+    }
+    lines.push(Line::from(Span::styled(
+        "Tab next · Enter save+connect · Esc cancel",
+        Style::default().fg(Color::DarkGray),
+    )));
+    f.render_widget(Paragraph::new(lines), inner);
 }
 
 fn render_help(f: &mut Frame, area: Rect) {
