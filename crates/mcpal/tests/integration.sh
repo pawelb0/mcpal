@@ -182,6 +182,16 @@ it_grep 'T8 spec has auth = oauth' 'type = "oauth"' \
 
 rm -rf "$ADD_DIR"
 
+# ---------- one-line ephemeral refs ----------
+section 'one-line ephemeral refs (cmd:)'
+it_grep     'cmd: lists tools on the everything server' '\becho\b' \
+            mc tool list 'cmd:npx -y @modelcontextprotocol/server-everything'
+it_grep     'cmd: tool call returns echoed text' 'Echo: cmdmode' \
+            mc --query 'content[0].text' tool call \
+            'cmd:npx -y @modelcontextprotocol/server-everything' echo --message cmdmode
+it_grep_err 'cmd: with no command after prefix' 'needs a command' \
+            mc tool list 'cmd:'
+
 # ---------- stderr surfaced on stdio failure ----------
 section "stderr surfaced on stdio failure"
 
