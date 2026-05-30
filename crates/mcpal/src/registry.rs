@@ -10,17 +10,17 @@ use serde::Deserialize;
 const DEFAULT_BASE: &str = "https://registry.modelcontextprotocol.io";
 
 #[derive(Deserialize)]
-pub struct Envelope {
-    pub servers: Vec<ServerWrapper>,
+pub(crate) struct Envelope {
+    pub servers: Vec<ServerEntry>,
 }
 #[derive(Deserialize)]
-pub struct ServerWrapper {
+pub(crate) struct ServerEntry {
     pub server: Server,
 }
 
 #[derive(Deserialize, Default)]
 #[serde(default)]
-pub struct Server {
+pub(crate) struct Server {
     pub name: String,
     pub description: Option<String>,
     pub version: Option<String>,
@@ -30,7 +30,7 @@ pub struct Server {
 
 #[derive(Deserialize, Clone, Default)]
 #[serde(default, rename_all = "camelCase")]
-pub struct Package {
+pub(crate) struct Package {
     pub registry_type: String,
     pub identifier: String,
     pub version: Option<String>,
@@ -42,13 +42,13 @@ pub struct Package {
 
 #[derive(Deserialize, Clone, Default)]
 #[serde(default)]
-pub struct Transport {
+pub(crate) struct Transport {
     pub r#type: String,
 }
 
 #[derive(Deserialize, Clone)]
 #[serde(default, rename_all = "camelCase")]
-pub struct EnvVar {
+pub(crate) struct EnvVar {
     pub name: String,
     pub description: Option<String>,
     #[serde(default = "default_required")]
@@ -73,20 +73,20 @@ fn default_required() -> bool {
 
 #[derive(Deserialize, Clone, Default)]
 #[serde(default)]
-pub struct Argument {
+pub(crate) struct Argument {
     pub value: Option<String>,
     pub default: Option<String>,
 }
 
 #[derive(Deserialize, Clone, Default)]
 #[serde(default)]
-pub struct Remote {
+pub(crate) struct Remote {
     pub r#type: String,
     pub url: String,
 }
 
 #[derive(serde::Serialize)]
-pub struct Hit<'a> {
+pub(crate) struct Hit<'a> {
     pub name: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<&'a str>,
@@ -95,25 +95,22 @@ pub struct Hit<'a> {
     pub kind: &'static str,
 }
 
-/// Per-var info pulled from the registry, used to prompt or print hints.
 #[derive(Debug, Clone, serde::Serialize)]
-pub struct EnvVarHint {
+pub(crate) struct EnvVarHint {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 }
 
-/// Result of converting a registry server into a ServerSpec: the spec
-/// plus everything the caller needs to know about declared env vars.
+/// Spec plus declared env vars (satisfied or not). `missing` lists required
+/// names the caller still needs to prompt for or bail on.
 #[derive(Debug, Clone)]
-pub struct RequiredEnvHint {
-    /// Every declared env var (satisfied or not).
+pub(crate) struct RequiredEnvHint {
     pub vars: Vec<EnvVarHint>,
-    /// Names of required vars that are unsatisfied — caller must prompt or bail.
     pub missing: Vec<String>,
 }
 
-pub fn classify(s: &Server) -> &'static str {
+pub(crate) fn classify(s: &Server) -> &'static str {
     if !s.packages.is_empty() {
         "stdio"
     } else if !s.remotes.is_empty() {
@@ -130,7 +127,7 @@ fn client() -> Result<reqwest::Client> {
         .build()?)
 }
 
-pub async fn search(query: &str, limit: u32) -> Result<Envelope> {
+pub(crate) async fn search(query: &str, limit: u32) -> Result<Envelope> {
     let base = std::env::var("MCPAL_REGISTRY_URL").unwrap_or_else(|_| DEFAULT_BASE.into());
     Ok(client()?
         .get(format!("{base}/v0/servers"))
@@ -144,7 +141,7 @@ pub async fn search(query: &str, limit: u32) -> Result<Envelope> {
 
 /// Registry's `?name=` doesn't actually filter, so we search and pick the
 /// exact-name match with the highest semver.
-pub async fn fetch(name: &str) -> Result<Server> {
+pub(crate) async fn fetch(name: &str) -> Result<Server> {
     let env = search(name, 20).await?;
     let candidates: Vec<Server> = env.servers.into_iter().map(|w| w.server).collect();
     pick_latest(name, candidates)
@@ -168,10 +165,10 @@ fn pick_latest(name: &str, candidates: Vec<Server>) -> Result<Server> {
             .and_then(|v| semver::Version::parse(v).ok());
         av.cmp(&bv)
     });
-    Ok(hits.pop().unwrap())
+    Ok(hits.pop().expect("non-empty: is_empty checked above"))
 }
 
-pub fn to_spec(
+pub(crate) fn to_spec(
     server: &Server,
     extra_env: &BTreeMap<String, String>,
 ) -> Result<(ServerSpec, RequiredEnvHint)> {
