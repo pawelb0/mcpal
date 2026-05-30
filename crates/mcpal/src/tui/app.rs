@@ -808,3 +808,30 @@ fn centered(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
         ])
         .split(vertical[1])[1]
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Focus;
+
+    #[test]
+    fn focus_next_cycles_forward() {
+        assert_eq!(Focus::Sidebar.next(), Focus::Detail);
+        assert_eq!(Focus::Detail.next(), Focus::Output);
+        assert_eq!(Focus::Output.next(), Focus::Sidebar);
+    }
+
+    #[test]
+    fn focus_prev_cycles_backward() {
+        assert_eq!(Focus::Sidebar.prev(), Focus::Output);
+        assert_eq!(Focus::Output.prev(), Focus::Detail);
+        assert_eq!(Focus::Detail.prev(), Focus::Sidebar);
+    }
+
+    #[test]
+    fn focus_next_then_prev_returns_origin() {
+        for f in [Focus::Sidebar, Focus::Detail, Focus::Output] {
+            assert_eq!(f.next().prev(), f);
+            assert_eq!(f.prev().next(), f);
+        }
+    }
+}

@@ -79,14 +79,7 @@ impl Sidebar {
     }
 
     fn visible(&self) -> Vec<&Entry> {
-        if self.filter.is_empty() {
-            self.entries.iter().collect()
-        } else {
-            self.entries
-                .iter()
-                .filter(|e| e.display.contains(&self.filter))
-                .collect()
-        }
+        filter_entries(&self.entries, &self.filter)
     }
 
     pub fn selected(&self) -> Option<&Entry> {
@@ -199,5 +192,65 @@ impl Sidebar {
             );
             f.render_widget(p, rect);
         }
+    }
+}
+
+fn filter_entries<'a>(entries: &'a [Entry], filter: &str) -> Vec<&'a Entry> {
+    if filter.is_empty() {
+        entries.iter().collect()
+    } else {
+        entries
+            .iter()
+            .filter(|e| e.display.contains(filter))
+            .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn e(display: &str) -> Entry {
+        Entry {
+            display: display.into(),
+            kind: Kind::Stdio,
+            spec: ServerSpec::Stdio {
+                command: "x".into(),
+                args: vec![],
+                env: Default::default(),
+            },
+        }
+    }
+
+    #[test]
+    fn empty_filter_returns_all() {
+        let xs = vec![e("a"), e("b"), e("c")];
+        assert_eq!(filter_entries(&xs, "").len(), 3);
+    }
+
+    #[test]
+    fn substring_filter_keeps_matches() {
+        let xs = vec![e("cursor:linear"), e("zed:linear"), e("ev")];
+        let kept: Vec<&str> = filter_entries(&xs, "linear")
+            .iter()
+            .map(|e| e.display.as_str())
+            .collect();
+        assert_eq!(kept, vec!["cursor:linear", "zed:linear"]);
+    }
+
+    #[test]
+    fn filter_with_no_match_returns_empty() {
+        let xs = vec![e("a"), e("b")];
+        assert!(filter_entries(&xs, "zzz").is_empty());
+    }
+
+    #[test]
+    fn filter_is_case_sensitive() {
+        let xs = vec![e("Cursor"), e("cursor")];
+        let kept: Vec<&str> = filter_entries(&xs, "Cur")
+            .iter()
+            .map(|e| e.display.as_str())
+            .collect();
+        assert_eq!(kept, vec!["Cursor"]);
     }
 }

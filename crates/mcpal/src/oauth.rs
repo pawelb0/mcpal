@@ -131,7 +131,7 @@ pub(crate) fn current_access_token(reference: &str) -> Option<String> {
 /// `current_access_token`, but eagerly refreshes when within 30s of expiry.
 pub(crate) async fn access_token_refreshing(reference: &str, server_url: &str) -> Option<String> {
     let mut blob = token_blob(reference)?;
-    if expires_soon(&blob) {
+    if expires_soon(&blob, now_secs()) {
         if let Err(e) = refresh(reference, server_url).await {
             tracing::debug!(target: "mcpal::oauth", "eager refresh failed: {e:#}");
         }
@@ -140,7 +140,13 @@ pub(crate) async fn access_token_refreshing(reference: &str, server_url: &str) -
     access_token_from(&blob)
 }
 
-fn expires_soon(v: &serde_json::Value) -> bool {
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+
+fn expires_soon(v: &serde_json::Value, now: u64) -> bool {
     let r = v.pointer("/token_received_at").and_then(|x| x.as_u64());
     let t = v
         .pointer("/token_response/expires_in")
@@ -148,8 +154,77 @@ fn expires_soon(v: &serde_json::Value) -> bool {
     let (Some(r), Some(t)) = (r, t) else {
         return false;
     };
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs());
     now + 30 >= r + t
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn access_token_pulled_from_nested_path() {
+        let blob = json!({
+            "token_response": { "access_token": "ya29.abc", "expires_in": 3600 },
+            "token_received_at": 1700000000_u64,
+        });
+        assert_eq!(access_token_from(&blob).as_deref(), Some("ya29.abc"));
+    }
+
+    #[test]
+    fn missing_access_token_returns_none() {
+        let blob = json!({ "token_response": { "expires_in": 3600 } });
+        assert!(access_token_from(&blob).is_none());
+    }
+
+    #[test]
+    fn non_string_access_token_returns_none() {
+        let blob = json!({ "token_response": { "access_token": 42 } });
+        assert!(access_token_from(&blob).is_none());
+    }
+
+    #[test]
+    fn expires_soon_at_exact_boundary_is_true() {
+        // received 1000, expires_in 60 → expires at 1060.
+        // now + 30 >= 1060 → triggers at now=1030 (30s headroom).
+        let blob = json!({
+            "token_received_at": 1000_u64,
+            "token_response": { "expires_in": 60 },
+        });
+        assert!(!expires_soon(&blob, 1029));
+        assert!(expires_soon(&blob, 1030));
+        assert!(expires_soon(&blob, 1060));
+        assert!(expires_soon(&blob, 9999));
+    }
+
+    #[test]
+    fn missing_received_at_means_no_refresh() {
+        let blob = json!({ "token_response": { "expires_in": 60 } });
+        assert!(!expires_soon(&blob, 0));
+        assert!(!expires_soon(&blob, u64::MAX));
+    }
+
+    #[test]
+    fn missing_expires_in_means_no_refresh() {
+        let blob = json!({ "token_received_at": 1000_u64 });
+        assert!(!expires_soon(&blob, 1000));
+    }
+
+    #[test]
+    fn non_integer_timestamps_skip_refresh() {
+        let blob = json!({
+            "token_received_at": "1000",
+            "token_response": { "expires_in": "60" },
+        });
+        assert!(!expires_soon(&blob, 1000));
+    }
+
+    #[test]
+    fn fresh_token_within_lifetime_skips_refresh() {
+        let blob = json!({
+            "token_received_at": 1000_u64,
+            "token_response": { "expires_in": 3600 },
+        });
+        assert!(!expires_soon(&blob, 1500));
+    }
 }
