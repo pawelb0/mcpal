@@ -58,22 +58,7 @@ impl Ctx {
     /// future's output verbatim. A fired timeout becomes an `anyhow!` whose
     /// message `exit::classify` matches as E0007; Ctrl-C becomes E0011.
     pub async fn under_deadline<F: Future>(&self, fut: F) -> Result<F::Output> {
-        let timeout = self.timeout;
-        let sleeper = async move {
-            match timeout {
-                Some(secs) => tokio::time::sleep(Duration::from_secs(secs)).await,
-                None => std::future::pending::<()>().await,
-            }
-        };
-        tokio::pin!(fut, sleeper);
-        tokio::select! {
-            out = &mut fut => Ok(out),
-            _ = &mut sleeper => Err(anyhow!(
-                "request timed out after {}s",
-                timeout.expect("sleeper only fires when timeout is set"),
-            )),
-            _ = tokio::signal::ctrl_c() => Err(anyhow!("interrupted by ctrl-c")),
-        }
+        race_deadline(self.timeout, fut).await
     }
 
     pub fn render_one<T: Serialize>(&self, value: &T) -> Result<(), crate::output::Error> {
@@ -105,6 +90,24 @@ impl Ctx {
     }
 }
 
+async fn race_deadline<F: Future>(timeout: Option<u64>, fut: F) -> Result<F::Output> {
+    let sleeper = async move {
+        match timeout {
+            Some(secs) => tokio::time::sleep(Duration::from_secs(secs)).await,
+            None => std::future::pending::<()>().await,
+        }
+    };
+    tokio::pin!(fut, sleeper);
+    tokio::select! {
+        out = &mut fut => Ok(out),
+        _ = &mut sleeper => Err(anyhow!(
+            "request timed out after {}s",
+            timeout.expect("sleeper only fires when timeout is set"),
+        )),
+        _ = tokio::signal::ctrl_c() => Err(anyhow!("interrupted by ctrl-c")),
+    }
+}
+
 /// For HTTP specs: replace `AuthSpec::Oauth` with the stored access token
 /// (auto-refresh if near expiry); leave any other explicit `auth` alone;
 /// otherwise fall through oauth → keyring → `MCPAL_BEARER`.
@@ -131,5 +134,43 @@ pub async fn attach_bearer(spec: &mut ServerSpec, reference: &str, display: &str
         .or_else(|| std::env::var("MCPAL_BEARER").ok());
     if let Some(token) = token {
         *auth = Some(AuthSpec::Bearer { token });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn no_timeout_returns_future_value() {
+        let r: Result<i32> = race_deadline(None, async { 42 }).await;
+        assert_eq!(r.unwrap(), 42);
+    }
+
+    #[tokio::test]
+    async fn future_completing_before_timeout_returns_value() {
+        let r: Result<&str> = race_deadline(Some(60), async { "ok" }).await;
+        assert_eq!(r.unwrap(), "ok");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn elapsed_timeout_returns_e0007_message() {
+        let r: Result<()> = race_deadline(Some(3), async {
+            tokio::time::sleep(Duration::from_secs(60)).await;
+        })
+        .await;
+        let err = r.unwrap_err().to_string();
+        assert!(err.contains("timed out"), "got: {err}");
+        assert!(err.contains("3s"), "should report budget: {err}");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn fast_future_wins_against_long_timeout() {
+        let r: Result<u32> = race_deadline(Some(3600), async {
+            tokio::time::sleep(Duration::from_millis(1)).await;
+            7
+        })
+        .await;
+        assert_eq!(r.unwrap(), 7);
     }
 }
