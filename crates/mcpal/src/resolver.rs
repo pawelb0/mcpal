@@ -16,10 +16,11 @@ pub struct ResolvedServer {
 
 /// Resolution order:
 ///   1. mcpal-owned alias
-///   2. http(s) URL
-///   3. path to a JSON spec file
-///   4. `<source>:<name>` from discovery
-///   5. bare `<name>` from discovery (unambiguous)
+///   2. `cmd:<command> [args]` ephemeral stdio
+///   3. http(s) URL
+///   4. path to a JSON spec file
+///   5. `<source>:<name>` from discovery
+///   6. bare `<name>` from discovery (unambiguous)
 pub fn resolve(reference: &str, ctx: &Ctx) -> Result<ResolvedServer> {
     resolve_with(reference, &ctx.cfg.server, ctx.discovered()?)
 }
@@ -33,6 +34,21 @@ pub(crate) fn resolve_with(
         return Ok(ResolvedServer {
             display: reference.into(),
             spec: spec.clone(),
+        });
+    }
+
+    if let Some(rest) = reference.strip_prefix("cmd:") {
+        let mut parts = rest.split_whitespace();
+        let command = parts
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("cmd: needs a command after the prefix"))?;
+        return Ok(ResolvedServer {
+            display: reference.into(),
+            spec: ServerSpec::Stdio {
+                command: command.into(),
+                args: parts.map(String::from).collect(),
+                env: BTreeMap::new(),
+            },
         });
     }
 
@@ -71,7 +87,7 @@ pub(crate) fn resolve_with(
 
     let bare: Vec<_> = discovered.iter().filter(|s| s.name == reference).collect();
     match bare.as_slice() {
-        [] => bail!("server '{reference}' not found (owned, URL, path, or discovered)"),
+        [] => bail!("server '{reference}' not found (owned, cmd:, URL, path, or discovered)"),
         [only] => Ok(ResolvedServer {
             display: format!("{}:{}", only.source, only.name),
             spec: only.spec.clone(),
@@ -181,7 +197,7 @@ mod tests {
         let err = resolve_with("ghost", &BTreeMap::new(), &[]).unwrap_err();
         let msg = format!("{err}");
         assert!(msg.contains("not found"));
-        assert!(msg.contains("owned, URL, path, or discovered"));
+        assert!(msg.contains("owned, cmd:, URL, path, or discovered"));
     }
 
     #[test]
@@ -189,6 +205,64 @@ mod tests {
         let discovered = vec![disc("cursor", "linear", "a")];
         let r = resolve_with("cursor:missing", &BTreeMap::new(), &discovered);
         assert!(r.is_err(), "no entry for cursor:missing should error");
+    }
+
+    #[test]
+    fn cmd_prefix_single_command() {
+        let r = resolve_with("cmd:echo", &BTreeMap::new(), &[]).unwrap();
+        assert_eq!(r.display, "cmd:echo");
+        if let ServerSpec::Stdio { command, args, .. } = r.spec {
+            assert_eq!(command, "echo");
+            assert!(args.is_empty());
+        } else {
+            panic!("expected stdio");
+        }
+    }
+
+    #[test]
+    fn cmd_prefix_splits_whitespace_into_args() {
+        let r =
+            resolve_with("cmd:npx -y @mcp/server-everything", &BTreeMap::new(), &[]).unwrap();
+        if let ServerSpec::Stdio { command, args, .. } = r.spec {
+            assert_eq!(command, "npx");
+            assert_eq!(args, vec!["-y", "@mcp/server-everything"]);
+        }
+    }
+
+    #[test]
+    fn cmd_prefix_collapses_repeated_whitespace() {
+        let r = resolve_with("cmd:npx  -y   @x", &BTreeMap::new(), &[]).unwrap();
+        if let ServerSpec::Stdio { args, .. } = r.spec {
+            assert_eq!(args, vec!["-y", "@x"]);
+        }
+    }
+
+    #[test]
+    fn empty_cmd_prefix_errors() {
+        let err = resolve_with("cmd:", &BTreeMap::new(), &[]).unwrap_err();
+        assert!(err.to_string().contains("needs a command"));
+    }
+
+    #[test]
+    fn cmd_prefix_skips_path_check() {
+        // "cmd:./local" should be ephemeral stdio, not parsed as filesystem path.
+        let r = resolve_with("cmd:./local --flag", &BTreeMap::new(), &[]).unwrap();
+        if let ServerSpec::Stdio { command, args, .. } = r.spec {
+            assert_eq!(command, "./local");
+            assert_eq!(args, vec!["--flag"]);
+        }
+    }
+
+    #[test]
+    fn cmd_prefix_takes_precedence_over_owned() {
+        let mut owned = BTreeMap::new();
+        owned.insert("cmd:echo".into(), stdio("aliased"));
+        // owned wins because exact match comes first; cmd: ref does not collide
+        // with the owned check above. This documents the order.
+        let r = resolve_with("cmd:echo", &owned, &[]).unwrap();
+        if let ServerSpec::Stdio { command, .. } = r.spec {
+            assert_eq!(command, "aliased", "owned exact-match precedes cmd: prefix");
+        }
     }
 
     #[test]

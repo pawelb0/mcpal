@@ -31,7 +31,7 @@ const ANYHOW_PATTERNS: &[(&str, i32, &str)] = &[
     ("schema validation", 2, "E0012"),
     ("timed out", 8, "E0007"),
     ("timeout", 8, "E0007"),
-    ("not found (owned, url, path, or discovered)", 3, "E0001"),
+    ("not found (owned, cmd:, url, path, or discovered)", 3, "E0001"),
     ("not found in mcpal config", 3, "E0001"),
     ("expects k=v", 2, "E0002"),
     ("expected --flag", 2, "E0002"),
@@ -112,9 +112,10 @@ const EXPLAIN: &[(&str, &str)] = &[
     ),
     (
         "E0001",
-        "Server reference not found. A `<ref>` resolves as: owned alias → URL → \
-        JSON file → `<source>:<name>` discovered → bare name (unambiguous). Fix with \
-        `mcpal server discover`, `server list --all`, or `server add`.\n",
+        "Server reference not found. A `<ref>` resolves as: owned alias → \
+        `cmd:<stdio command>` ephemeral → URL → JSON file → `<source>:<name>` \
+        discovered → bare name (unambiguous). Fix with `mcpal server discover`, \
+        `server list --all`, or `server add`.\n",
     ),
     (
         "E0002",
