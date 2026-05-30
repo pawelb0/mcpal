@@ -24,6 +24,7 @@ pub struct Ctx {
     pub profile: String,
     pub discover_from: Vec<PathBuf>,
     pub handler: Handler,
+    pub auth_override: Option<String>,
     discovered: OnceCell<Vec<DiscoveredServer>>,
 }
 
@@ -39,6 +40,7 @@ impl Ctx {
         profile: String,
         discover_from: Vec<PathBuf>,
         handler: Handler,
+        auth_override: Option<String>,
     ) -> Self {
         Self {
             cfg,
@@ -50,6 +52,7 @@ impl Ctx {
             profile,
             discover_from,
             handler,
+            auth_override,
             discovered: OnceCell::new(),
         }
     }
@@ -87,6 +90,24 @@ impl Ctx {
         attach_bearer(&mut resolved.spec, reference, &resolved.display).await;
         let client = connect(&resolved.spec, self.handler.clone()).await?;
         Ok((resolved, client))
+    }
+}
+
+/// Map `--auth <mode>` to a concrete `AuthSpec` override (or `Ok(None)` for
+/// "anonymous"). Returns `Err` for an unrecognised mode.
+pub(crate) fn parse_auth_override(mode: &str) -> Result<Option<AuthSpec>> {
+    match mode {
+        "none" | "anon" => Ok(None),
+        "oauth" => Ok(Some(AuthSpec::Oauth)),
+        s if s.starts_with("env:") => Ok(Some(AuthSpec::BearerEnv {
+            env: s["env:".len()..].into(),
+        })),
+        s if s.starts_with("bearer:") => Ok(Some(AuthSpec::Bearer {
+            token: s["bearer:".len()..].into(),
+        })),
+        other => Err(anyhow!(
+            "--auth: unknown mode '{other}' (expected: oauth, none, env:VAR, bearer:TOKEN)"
+        )),
     }
 }
 
@@ -172,5 +193,36 @@ mod tests {
         })
         .await;
         assert_eq!(r.unwrap(), 7);
+    }
+
+    #[test]
+    fn auth_override_oauth_explicit() {
+        let a = parse_auth_override("oauth").unwrap();
+        assert!(matches!(a, Some(AuthSpec::Oauth)));
+    }
+
+    #[test]
+    fn auth_override_none_alias() {
+        assert!(parse_auth_override("none").unwrap().is_none());
+        assert!(parse_auth_override("anon").unwrap().is_none());
+    }
+
+    #[test]
+    fn auth_override_env_var() {
+        let a = parse_auth_override("env:GH_TOKEN").unwrap();
+        assert!(matches!(a, Some(AuthSpec::BearerEnv { env }) if env == "GH_TOKEN"));
+    }
+
+    #[test]
+    fn auth_override_bearer_literal() {
+        let a = parse_auth_override("bearer:abc.def").unwrap();
+        assert!(matches!(a, Some(AuthSpec::Bearer { token }) if token == "abc.def"));
+    }
+
+    #[test]
+    fn auth_override_unknown_mode_errors() {
+        let err = parse_auth_override("magic").unwrap_err().to_string();
+        assert!(err.contains("unknown mode"));
+        assert!(err.contains("oauth, none, env:VAR, bearer:TOKEN"));
     }
 }

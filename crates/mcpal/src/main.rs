@@ -83,6 +83,7 @@ async fn dispatch(cli: Cli) -> Result<()> {
         cli.profile.clone(),
         cli.discover_from.clone(),
         handler,
+        cli.auth,
     );
 
     use Command::*;

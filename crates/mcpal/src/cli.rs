@@ -53,6 +53,10 @@ pub struct Cli {
     /// JMESPath filter applied to the response.
     #[arg(long, global = true, value_name = "JMESPATH")]
     pub query: Option<String>,
+    /// Override auth for inline URL `<ref>`: `oauth` (default),
+    /// `none`, `env:VAR`, or `bearer:TOKEN`.
+    #[arg(long, global = true, value_name = "MODE")]
+    pub auth: Option<String>,
     /// Abort after N seconds.
     #[arg(long, global = true, value_name = "SECS")]
     pub timeout: Option<u64>,

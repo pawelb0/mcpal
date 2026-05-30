@@ -22,13 +22,23 @@ pub struct ResolvedServer {
 ///   5. `<source>:<name>` from discovery
 ///   6. bare `<name>` from discovery (unambiguous)
 pub fn resolve(reference: &str, ctx: &Ctx) -> Result<ResolvedServer> {
-    resolve_with(reference, &ctx.cfg.server, ctx.discovered()?)
+    let auth_override = match ctx.auth_override.as_deref() {
+        Some(mode) => Some(crate::runtime::parse_auth_override(mode)?),
+        None => None,
+    };
+    resolve_with(
+        reference,
+        &ctx.cfg.server,
+        ctx.discovered()?,
+        auth_override.as_ref(),
+    )
 }
 
 pub(crate) fn resolve_with(
     reference: &str,
     owned: &BTreeMap<String, ServerSpec>,
     discovered: &[DiscoveredServer],
+    auth_override: Option<&Option<AuthSpec>>,
 ) -> Result<ResolvedServer> {
     if let Some(spec) = owned.get(reference) {
         return Ok(ResolvedServer {
@@ -53,12 +63,16 @@ pub(crate) fn resolve_with(
     }
 
     if reference.starts_with("http://") || reference.starts_with("https://") {
+        let auth = match auth_override {
+            Some(o) => o.clone(),
+            None => Some(AuthSpec::Oauth),
+        };
         return Ok(ResolvedServer {
             display: reference.into(),
             spec: ServerSpec::Http {
                 url: reference.into(),
                 headers: BTreeMap::new(),
-                auth: Some(AuthSpec::Oauth),
+                auth,
             },
         });
     }
@@ -131,7 +145,7 @@ mod tests {
         let mut owned = BTreeMap::new();
         owned.insert("ev".into(), stdio("owned"));
         let discovered = vec![disc("cursor", "ev", "cursor-cmd")];
-        let r = resolve_with("ev", &owned, &discovered).unwrap();
+        let r = resolve_with("ev", &owned, &discovered, None).unwrap();
         assert_eq!(r.display, "ev");
         match r.spec {
             ServerSpec::Stdio { command, .. } => assert_eq!(command, "owned"),
@@ -142,7 +156,7 @@ mod tests {
     #[test]
     fn https_url_becomes_oauth_http_spec() {
         let r =
-            resolve_with("https://x.example/mcp", &BTreeMap::new(), &[]).expect("resolve url");
+            resolve_with("https://x.example/mcp", &BTreeMap::new(), &[], None).expect("resolve url");
         assert_eq!(r.display, "https://x.example/mcp");
         match r.spec {
             ServerSpec::Http { url, auth, .. } => {
@@ -155,7 +169,7 @@ mod tests {
 
     #[test]
     fn http_url_also_accepted() {
-        let r = resolve_with("http://localhost:9/mcp", &BTreeMap::new(), &[]).unwrap();
+        let r = resolve_with("http://localhost:9/mcp", &BTreeMap::new(), &[], None).unwrap();
         assert!(matches!(r.spec, ServerSpec::Http { .. }));
     }
 
@@ -165,7 +179,7 @@ mod tests {
             disc("cursor", "linear", "a"),
             disc("zed", "linear", "b"),
         ];
-        let r = resolve_with("zed:linear", &BTreeMap::new(), &discovered).unwrap();
+        let r = resolve_with("zed:linear", &BTreeMap::new(), &discovered, None).unwrap();
         assert_eq!(r.display, "zed:linear");
         if let ServerSpec::Stdio { command, .. } = r.spec {
             assert_eq!(command, "b");
@@ -175,7 +189,7 @@ mod tests {
     #[test]
     fn bare_unambiguous_match() {
         let discovered = vec![disc("cursor", "linear", "a")];
-        let r = resolve_with("linear", &BTreeMap::new(), &discovered).unwrap();
+        let r = resolve_with("linear", &BTreeMap::new(), &discovered, None).unwrap();
         assert_eq!(r.display, "cursor:linear");
     }
 
@@ -185,7 +199,7 @@ mod tests {
             disc("cursor", "linear", "a"),
             disc("zed", "linear", "b"),
         ];
-        let err = resolve_with("linear", &BTreeMap::new(), &discovered).unwrap_err();
+        let err = resolve_with("linear", &BTreeMap::new(), &discovered, None).unwrap_err();
         let msg = format!("{err}");
         assert!(msg.contains("ambiguous"));
         assert!(msg.contains("cursor:linear"));
@@ -194,7 +208,7 @@ mod tests {
 
     #[test]
     fn unknown_errors_with_e0001_signal() {
-        let err = resolve_with("ghost", &BTreeMap::new(), &[]).unwrap_err();
+        let err = resolve_with("ghost", &BTreeMap::new(), &[], None).unwrap_err();
         let msg = format!("{err}");
         assert!(msg.contains("not found"));
         assert!(msg.contains("owned, cmd:, URL, path, or discovered"));
@@ -203,13 +217,13 @@ mod tests {
     #[test]
     fn source_prefix_with_no_match_falls_through_to_bare() {
         let discovered = vec![disc("cursor", "linear", "a")];
-        let r = resolve_with("cursor:missing", &BTreeMap::new(), &discovered);
+        let r = resolve_with("cursor:missing", &BTreeMap::new(), &discovered, None);
         assert!(r.is_err(), "no entry for cursor:missing should error");
     }
 
     #[test]
     fn cmd_prefix_single_command() {
-        let r = resolve_with("cmd:echo", &BTreeMap::new(), &[]).unwrap();
+        let r = resolve_with("cmd:echo", &BTreeMap::new(), &[], None).unwrap();
         assert_eq!(r.display, "cmd:echo");
         if let ServerSpec::Stdio { command, args, .. } = r.spec {
             assert_eq!(command, "echo");
@@ -222,7 +236,7 @@ mod tests {
     #[test]
     fn cmd_prefix_splits_whitespace_into_args() {
         let r =
-            resolve_with("cmd:npx -y @mcp/server-everything", &BTreeMap::new(), &[]).unwrap();
+            resolve_with("cmd:npx -y @mcp/server-everything", &BTreeMap::new(), &[], None).unwrap();
         if let ServerSpec::Stdio { command, args, .. } = r.spec {
             assert_eq!(command, "npx");
             assert_eq!(args, vec!["-y", "@mcp/server-everything"]);
@@ -231,7 +245,7 @@ mod tests {
 
     #[test]
     fn cmd_prefix_collapses_repeated_whitespace() {
-        let r = resolve_with("cmd:npx  -y   @x", &BTreeMap::new(), &[]).unwrap();
+        let r = resolve_with("cmd:npx  -y   @x", &BTreeMap::new(), &[], None).unwrap();
         if let ServerSpec::Stdio { args, .. } = r.spec {
             assert_eq!(args, vec!["-y", "@x"]);
         }
@@ -239,14 +253,14 @@ mod tests {
 
     #[test]
     fn empty_cmd_prefix_errors() {
-        let err = resolve_with("cmd:", &BTreeMap::new(), &[]).unwrap_err();
+        let err = resolve_with("cmd:", &BTreeMap::new(), &[], None).unwrap_err();
         assert!(err.to_string().contains("needs a command"));
     }
 
     #[test]
     fn cmd_prefix_skips_path_check() {
         // "cmd:./local" should be ephemeral stdio, not parsed as filesystem path.
-        let r = resolve_with("cmd:./local --flag", &BTreeMap::new(), &[]).unwrap();
+        let r = resolve_with("cmd:./local --flag", &BTreeMap::new(), &[], None).unwrap();
         if let ServerSpec::Stdio { command, args, .. } = r.spec {
             assert_eq!(command, "./local");
             assert_eq!(args, vec!["--flag"]);
@@ -259,10 +273,52 @@ mod tests {
         owned.insert("cmd:echo".into(), stdio("aliased"));
         // owned wins because exact match comes first; cmd: ref does not collide
         // with the owned check above. This documents the order.
-        let r = resolve_with("cmd:echo", &owned, &[]).unwrap();
+        let r = resolve_with("cmd:echo", &owned, &[], None).unwrap();
         if let ServerSpec::Stdio { command, .. } = r.spec {
             assert_eq!(command, "aliased", "owned exact-match precedes cmd: prefix");
         }
+    }
+
+    #[test]
+    fn auth_override_anon_strips_oauth_default() {
+        let r = resolve_with(
+            "https://x.example/mcp",
+            &BTreeMap::new(),
+            &[],
+            Some(&None),
+        )
+        .unwrap();
+        if let ServerSpec::Http { auth, .. } = r.spec {
+            assert!(auth.is_none(), "--auth none should leave auth=None");
+        } else {
+            panic!("expected http");
+        }
+    }
+
+    #[test]
+    fn auth_override_bearer_env_via_resolver() {
+        let r = resolve_with(
+            "https://x.example/mcp",
+            &BTreeMap::new(),
+            &[],
+            Some(&Some(AuthSpec::BearerEnv {
+                env: "GH_TOKEN".into(),
+            })),
+        )
+        .unwrap();
+        if let ServerSpec::Http { auth, .. } = r.spec {
+            assert!(matches!(
+                auth,
+                Some(AuthSpec::BearerEnv { env }) if env == "GH_TOKEN"
+            ));
+        }
+    }
+
+    #[test]
+    fn auth_override_ignored_for_stdio_refs() {
+        // `cmd:` is stdio — auth override should not apply / corrupt the spec.
+        let r = resolve_with("cmd:echo", &BTreeMap::new(), &[], Some(&None)).unwrap();
+        assert!(matches!(r.spec, ServerSpec::Stdio { .. }));
     }
 
     #[test]
@@ -275,7 +331,7 @@ mod tests {
         )
         .unwrap();
         let p = path.to_str().unwrap();
-        let r = resolve_with(p, &BTreeMap::new(), &[]).unwrap();
+        let r = resolve_with(p, &BTreeMap::new(), &[], None).unwrap();
         assert_eq!(r.display, p);
         if let ServerSpec::Stdio { command, args, .. } = r.spec {
             assert_eq!(command, "npx");
