@@ -69,7 +69,7 @@ pub fn servers_map(
 ) -> Vec<DiscoveredServer> {
     obj.iter()
         .filter_map(|(name, val)| {
-            let entry: Entry = serde_json::from_value(val.clone()).ok()?;
+            let entry = Entry::deserialize(val).ok()?;
             Some(DiscoveredServer {
                 source,
                 source_path: source_path.to_path_buf(),

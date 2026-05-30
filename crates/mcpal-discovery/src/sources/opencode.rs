@@ -40,7 +40,7 @@ impl Source for Opencode {
         Ok(map
             .iter()
             .filter_map(|(name, entry)| {
-                let parsed: OpencodeEntry = serde_json::from_value(entry.clone()).ok()?;
+                let parsed = OpencodeEntry::deserialize(entry).ok()?;
                 Some(DiscoveredServer {
                     source: ID,
                     source_path: path.to_path_buf(),
