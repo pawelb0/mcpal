@@ -8,6 +8,7 @@
 
 - [Concepts](./concepts.md)
 - [Discovery](./discovery.md)
+- [Why a CLI for MCP](./why-cli.md)
 
 # How-to guides
 

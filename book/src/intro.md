@@ -134,6 +134,8 @@ explanation.
 
 - [Concepts](./concepts.md) — references, transports, auth modes,
   output.
+- [Why a CLI for MCP](./why-cli.md) — where a shell client earns
+  its place next to an MCP-aware chat app, and where it doesn't.
 
 ## License
 

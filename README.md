@@ -39,6 +39,10 @@
   editors use.
 - **Call already-configured servers.** Cursor set up `linear`? Run
   `mcpal tool list cursor:linear`. No copy-pasting `mcp.json`.
+- **Skip the upfront tool-definition tax.** A chat app loads every
+  server's full tool catalogue into the model's context. mcpal
+  invokes one tool per shell line — pay for what you call. More in
+  [Why a CLI for MCP](https://pawelb0.github.io/mcpal/why-cli.html).
 
 ## Quickstart
 
