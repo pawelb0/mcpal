@@ -94,10 +94,10 @@ A CLI in front of MCP is not always the right move:
 - **End users without a terminal.** A non-developer running a SaaS
   integration is not the audience.
 
-## Honest limitations today
+## Limitations
 
-mcpal does not yet remove every cost the article-length critiques
-of MCP point at:
+mcpal does not remove every MCP cost the published critiques point
+at:
 
 - Each `mcpal tool call` spawns the server fresh over stdio.
   Initialization (the `initialize` handshake, the `tools/list`
@@ -107,6 +107,5 @@ of MCP point at:
 - The tool catalogue is not cached on disk. `tool list` round-trips
   to the server. A local cache with a TTL is plausible future work.
 
-These are concrete known gaps. The shell surface is the part that
-exists today and that earns the project a place alongside (not
-instead of) MCP-aware chat clients.
+Known gaps. The shell surface is what exists today; the project sits
+alongside MCP-aware chat clients, not in their place.

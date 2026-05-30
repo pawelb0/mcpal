@@ -207,7 +207,7 @@ mod tests {
     }
 
     #[test]
-    fn unknown_errors_with_e0001_signal() {
+    fn unknown_ref_message_lists_resolution_order() {
         let err = resolve_with("ghost", &BTreeMap::new(), &[], None).unwrap_err();
         let msg = format!("{err}");
         assert!(msg.contains("not found"));
@@ -268,14 +268,12 @@ mod tests {
     }
 
     #[test]
-    fn cmd_prefix_takes_precedence_over_owned() {
+    fn owned_alias_beats_cmd_prefix_on_exact_match() {
         let mut owned = BTreeMap::new();
         owned.insert("cmd:echo".into(), stdio("aliased"));
-        // owned wins because exact match comes first; cmd: ref does not collide
-        // with the owned check above. This documents the order.
         let r = resolve_with("cmd:echo", &owned, &[], None).unwrap();
         if let ServerSpec::Stdio { command, .. } = r.spec {
-            assert_eq!(command, "aliased", "owned exact-match precedes cmd: prefix");
+            assert_eq!(command, "aliased");
         }
     }
 
