@@ -16,9 +16,9 @@ categories = ["command-line-utilities", "development-tools"]
 workspace = true
 
 [dependencies]
-mcpal-core = { path = "../mcpal-core", version = "0.4.1" }
+mcpal-core = { path = "../mcpal-core", version = "0.4.2" }
 
-mcpal-discovery = { path = "../mcpal-discovery", version = "0.4.1" }
+mcpal-discovery = { path = "../mcpal-discovery", version = "0.4.2" }
 
 tokio.workspace = true
 clap.workspace = true

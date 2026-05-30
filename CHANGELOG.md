@@ -4,6 +4,26 @@ All notable changes documented here. Format: [Keep a Changelog](https://keepacha
 
 ## [Unreleased]
 
+## [0.4.2]
+
+### Added
+- `cmd:<command> [args]` ephemeral stdio `<ref>` — call any local MCP server in one shell line, no `server add`. `mcpal tool list "cmd:npx -y @mcp/server-everything"`.
+- `--auth MODE` global flag pairs with an inline `https://` `<ref>` to pick auth on the fly: `oauth` (default), `none`/`anon`, `env:VAR`, `bearer:TOKEN`.
+- `book/src/one-liners.md` — every one-line `<ref>` shape in one table, with auth modes and the limits of each.
+- `book/src/why-cli.md` — Explanation chapter on when a shell client earns its place next to MCP-aware chat apps.
+- `book/src/protocol-matrix.md` carries a roadmap table for the 2026-07-28 RC.
+
+### Changed
+- Resolver order documented and stable: owned alias → `cmd:` → URL → JSON path → `<source>:<name>` → bare name. E0001 message lists the new precedence.
+- `mcpal-core::handler::run_sampling_handler` returns `anyhow::Result` instead of a hand-rolled `Result<_, String>`.
+- `Config::load` drops the `Path::exists` pre-check and matches `ErrorKind::NotFound` directly; one less stat() per startup.
+- `--query` no longer JSON-string-roundtrips its jmespath result.
+- Internal registry DTOs (`Envelope`, `Server`, `Package`, `EnvVar`, …) move to `pub(crate)`. `ServerWrapper` renamed to `ServerEntry`. `EnvVarHint` collapsed into `(String, Option<String>)`.
+- Unit coverage doubled: 60 → 130 tests (oauth math, JMESPath, resolver order, exit classifier, runtime deadline, TUI focus, sidebar filter, diff edges, discover descriptors).
+
+### Fixed
+- `oauth::access_token_refreshing` made one redundant keyring read per call; collapsed to a single load on the hot path.
+
 ## [0.4.1]
 
 ### Added
