@@ -145,7 +145,6 @@ fn classify_one(index: usize, raw: &RawContent) -> Hit {
 
 /// True when a result is worth flagging — at least one mcp-ui or
 /// OpenAI-Apps content block. Used by the TUI to badge call results.
-#[cfg(feature = "tui")]
 pub fn has_ui(result: &CallToolResult) -> bool {
     classify(result)
         .iter()
@@ -284,7 +283,7 @@ mod tests {
         let hits = classify(&r);
         assert_eq!(hits[0].kind, HitKind::McpUi);
         assert_eq!(hits[0].uri.as_deref(), Some("ui://weather/london"));
-        assert!(has_ui_in(&r));
+        assert!(has_ui(&r));
     }
 
     #[test]
@@ -301,7 +300,7 @@ mod tests {
         }));
         let hits = classify(&r);
         assert_eq!(hits[0].kind, HitKind::OpenAiApp);
-        assert!(has_ui_in(&r));
+        assert!(has_ui(&r));
     }
 
     #[test]
@@ -318,7 +317,7 @@ mod tests {
         }));
         let hits = classify(&r);
         assert_eq!(hits[0].kind, HitKind::Resource);
-        assert!(!has_ui_in(&r));
+        assert!(!has_ui(&r));
     }
 
     #[test]
@@ -340,15 +339,7 @@ mod tests {
         assert_eq!(hits[0].kind, HitKind::Text);
         assert_eq!(hits[1].kind, HitKind::McpUi);
         assert_eq!(hits[2].kind, HitKind::Resource);
-        assert!(has_ui_in(&r));
+        assert!(has_ui(&r));
     }
 
-    /// `has_ui` is gated by `#[cfg(feature = "tui")]`, so the test
-    /// re-implements the predicate locally to stay buildable without
-    /// the feature.
-    fn has_ui_in(r: &CallToolResult) -> bool {
-        classify(r)
-            .iter()
-            .any(|h| matches!(h.kind, HitKind::McpUi | HitKind::OpenAiApp))
-    }
 }

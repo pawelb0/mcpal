@@ -117,23 +117,20 @@ async fn add(args: ServerAddArgs, ctx: &Ctx) -> Result<()> {
         ServerSpec::Stdio { .. } => "stdio",
     };
     write_server(&ctx.config_path, &alias, spec, force)?;
+    let auth = match &intent {
+        AuthIntent::None => "none",
+        AuthIntent::Literal(_) => "bearer",
+        AuthIntent::Env(_) => "bearer_env",
+        AuthIntent::Oauth => "oauth",
+    };
     materialise_auth(&alias, &intent, no_login, ctx).await?;
     ctx.render_one(&json!({
         "ok": true,
         "ref": alias,
         "transport": transport,
-        "auth": auth_label(&intent),
+        "auth": auth,
     }))?;
     Ok(())
-}
-
-fn auth_label(intent: &AuthIntent) -> &'static str {
-    match intent {
-        AuthIntent::None => "none",
-        AuthIntent::Literal(_) => "bearer",
-        AuthIntent::Env(_) => "bearer_env",
-        AuthIntent::Oauth => "oauth",
-    }
 }
 
 async fn materialise_auth(
@@ -351,33 +348,28 @@ async fn install(args: ServerInstallArgs, ctx: &Ctx) -> Result<()> {
         .unwrap_or_else(|| default_alias(&server.name).into());
 
     loop {
-        let (spec, hint) = registry::to_spec(&server, &extra)?;
-        if hint.missing.is_empty() {
+        let (spec, missing) = registry::to_spec(&server, &extra)?;
+        if missing.is_empty() {
             write_server(&ctx.config_path, &alias, spec, false)?;
             eprintln!("installed {} as '{alias}'", server.name);
             return Ok(());
         }
         if args.no_prompt || !std::io::stdin().is_terminal() {
+            let names: Vec<&str> = missing.iter().map(|(n, _)| n.as_str()).collect();
             bail!(
                 "registry server requires env vars: {} — re-run on a TTY or pass --env VAR=…",
-                hint.missing.join(", "),
+                names.join(", "),
             );
         }
         eprintln!(
             "{} needs {} environment variable{}:",
             server.name,
-            hint.missing.len(),
-            if hint.missing.len() == 1 { "" } else { "s" },
+            missing.len(),
+            if missing.len() == 1 { "" } else { "s" },
         );
-        for missing_name in &hint.missing {
-            let description = hint
-                .vars
-                .iter()
-                .find(|v| v.name == *missing_name)
-                .and_then(|v| v.description.clone())
-                .unwrap_or_default();
-            let value = prompt_for(missing_name, &description).context("prompt")?;
-            extra.insert(missing_name.clone(), value);
+        for (name, desc) in &missing {
+            let value = prompt_for(name, desc.as_deref().unwrap_or("")).context("prompt")?;
+            extra.insert(name.clone(), value);
         }
     }
 }

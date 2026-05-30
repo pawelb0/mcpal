@@ -95,20 +95,8 @@ pub(crate) struct Hit<'a> {
     pub kind: &'static str,
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
-pub(crate) struct EnvVarHint {
-    pub name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-}
-
-/// Spec plus declared env vars (satisfied or not). `missing` lists required
-/// names the caller still needs to prompt for or bail on.
-#[derive(Debug, Clone)]
-pub(crate) struct RequiredEnvHint {
-    pub vars: Vec<EnvVarHint>,
-    pub missing: Vec<String>,
-}
+/// `(name, description)` pairs the caller still needs to prompt for or bail on.
+pub(crate) type RequiredEnv = Vec<(String, Option<String>)>;
 
 pub(crate) fn classify(s: &Server) -> &'static str {
     if !s.packages.is_empty() {
@@ -171,7 +159,7 @@ fn pick_latest(name: &str, candidates: Vec<Server>) -> Result<Server> {
 pub(crate) fn to_spec(
     server: &Server,
     extra_env: &BTreeMap<String, String>,
-) -> Result<(ServerSpec, RequiredEnvHint)> {
+) -> Result<(ServerSpec, RequiredEnv)> {
     if let Some(pkg) = server
         .packages
         .iter()
@@ -190,10 +178,7 @@ pub(crate) fn to_spec(
                 headers: BTreeMap::new(),
                 auth: None,
             },
-            RequiredEnvHint {
-                vars: Vec::new(),
-                missing: Vec::new(),
-            },
+            Vec::new(),
         ));
     }
     bail!(
@@ -205,7 +190,7 @@ pub(crate) fn to_spec(
 fn stdio_from_package(
     pkg: &Package,
     extra_env: &BTreeMap<String, String>,
-) -> Result<(ServerSpec, RequiredEnvHint)> {
+) -> Result<(ServerSpec, RequiredEnv)> {
     let id = &pkg.identifier;
     let ver = pkg.version.as_deref().filter(|v| !v.is_empty());
     let (command, mut args): (&str, Vec<String>) = match pkg.registry_type.as_str() {
@@ -238,19 +223,11 @@ fn stdio_from_package(
         .collect();
     env.extend(extra_env.iter().map(|(k, v)| (k.clone(), v.clone())));
 
-    let vars: Vec<EnvVarHint> = pkg
-        .environment_variables
-        .iter()
-        .map(|v| EnvVarHint {
-            name: v.name.clone(),
-            description: v.description.clone(),
-        })
-        .collect();
-    let missing: Vec<String> = pkg
+    let missing: RequiredEnv = pkg
         .environment_variables
         .iter()
         .filter(|v| v.is_required && !env.contains_key(&v.name))
-        .map(|v| v.name.clone())
+        .map(|v| (v.name.clone(), v.description.clone()))
         .collect();
 
     Ok((
@@ -259,7 +236,7 @@ fn stdio_from_package(
             args,
             env,
         },
-        RequiredEnvHint { vars, missing },
+        missing,
     ))
 }
 
@@ -313,8 +290,8 @@ mod tests {
                 "registryType":"npm","identifier":"@mcp/foo",
                 "environmentVariables":[{"name":"NEEDED","isRequired":true}]}]}}]}"#,
         );
-        let (_, hint) = to_spec(&s, &BTreeMap::new()).unwrap();
-        assert!(hint.missing.contains(&"NEEDED".to_string()));
+        let (_, missing) = to_spec(&s, &BTreeMap::new()).unwrap();
+        assert!(missing.iter().any(|(n, _)| n == "NEEDED"));
     }
 
     #[test]
@@ -342,17 +319,16 @@ mod tests {
     }
 
     #[test]
-    fn to_spec_returns_missing_when_required_unsupplied() {
+    fn to_spec_returns_missing_with_description() {
         let body = r#"{"servers":[{"server":{"name":"x","packages":[{"registryType":"npm","identifier":"p","environmentVariables":[
             {"name":"NEEDED","description":"the thing"}
         ]}]}}]}"#;
         let s = parse(body);
-        let (spec, hint) = to_spec(&s, &BTreeMap::new()).expect("to_spec");
+        let (spec, missing) = to_spec(&s, &BTreeMap::new()).expect("to_spec");
         assert!(matches!(spec, ServerSpec::Stdio { .. }));
-        assert_eq!(hint.missing, vec!["NEEDED"]);
-        assert_eq!(hint.vars.len(), 1);
-        assert_eq!(hint.vars[0].name, "NEEDED");
-        assert_eq!(hint.vars[0].description.as_deref(), Some("the thing"));
+        assert_eq!(missing.len(), 1);
+        assert_eq!(missing[0].0, "NEEDED");
+        assert_eq!(missing[0].1.as_deref(), Some("the thing"));
     }
 
     #[test]
@@ -363,8 +339,8 @@ mod tests {
         let s = parse(body);
         let mut extra = BTreeMap::new();
         extra.insert("NEEDED".to_string(), "abc".to_string());
-        let (_, hint) = to_spec(&s, &extra).unwrap();
-        assert!(hint.missing.is_empty());
+        let (_, missing) = to_spec(&s, &extra).unwrap();
+        assert!(missing.is_empty());
     }
 
     #[test]
@@ -373,8 +349,8 @@ mod tests {
             {"name":"NEEDED","default":"baked"}
         ]}]}}]}"#;
         let s = parse(body);
-        let (spec, hint) = to_spec(&s, &BTreeMap::new()).unwrap();
-        assert!(hint.missing.is_empty());
+        let (spec, missing) = to_spec(&s, &BTreeMap::new()).unwrap();
+        assert!(missing.is_empty());
         if let ServerSpec::Stdio { env, .. } = spec {
             assert_eq!(env.get("NEEDED").map(String::as_str), Some("baked"));
         } else {
@@ -388,12 +364,8 @@ mod tests {
             {"name":"OPTIONAL","isRequired":false}
         ]}]}}]}"#;
         let s = parse(body);
-        let (_, hint) = to_spec(&s, &BTreeMap::new()).unwrap();
-        assert!(
-            hint.missing.is_empty(),
-            "isRequired:false should not appear in missing"
-        );
-        assert_eq!(hint.vars.len(), 1);
+        let (_, missing) = to_spec(&s, &BTreeMap::new()).unwrap();
+        assert!(missing.is_empty());
     }
 }
 
