@@ -210,3 +210,77 @@ pub fn explain(code: &str) -> Option<&'static str> {
     let upper = code.to_ascii_uppercase();
     EXPLAIN.iter().find(|(c, _)| *c == upper).map(|(_, p)| *p)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::anyhow;
+
+    fn classify_msg(msg: &str) -> Diagnostic {
+        classify(&anyhow!("{msg}"))
+    }
+
+    #[test]
+    fn explain_codes_have_an_entry_per_pattern() {
+        // Every E#### the classifier can emit must have an EXPLAIN entry.
+        for (_, _, ec) in ANYHOW_PATTERNS {
+            assert!(
+                explain(ec).is_some(),
+                "no EXPLAIN entry for classifier code {ec}"
+            );
+        }
+    }
+
+    #[test]
+    fn timeout_maps_to_e0007_exit_8() {
+        let d = classify_msg("request timed out after 5s");
+        assert_eq!(d.error_code, "E0007");
+        assert_eq!(d.code, 8);
+    }
+
+    #[test]
+    fn ctrl_c_maps_to_e0011_exit_130() {
+        let d = classify_msg("interrupted by ctrl-c");
+        assert_eq!(d.error_code, "E0011");
+        assert_eq!(d.code, 130);
+    }
+
+    #[test]
+    fn missing_env_maps_to_e0017() {
+        let d = classify_msg("registry server requires env vars: API_KEY");
+        assert_eq!(d.error_code, "E0017");
+        assert_eq!(d.code, 2);
+    }
+
+    #[test]
+    fn duplicate_alias_maps_to_e0013() {
+        let d = classify_msg("server 'gh' already exists");
+        assert_eq!(d.error_code, "E0013");
+    }
+
+    #[test]
+    fn unknown_pattern_falls_through_to_e0000() {
+        let d = classify_msg("something nobody anticipated");
+        assert_eq!(d.error_code, "E0000");
+        assert_eq!(d.code, 1);
+    }
+
+    #[test]
+    fn explain_is_case_insensitive() {
+        assert!(explain("E0001").is_some());
+        assert!(explain("e0001").is_some());
+        assert!(explain("E9999").is_none());
+    }
+
+    #[test]
+    fn collection_not_found_maps_to_e0015() {
+        let d = classify_msg("collection not found: no mcpal.yml from . upward");
+        assert_eq!(d.error_code, "E0015");
+    }
+
+    #[test]
+    fn template_unset_maps_to_e0014() {
+        let d = classify_msg("template variable not set: profile.foo");
+        assert_eq!(d.error_code, "E0014");
+    }
+}
