@@ -73,9 +73,7 @@ pub async fn login(reference: &str, server_url: &str, open_browser: bool) -> Res
             }
         }),
     );
-    let listener = tokio::net::TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))
-        .await
-        .context("bind callback listener")?;
+    let listener = tokio::net::TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0))).await?;
     let redirect_uri = format!(
         "http://127.0.0.1:{}/callback",
         listener.local_addr()?.port()
@@ -84,29 +82,20 @@ pub async fn login(reference: &str, server_url: &str, open_browser: bool) -> Res
         let _ = axum::serve(listener, app).await;
     });
 
-    let mut am = AuthorizationManager::new(server_url)
-        .await
-        .context("init AuthorizationManager")?;
+    let mut am = AuthorizationManager::new(server_url).await?;
     am.set_credential_store(KeyringCredentialStore::new(reference));
-    let md = am.discover_metadata().await.context("discover metadata")?;
+    let md = am.discover_metadata().await?;
     am.set_metadata(md);
-    am.register_client("mcpal", &redirect_uri, &[])
-        .await
-        .context("register client")?;
-    let url = am
-        .get_authorization_url(&[])
-        .await
-        .context("authorization url")?;
+    am.register_client("mcpal", &redirect_uri, &[]).await?;
+    let url = am.get_authorization_url(&[]).await?;
 
     eprintln!("Open this URL to authorize {reference}:\n  {url}");
     if open_browser && let Err(e) = webbrowser::open(&url) {
         eprintln!("  (couldn't launch browser: {e}; open the URL manually)");
     }
 
-    let p = rx.await.context("waiting for callback")?;
-    am.exchange_code_for_token(&p.code, &p.state)
-        .await
-        .context("exchange code for token")?;
+    let p = rx.await.context("waiting for oauth callback")?;
+    am.exchange_code_for_token(&p.code, &p.state).await?;
     server.abort();
     Ok(())
 }
@@ -116,14 +105,12 @@ pub async fn refresh(reference: &str, server_url: &str) -> Result<()> {
     if store.load().await?.is_none() {
         bail!("no oauth credentials for '{reference}'; run `mcpal auth login --oauth`");
     }
-    let mut am = AuthorizationManager::new(server_url)
-        .await
-        .context("init AuthorizationManager")?;
+    let mut am = AuthorizationManager::new(server_url).await?;
     am.set_credential_store(store);
-    if !am.initialize_from_store().await.context("restore creds")? {
+    if !am.initialize_from_store().await? {
         bail!("credentials present but could not be restored; re-run login");
     }
-    am.refresh_token().await.context("refresh token")?;
+    am.refresh_token().await?;
     Ok(())
 }
 
@@ -131,27 +118,29 @@ fn token_blob(reference: &str) -> Option<serde_json::Value> {
     serde_json::from_str(&keyring::get(reference, Kind::Oauth)?).ok()
 }
 
-pub(crate) fn current_access_token(reference: &str) -> Option<String> {
-    token_blob(reference)?
-        .pointer("/token_response/access_token")?
+fn access_token_from(blob: &serde_json::Value) -> Option<String> {
+    blob.pointer("/token_response/access_token")?
         .as_str()
         .map(String::from)
 }
 
-/// `current_access_token`, but eagerly refreshes when within 30s of expiry.
-pub(crate) async fn access_token_refreshing(reference: &str, server_url: &str) -> Option<String> {
-    if expires_soon(reference)
-        && let Err(e) = refresh(reference, server_url).await
-    {
-        tracing::debug!(target: "mcpal::oauth", "eager refresh failed: {e:#}");
-    }
-    current_access_token(reference)
+pub(crate) fn current_access_token(reference: &str) -> Option<String> {
+    access_token_from(&token_blob(reference)?)
 }
 
-fn expires_soon(reference: &str) -> bool {
-    let Some(v) = token_blob(reference) else {
-        return false;
-    };
+/// `current_access_token`, but eagerly refreshes when within 30s of expiry.
+pub(crate) async fn access_token_refreshing(reference: &str, server_url: &str) -> Option<String> {
+    let mut blob = token_blob(reference)?;
+    if expires_soon(&blob) {
+        if let Err(e) = refresh(reference, server_url).await {
+            tracing::debug!(target: "mcpal::oauth", "eager refresh failed: {e:#}");
+        }
+        blob = token_blob(reference)?;
+    }
+    access_token_from(&blob)
+}
+
+fn expires_soon(v: &serde_json::Value) -> bool {
     let r = v.pointer("/token_received_at").and_then(|x| x.as_u64());
     let t = v
         .pointer("/token_response/expires_in")
