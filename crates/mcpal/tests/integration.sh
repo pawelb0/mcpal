@@ -192,6 +192,13 @@ it_grep     'cmd: tool call returns echoed text' 'Echo: cmdmode' \
 it_grep_err 'cmd: with no command after prefix' 'needs a command' \
             mc tool list 'cmd:'
 
+it          '--auth none resolves URL without OAuth warning' \
+            mc --auth none server show 'https://example.test/mcp'
+it_grep     '--auth env:VAR is preserved in spec' 'bearer_env' \
+            mc --auth env:GH_TOKEN --output json server show 'https://example.test/mcp'
+it_exit     '--auth unknown mode → E0002 exit 2' 2 \
+            mc --auth magic server show 'https://example.test/mcp'
+
 # ---------- stderr surfaced on stdio failure ----------
 section "stderr surfaced on stdio failure"
 
