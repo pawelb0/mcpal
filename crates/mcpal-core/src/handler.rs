@@ -113,8 +113,8 @@ impl ClientHandler for Handler {
                 Ok(result)
             }
             Err(e) => {
-                let msg = format!("sampling handler: {e}");
-                self.emit(json!({"kind": "sampling_response", "error": e}));
+                let msg = format!("sampling handler: {e:#}");
+                self.emit(json!({"kind": "sampling_response", "error": &msg}));
                 Err(ErrorData::internal_error(msg, None))
             }
         }
@@ -170,23 +170,24 @@ impl ClientHandler for Handler {
 async fn run_sampling_handler(
     argv: &[String],
     params: &CreateMessageRequestParams,
-) -> Result<CreateMessageResult, String> {
-    let (cmd, rest) = argv.split_first().ok_or("empty argv")?;
+) -> anyhow::Result<CreateMessageResult> {
+    use anyhow::{Context, anyhow, bail};
+    let (cmd, rest) = argv.split_first().ok_or_else(|| anyhow!("empty argv"))?;
     let mut child = Command::new(cmd)
         .args(rest)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::inherit())
         .spawn()
-        .map_err(|e| format!("spawn {cmd}: {e}"))?;
-    let payload = serde_json::to_vec(params).map_err(|e| e.to_string())?;
+        .with_context(|| format!("spawn {cmd}"))?;
+    let payload = serde_json::to_vec(params)?;
     if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(&payload).await.map_err(|e| e.to_string())?;
-        stdin.shutdown().await.map_err(|e| e.to_string())?;
+        stdin.write_all(&payload).await?;
+        stdin.shutdown().await?;
     }
-    let out = child.wait_with_output().await.map_err(|e| e.to_string())?;
+    let out = child.wait_with_output().await?;
     if !out.status.success() {
-        return Err(format!("handler exited {:?}", out.status.code()));
+        bail!("handler exited {:?}", out.status.code());
     }
-    serde_json::from_slice(&out.stdout).map_err(|e| e.to_string())
+    Ok(serde_json::from_slice(&out.stdout)?)
 }
