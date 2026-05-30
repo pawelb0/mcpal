@@ -341,5 +341,4 @@ mod tests {
         assert_eq!(hits[2].kind, HitKind::Resource);
         assert!(has_ui(&r));
     }
-
 }

@@ -31,7 +31,11 @@ const ANYHOW_PATTERNS: &[(&str, i32, &str)] = &[
     ("schema validation", 2, "E0012"),
     ("timed out", 8, "E0007"),
     ("timeout", 8, "E0007"),
-    ("not found (owned, cmd:, url, path, or discovered)", 3, "E0001"),
+    (
+        "not found (owned, cmd:, url, path, or discovered)",
+        3,
+        "E0001",
+    ),
     ("cmd: needs a command", 2, "E0002"),
     ("--auth: unknown mode", 2, "E0002"),
     ("not found in mcpal config", 3, "E0001"),
@@ -283,7 +287,9 @@ mod tests {
 
     #[test]
     fn unknown_auth_mode_maps_to_e0002() {
-        let d = classify_msg("--auth: unknown mode 'magic' (expected: oauth, none, env:VAR, bearer:TOKEN)");
+        let d = classify_msg(
+            "--auth: unknown mode 'magic' (expected: oauth, none, env:VAR, bearer:TOKEN)",
+        );
         assert_eq!(d.error_code, "E0002");
         assert_eq!(d.code, 2);
     }

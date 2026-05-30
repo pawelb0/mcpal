@@ -84,7 +84,10 @@ mod tests {
     use serde_json::json;
 
     fn m(items: &[(&str, Value)]) -> BTreeMap<String, Value> {
-        items.iter().map(|(k, v)| ((*k).into(), v.clone())).collect()
+        items
+            .iter()
+            .map(|(k, v)| ((*k).into(), v.clone()))
+            .collect()
     }
 
     #[test]

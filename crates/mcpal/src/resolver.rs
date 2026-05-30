@@ -155,8 +155,8 @@ mod tests {
 
     #[test]
     fn https_url_becomes_oauth_http_spec() {
-        let r =
-            resolve_with("https://x.example/mcp", &BTreeMap::new(), &[], None).expect("resolve url");
+        let r = resolve_with("https://x.example/mcp", &BTreeMap::new(), &[], None)
+            .expect("resolve url");
         assert_eq!(r.display, "https://x.example/mcp");
         match r.spec {
             ServerSpec::Http { url, auth, .. } => {
@@ -175,10 +175,7 @@ mod tests {
 
     #[test]
     fn source_prefixed_lookup() {
-        let discovered = vec![
-            disc("cursor", "linear", "a"),
-            disc("zed", "linear", "b"),
-        ];
+        let discovered = vec![disc("cursor", "linear", "a"), disc("zed", "linear", "b")];
         let r = resolve_with("zed:linear", &BTreeMap::new(), &discovered, None).unwrap();
         assert_eq!(r.display, "zed:linear");
         if let ServerSpec::Stdio { command, .. } = r.spec {
@@ -195,10 +192,7 @@ mod tests {
 
     #[test]
     fn bare_ambiguous_errors_listing_matches() {
-        let discovered = vec![
-            disc("cursor", "linear", "a"),
-            disc("zed", "linear", "b"),
-        ];
+        let discovered = vec![disc("cursor", "linear", "a"), disc("zed", "linear", "b")];
         let err = resolve_with("linear", &BTreeMap::new(), &discovered, None).unwrap_err();
         let msg = format!("{err}");
         assert!(msg.contains("ambiguous"));
@@ -235,8 +229,13 @@ mod tests {
 
     #[test]
     fn cmd_prefix_splits_whitespace_into_args() {
-        let r =
-            resolve_with("cmd:npx -y @mcp/server-everything", &BTreeMap::new(), &[], None).unwrap();
+        let r = resolve_with(
+            "cmd:npx -y @mcp/server-everything",
+            &BTreeMap::new(),
+            &[],
+            None,
+        )
+        .unwrap();
         if let ServerSpec::Stdio { command, args, .. } = r.spec {
             assert_eq!(command, "npx");
             assert_eq!(args, vec!["-y", "@mcp/server-everything"]);
@@ -279,13 +278,7 @@ mod tests {
 
     #[test]
     fn auth_override_anon_strips_oauth_default() {
-        let r = resolve_with(
-            "https://x.example/mcp",
-            &BTreeMap::new(),
-            &[],
-            Some(&None),
-        )
-        .unwrap();
+        let r = resolve_with("https://x.example/mcp", &BTreeMap::new(), &[], Some(&None)).unwrap();
         if let ServerSpec::Http { auth, .. } = r.spec {
             assert!(auth.is_none(), "--auth none should leave auth=None");
         } else {
