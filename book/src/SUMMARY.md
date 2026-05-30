@@ -12,6 +12,7 @@
 
 # How-to guides
 
+- [One-line MCP](./one-liners.md)
 - [Recipes](./recipes.md)
 - [Collections](./collection.md)
 - [Authenticate to an HTTP server](./auth.md)

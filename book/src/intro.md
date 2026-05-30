@@ -115,6 +115,8 @@ explanation.
 
 **How-to guides** — find the recipe for the problem you have.
 
+- [One-line MCP](./one-liners.md) — drive any server in a single
+  shell command: `cmd:`, URL, JSON spec, discovered ref.
 - [Recipes](./recipes.md) — short task-driven snippets, including a
   cookbook against real servers.
 - [Authenticate to an HTTP server](./auth.md) — bearer or OAuth 2.1,

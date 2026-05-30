@@ -46,6 +46,19 @@
 
 ## Quickstart
 
+### One-liner — no setup
+
+```bash
+# any stdio MCP server, ephemeral
+mcpal tool call "cmd:npx -y @modelcontextprotocol/server-everything" \
+    echo --message hi
+
+# any HTTP server
+mcpal tool list https://mcp.context7.com/mcp
+```
+
+Full table of one-line `<ref>` shapes: [One-line MCP](https://pawelb0.github.io/mcpal/one-liners.html).
+
 ### Call a server your editor already configured
 
 ```bash
