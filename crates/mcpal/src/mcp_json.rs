@@ -71,7 +71,7 @@ pub fn load(path: &Path) -> Result<BTreeMap<String, ServerSpec>> {
 
     let mut out = BTreeMap::new();
     for (name, raw) in map {
-        let entry: Entry = serde_json::from_value(raw.clone())
+        let entry = Entry::deserialize(raw)
             .with_context(|| format!("entry '{name}' in {}", path.display()))?;
         out.insert(name.clone(), entry.into_spec());
     }
