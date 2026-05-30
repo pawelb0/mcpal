@@ -7,8 +7,8 @@ multilingual = false
 src = "src"
 
 [output.html]
-default-theme = "navy"
-preferred-dark-theme = "ayu"
+default-theme = "light"
+preferred-dark-theme = "navy"
 git-repository-url = "https://github.com/pawelb0/mcpal"
 edit-url-template = "https://github.com/pawelb0/mcpal/edit/main/book/{path}"
 
