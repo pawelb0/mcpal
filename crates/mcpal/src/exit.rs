@@ -32,6 +32,7 @@ const ANYHOW_PATTERNS: &[(&str, i32, &str)] = &[
     ("timed out", 8, "E0007"),
     ("timeout", 8, "E0007"),
     ("not found (owned, cmd:, url, path, or discovered)", 3, "E0001"),
+    ("cmd: needs a command", 2, "E0002"),
     ("not found in mcpal config", 3, "E0001"),
     ("expects k=v", 2, "E0002"),
     ("expected --flag", 2, "E0002"),
@@ -277,6 +278,13 @@ mod tests {
     fn collection_not_found_maps_to_e0015() {
         let d = classify_msg("collection not found: no mcpal.yml from . upward");
         assert_eq!(d.error_code, "E0015");
+    }
+
+    #[test]
+    fn empty_cmd_prefix_maps_to_e0002() {
+        let d = classify_msg("cmd: needs a command after the prefix");
+        assert_eq!(d.error_code, "E0002");
+        assert_eq!(d.code, 2);
     }
 
     #[test]
