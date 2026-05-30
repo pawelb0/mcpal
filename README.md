@@ -53,8 +53,12 @@
 mcpal tool call "cmd:npx -y @modelcontextprotocol/server-everything" \
     echo --message hi
 
-# any HTTP server
-mcpal tool list https://mcp.context7.com/mcp
+# anonymous HTTP server
+mcpal --auth none tool list https://mcp.context7.com/mcp
+
+# HTTP + env-backed bearer (no token in shell history)
+GH_TOKEN=ghp_… mcpal --auth env:GH_TOKEN \
+    tool list https://api.githubcopilot.com/mcp/
 ```
 
 Full table of one-line `<ref>` shapes: [One-line MCP](https://pawelb0.github.io/mcpal/one-liners.html).

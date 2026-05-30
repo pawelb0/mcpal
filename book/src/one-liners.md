@@ -7,7 +7,7 @@ matches what you have:
 | You have | One-line `<ref>` | Example |
 |---|---|---|
 | A local stdio command (npx, uvx, docker, anything) | `cmd:<command> [args]` | `mcpal tool call "cmd:npx -y @modelcontextprotocol/server-everything" echo --message hi` |
-| An HTTP(S) URL | the URL itself | `mcpal tool list https://mcp.context7.com/mcp` |
+| An HTTP(S) URL | the URL plus `--auth MODE` | `mcpal --auth env:GH_TOKEN tool list https://api.githubcopilot.com/mcp/` |
 | A `ServerSpec` JSON file on disk | the path | `mcpal tool call ./spec.json read_file --path README.md` |
 | A server one of your editors already configured | `<source>:<name>` | `mcpal tool call cursor:linear get-issue --id ENG-123` |
 | A bare name that's unambiguous across discovered sources | the name | `mcpal tool list linear` |
@@ -50,10 +50,9 @@ won't survive whitespace-splitting — for anything that fancy, use
 
 ## `https://…` — ephemeral HTTP
 
-A literal URL resolves to an HTTP `ServerSpec` with `auth = oauth`. The
-first call without a stored token will print a warning telling you to
-run `mcpal auth login --oauth <url>`. Anonymous HTTP servers work as
-soon as you call them:
+A literal URL resolves to an HTTP `ServerSpec`. By default the spec
+carries `auth = oauth`. The first call without a stored token will
+print a warning telling you to run `mcpal auth login --oauth <url>`.
 
 ```bash
 mcpal tool list https://mcp.context7.com/mcp
@@ -61,9 +60,31 @@ mcpal --output json tool call https://mcp.context7.com/mcp \
     search --query 'Rust async runtimes'
 ```
 
-For HTTP with a static bearer (no OAuth), persist with
-`mcpal server add … --bearer …` — there is no one-line bearer-on-URL
-form, because the token would land in shell history.
+### `--auth MODE` — pick the auth flavour inline
+
+Override the default with the global `--auth` flag. Modes:
+
+| `--auth` | Behaviour |
+|---|---|
+| `oauth` (default) | Send the stored OAuth access token |
+| `none` / `anon` | Send no `Authorization` header |
+| `env:VAR` | Read the bearer token from `$VAR` at call time |
+| `bearer:TOKEN` | Send the literal token (leaks to shell history) |
+
+```bash
+# anonymous HTTP MCP — no warning about a missing OAuth token
+mcpal --auth none tool list https://mcp.context7.com/mcp
+
+# token comes from an env var, never touches the spec file or history
+GH_TOKEN=ghp_… mcpal --auth env:GH_TOKEN \
+    tool list https://api.githubcopilot.com/mcp/
+
+# literal token (avoid — lives in shell history)
+mcpal --auth bearer:ghp_… tool list https://api.githubcopilot.com/mcp/
+```
+
+For repeated use, persist with `mcpal server add … --bearer-env GH_TOKEN`
+so future calls don't need the `--auth` flag at all.
 
 ## `./spec.json` — ephemeral file
 
@@ -113,18 +134,30 @@ For full registry behaviour see [Recipes](./recipes.md).
 
 ## What doesn't work in one line
 
-- Static bearer tokens on inline URLs — would leak to shell history.
 - stdio with arguments that contain whitespace or shell metacharacters
   — `cmd:` is a whitespace split. Persist the spec with `server add`.
 - Registry servers that declare required env vars and you didn't pass
   `--env` — `mcpal server install` exits with `E0017`.
 
+Static bearer tokens via `--auth bearer:TOKEN` *do* work in one line
+but are noisy: the token lands in shell history and process listings.
+`--auth env:VAR` is the safer one-line form.
+
 ## Quick reference
 
 ```bash
-mcpal tool list   "cmd:npx -y @modelcontextprotocol/server-everything"
-mcpal tool list   https://mcp.context7.com/mcp
-mcpal tool list   /tmp/ev.json
-mcpal tool list   cursor:linear
-mcpal tool list   linear        # if unambiguous
+# stdio ephemeral
+mcpal tool list "cmd:npx -y @modelcontextprotocol/server-everything"
+
+# HTTP — pick auth inline
+mcpal --auth none      tool list https://mcp.context7.com/mcp
+mcpal --auth env:TOKEN tool list https://api.githubcopilot.com/mcp/
+mcpal --auth oauth     tool list https://mcp.notion.com/v1   # default
+
+# spec file
+mcpal tool list /tmp/ev.json
+
+# already configured
+mcpal tool list cursor:linear
+mcpal tool list linear        # if unambiguous
 ```
