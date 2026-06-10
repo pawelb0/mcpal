@@ -11,8 +11,8 @@ fn integration_script() {
         eprintln!("skipping: set MCPAL_INTEGRATION_TESTS=1 to run");
         return;
     }
-    if which::which("npx").is_err() || which::which("bash").is_err() {
-        eprintln!("skipping: integration tests need `npx` and `bash` on PATH");
+    if which::which("npm").is_err() || which::which("bash").is_err() {
+        eprintln!("skipping: integration tests need `npm` and `bash` on PATH");
         return;
     }
     // Build the oauth_mock example so the OAuth section can find it next to

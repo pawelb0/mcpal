@@ -1,18 +1,39 @@
 #!/usr/bin/env bash
-# Integration harness for mcpal. Drives the binary at $MCPAL_BIN against the
-# `@modelcontextprotocol/server-everything` reference server and exercises one
+# Integration harness for mcpal. Drives the binary at $MCPAL_BIN against a
+# pinned `@modelcontextprotocol/server-everything` (installed once into the
+# temp root, so individual calls skip npx/registry entirely) and exercises one
 # named operation per `it`. Output goes to $OUT; assertions are grep / `[ ]`.
 #
-# Skipped (by the parent Rust shim) if `npx` is not on PATH.
+# MCPAL_IT_ONLY=tools,oauth runs only sections whose name contains one of the
+# comma-separated (case-insensitive) substrings.
+#
+# Skipped (by the parent Rust shim) if `npm` is not on PATH.
 
 set -u
 
 BIN="${MCPAL_BIN:?MCPAL_BIN is required}"
-CFG="$(mktemp -t mcpal-test.XXXXXX)"
-rm -f "$CFG"
-OUT="$(mktemp -t mcpal-test-out.XXXXXX)"
-ERR="$(mktemp -t mcpal-test-err.XXXXXX)"
-trap 'rm -f "$CFG" "$OUT" "$ERR"' EXIT
+# Some tests cd elsewhere before invoking the binary.
+case "$BIN" in /*) ;; *) BIN="$(pwd)/$BIN" ;; esac
+
+TMPROOT="$(mktemp -d -t mcpal-it.XXXXXX)"
+CFG="$TMPROOT/config.toml"
+OUT="$TMPROOT/out"
+ERR="$TMPROOT/err"
+
+# Aliases that may have written to the OS keyring; logged out on exit.
+KEYRING_REFS=""
+# Background processes (oauth mock, login, watch); killed on exit.
+PIDS=""
+
+cleanup() {
+    for p in $PIDS; do kill "$p" 2>/dev/null; done
+    for r in $KEYRING_REFS; do
+        "$BIN" --config "$CFG" auth logout "$r" >/dev/null 2>&1
+    done
+    rm -rf "$TMPROOT"
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
 
 REF=ev
 pass=0
@@ -20,7 +41,39 @@ fail=0
 
 mc() { "$BIN" --config "$CFG" "$@"; }
 
+# Poll until $pat appears in $file, max $deadline seconds. No fixed sleeps:
+# fast when the event is fast, tolerant when the machine is loaded.
+wait_for_grep() {
+    local pat="$1" file="$2" deadline="${3:-15}" waited=0
+    until grep -qE -- "$pat" "$file" 2>/dev/null; do
+        sleep 0.1
+        waited=$((waited + 1))
+        if [ "$waited" -ge $((deadline * 10)) ]; then
+            return 1
+        fi
+    done
+    return 0
+}
+
+ONLY="$(printf '%s' "${MCPAL_IT_ONLY:-}" | tr '[:upper:]' '[:lower:]')"
+ACTIVE=1
+
+section() {
+    local name_lc
+    name_lc="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+    ACTIVE=1
+    if [ -n "$ONLY" ]; then
+        ACTIVE=0
+        local IFS=','
+        for f in $ONLY; do
+            case "$name_lc" in *"$f"*) ACTIVE=1 ;; esac
+        done
+    fi
+    [ "$ACTIVE" = 1 ] && printf '\n# %s\n' "$1"
+}
+
 it() {
+    [ "$ACTIVE" = 1 ] || return 0
     local name="$1"; shift
     if "$@" >"$OUT" 2>"$ERR"; then
         printf '  ok   %s\n' "$name"
@@ -34,6 +87,7 @@ it() {
 }
 
 it_grep() {
+    [ "$ACTIVE" = 1 ] || return 0
     local name="$1" pat="$2"; shift 2
     "$@" >"$OUT" 2>"$ERR" || true
     if grep -iqE -- "$pat" "$OUT"; then
@@ -47,6 +101,7 @@ it_grep() {
 }
 
 it_grep_err() {
+    [ "$ACTIVE" = 1 ] || return 0
     local name="$1" pat="$2"; shift 2
     "$@" >"$OUT" 2>"$ERR" || true
     if grep -iqE -- "$pat" "$ERR"; then
@@ -61,6 +116,7 @@ it_grep_err() {
 
 # Pipe a literal payload via stdin to the wrapped command.
 it_grep_stdin() {
+    [ "$ACTIVE" = 1 ] || return 0
     local name="$1" pat="$2" payload="$3"; shift 3
     printf '%s' "$payload" | "$@" >"$OUT" 2>"$ERR" || true
     if grep -iqE -- "$pat" "$OUT"; then
@@ -74,6 +130,7 @@ it_grep_stdin() {
 }
 
 it_exit() {
+    [ "$ACTIVE" = 1 ] || return 0
     local name="$1" want="$2"; shift 2
     "$@" >"$OUT" 2>"$ERR"
     local got=$?
@@ -88,49 +145,80 @@ it_exit() {
 }
 
 it_no_grep() {
-    local label="$1" pattern="$2"; shift 2
+    [ "$ACTIVE" = 1 ] || return 0
+    local name="$1" pat="$2"; shift 2
     local out; out="$("$@" 2>&1 || true)"
-    if printf '%s\n' "$out" | grep -q -- "$pattern"; then
-        echo "FAIL: $label (matched '$pattern')"; fail=$((fail+1))
+    if printf '%s\n' "$out" | grep -q -- "$pat"; then
+        printf '  FAIL %s (matched /%s/)\n' "$name" "$pat"
+        fail=$((fail + 1))
     else
-        echo "ok:   $label"; pass=$((pass+1))
+        printf '  ok   %s\n' "$name"
+        pass=$((pass + 1))
     fi
 }
 
-section() { printf '\n# %s\n' "$1"; }
+# ---------- setup: pinned everything-server, provisioned once ----------
+# Pinned so an upstream publish can't break the suite; installed into the
+# temp root so every mcpal invocation execs a local script instead of npx.
+EV_PKG="@modelcontextprotocol/server-everything@2026.1.26"
+EV="$TMPROOT/npm/node_modules/.bin/mcp-server-everything"
+
+printf '# setup: npm install %s\n' "$EV_PKG"
+if ! npm install --prefix "$TMPROOT/npm" --prefer-offline --no-audit --no-fund \
+    --loglevel=error "$EV_PKG" >"$OUT" 2>"$ERR"; then
+    echo "FATAL: npm install $EV_PKG failed" >&2
+    sed 's/^/      | /' "$ERR" >&2
+    exit 1
+fi
+[ -x "$EV" ] || { echo "FATAL: $EV not executable after install" >&2; exit 1; }
+
+# Every section assumes $REF exists; provision it outside any section so
+# MCPAL_IT_ONLY can run sections standalone.
+if ! mc server add "$REF" -- "$EV" >"$OUT" 2>"$ERR"; then
+    echo "FATAL: could not provision '$REF' in $CFG" >&2
+    sed 's/^/      | /' "$ERR" >&2
+    exit 1
+fi
 
 # ---------- config ----------
 section config
-it          'config init writes default config' mc config init
-it_grep     'config path prints absolute path'  '^/' mc config path
-it          'config show parses TOML'           mc config show
+CFG_INIT="$TMPROOT/cfg-init/config.toml"
+co() { "$BIN" --config "$CFG_INIT" "$@"; }
+it          'config init writes default config' co config init
+it_grep     'config path prints absolute path'  '^/' co config path
+it          'config show parses TOML'           co config show
 
 # ---------- server lifecycle ----------
 section server
-it          'server add stdio via `-- cmd`' \
-            mc server add "$REF" -- npx -y @modelcontextprotocol/server-everything
-it_grep     'server list shows the alias'   "$REF"      mc server list
+REF2=ev2
+it          'server add stdio via `-- cmd`' mc server add "$REF2" -- "$EV"
+it_grep     'server list shows the alias'   "$REF2"     mc server list
 it          'server list --owned still works'           mc server list --owned
-it_grep     'server list --owned shows alias'  "$REF"   mc server list --owned
+it_grep     'server list --owned shows alias' "$REF2"   mc server list --owned
 it          'server list --all kept for back-compat'    mc server list --all
-it_grep     'server show prints transport'  'stdio'     mc server show "$REF"
+it_grep     'server show prints transport'  'stdio'     mc server show "$REF2"
 it_exit     'server add duplicate fails (E0013)' 2 \
-            mc server add "$REF" -- npx -y @modelcontextprotocol/server-everything
+            mc server add "$REF2" -- "$EV"
 it_grep_err 'server add duplicate names E0013' 'E0013' \
-            mc server add "$REF" -- npx -y @modelcontextprotocol/server-everything
+            mc server add "$REF2" -- "$EV"
 it          'server add --force overwrites existing' \
-            mc server add "$REF" --force -- npx -y @modelcontextprotocol/server-everything
+            mc server add "$REF2" --force -- "$EV"
 
 # ---------- server add — one-liner with auth ----------
 section "server add — one-liner with auth"
 
-ADD_DIR="$(mktemp -d -t mcpal-add.XXXXXX)"
-ADD_CFG="$ADD_DIR/config.toml"
+# Unique alias suffix: keyring entries are keyed by alias, so fixed names
+# would collide across concurrent runs and leak on a crashed one.
+T1="t1-$$"; T2="t2-$$"; T3="t3-$$"; T4="t4-$$"; T5="t5-$$"
+T6="t6-$$"; T6B="t6b-$$"; T7="t7-$$"; T8="t8-$$"
+ADD_CFG="$TMPROOT/add/config.toml"
 add() { "$BIN" --config "$ADD_CFG" "$@"; }
 
-it 'add --bearer (literal) writes keyring + spec has no Authorization' \
-    add server add T1 --http http://example.invalid/mcp --bearer abc
-it_grep 'T1 spec has [server.T1] section' '^\[server\.T1\]' \
+KEYRING_REFS="$KEYRING_REFS $T1 $T3 $T7"
+
+it "add --bearer (literal) writes keyring + spec has no Authorization" \
+    add server add "$T1" --http http://example.invalid/mcp --bearer abc
+it_grep "T1 spec has [server.$T1] section" "^\\[server\\.$T1\\]" \
     cat "$ADD_CFG"
 it_grep 'T1 spec is http' 'transport = "http"' \
     cat "$ADD_CFG"
@@ -139,56 +227,50 @@ it_no_grep 'T1 spec has no Authorization header' 'Authorization' \
 it_no_grep 'T1 spec has no auth = key' '^auth' \
     cat "$ADD_CFG"
 it 'auth status reports bearer present' \
-    add auth status T1
-add auth logout T1 >/dev/null 2>&1 || true
+    add auth status "$T1"
 
 it 'add --bearer-env sets bearer_env in spec' \
-    add server add T2 --http http://example.invalid/mcp --bearer-env GH_TOKEN
+    add server add "$T2" --http http://example.invalid/mcp --bearer-env GH_TOKEN
 it_grep 'T2 spec has bearer_env' 'type = "bearer_env"' \
     cat "$ADD_CFG"
 it_grep 'T2 spec carries env var' 'env = "GH_TOKEN"' \
     cat "$ADD_CFG"
 
 it 'add --header Authorization: Bearer literal == --bearer' \
-    add server add T3 --http http://example.invalid/mcp --header 'Authorization: Bearer xyz'
+    add server add "$T3" --http http://example.invalid/mcp --header 'Authorization: Bearer xyz'
 it_grep 'T3 auth status bearer present' '"bearer": true' \
-    add --output json auth status T3
-add auth logout T3 >/dev/null 2>&1 || true
+    add --output json auth status "$T3"
 
 it 'add --header X-Api-Key kept in spec, no auth' \
-    add server add T4 --http http://example.invalid/mcp --header 'X-Api-Key: k1'
+    add server add "$T4" --http http://example.invalid/mcp --header 'X-Api-Key: k1'
 it_grep 'T4 spec has X-Api-Key' 'X-Api-Key' \
     cat "$ADD_CFG"
 it_no_grep 'T4 spec has no bearer_env' 'bearer_env' \
-    add server show T4
+    add server show "$T4"
 
 it 'add stdio (no auth flags)' \
-    add server add T5 -- echo hi
+    add server add "$T5" -- echo hi
 it_exit 'add stdio + --bearer is rejected' 2 \
-    add server add T6 --bearer x -- echo hi
+    add server add "$T6" --bearer x -- echo hi
 it_grep_err 'add stdio + --bearer shows E0002' 'E0002' \
-    add server add T6b --bearer x -- echo hi
+    add server add "$T6B" --bearer x -- echo hi
 
 it 'add --bearer - (stdin)' \
-    bash -c "echo stdintok | '$BIN' --config '$ADD_CFG' server add T7 --http http://example.invalid/mcp --bearer -"
+    bash -c "echo stdintok | '$BIN' --config '$ADD_CFG' server add '$T7' --http http://example.invalid/mcp --bearer -"
 it_grep 'T7 bearer present via stdin' '"bearer": true' \
-    add --output json auth status T7
-add auth logout T7 >/dev/null 2>&1 || true
+    add --output json auth status "$T7"
 
 it 'add --oauth --no-login writes spec only (no browser)' \
-    add server add T8 --http http://example.invalid/mcp --oauth --no-login
+    add server add "$T8" --http http://example.invalid/mcp --oauth --no-login
 it_grep 'T8 spec has auth = oauth' 'type = "oauth"' \
     cat "$ADD_CFG"
-
-rm -rf "$ADD_DIR"
 
 # ---------- one-line ephemeral refs ----------
 section 'one-line ephemeral refs (cmd:)'
 it_grep     'cmd: lists tools on the everything server' '\becho\b' \
-            mc tool list 'cmd:npx -y @modelcontextprotocol/server-everything'
+            mc tool list "cmd:$EV"
 it_grep     'cmd: tool call returns echoed text' 'Echo: cmdmode' \
-            mc --query 'content[0].text' tool call \
-            'cmd:npx -y @modelcontextprotocol/server-everything' echo --message cmdmode
+            mc --query 'content[0].text' tool call "cmd:$EV" echo --message cmdmode
 it_grep_err 'cmd: with no command after prefix' 'needs a command' \
             mc tool list 'cmd:'
 
@@ -202,12 +284,13 @@ it_exit     '--auth unknown mode → E0002 exit 2' 2 \
 # ---------- stderr surfaced on stdio failure ----------
 section "stderr surfaced on stdio failure"
 
-mc server add boom --force -- bash -c 'echo "kaboom-marker" >&2; exit 2'
+it 'boom server registers (setup)' \
+    mc server add boom --force -- bash -c 'echo "kaboom-marker" >&2; exit 2'
 it_exit 'boom server fails (service error exit 7)' 7 \
     mc tool list boom
 it_grep_err 'failure error chain contains stderr marker' 'kaboom-marker' \
     mc tool list boom
-mc server remove boom >/dev/null 2>&1 || true
+it 'boom server removes cleanly' mc server remove boom
 
 # ---------- server properties ----------
 section 'server properties'
@@ -281,22 +364,27 @@ it          'auth logout (idempotent)'       mc auth logout nope
 
 # ---------- server import promotes Authorization -----
 section 'server import (bearer extraction)'
-IMPORT_DIR="$(mktemp -d -t mcpal-import.XXXXXX)"
-cat >"$IMPORT_DIR/.mcp.json" <<'JSON'
+LIT="lit-$$"
+ENVREF="envref-$$"
+KEYRING_REFS="$KEYRING_REFS $LIT"
+IMPORT_DIR="$TMPROOT/import"
+mkdir -p "$IMPORT_DIR"
+cat >"$IMPORT_DIR/.mcp.json" <<JSON
 {
   "mcpServers": {
-    "lit": {
+    "$LIT": {
       "url": "https://example.test/mcp",
       "headers": { "Authorization": "Bearer TESTLITERAL-INTEGRATION" }
     },
-    "envref": {
+    "$ENVREF": {
       "url": "https://example.test/mcp",
-      "headers": { "Authorization": "Bearer ${MY_TOK}" }
+      "headers": { "Authorization": "Bearer \${MY_TOK}" }
     }
   }
 }
 JSON
 it_import_grep() {
+    [ "$ACTIVE" = 1 ] || return 0
     # Run mc inside $IMPORT_DIR, capture stdout+stderr together.
     local name="$1" pat="$2"; shift 2
     ( cd "$IMPORT_DIR" && mc "$@" ) >"$OUT" 2>&1 || true
@@ -310,27 +398,19 @@ it_import_grep() {
     fi
 }
 it_import_grep 'import literal moves token to keyring' 'stored in keyring' \
-               server import --from claude-code lit
+               server import --from claude-code "$LIT"
 it_import_grep 'import env-ref produces bearer_env'    'comes from \$MY_TOK' \
-               server import --from claude-code envref
-it_grep 'literal lands as bearer in keyring'  'bearer: true'  mc auth status lit
-it_grep 'env-ref has no keyring entry'        'bearer: false' mc auth status envref
-it_grep 'env-ref spec records bearer_env'     'bearer_env'    mc server show envref
-it_grep 'literal spec drops Authorization'    '^url:'         mc server show lit
-mc server show lit >"$OUT" 2>&1
-if grep -iq 'authorization' "$OUT"; then
-    printf '  FAIL %s (Authorization survived in spec)\n' 'literal scrubs Authorization' >&2
-    fail=$((fail + 1))
-else
-    printf '  ok   %s\n' 'literal scrubs Authorization'
-    pass=$((pass + 1))
-fi
-it 'cleanup: logout the test bearer' mc auth logout lit
-rm -rf "$IMPORT_DIR"
+               server import --from claude-code "$ENVREF"
+it_grep 'literal lands as bearer in keyring'  'bearer: true'  mc auth status "$LIT"
+it_grep 'env-ref has no keyring entry'        'bearer: false' mc auth status "$ENVREF"
+it_grep 'env-ref spec records bearer_env'     'bearer_env'    mc server show "$ENVREF"
+it_grep 'literal spec drops Authorization'    '^url:'         mc server show "$LIT"
+it_no_grep 'literal scrubs Authorization'     'authorization' mc server show "$LIT"
+it 'cleanup: logout the test bearer' mc auth logout "$LIT"
 
 # ---------- tool input variants ----------
 section 'tool input variants'
-ARGS_JSON="$(mktemp -t mcpal-args.XXXXXX).json"
+ARGS_JSON="$TMPROOT/args.json"
 printf '{"message":"file"}' >"$ARGS_JSON"
 it_grep     'tool call --cli-input-json @path'  'Echo: file' \
             mc --query 'content[0].text' tool call "$REF" echo --cli-input-json "@$ARGS_JSON"
@@ -385,8 +465,8 @@ it_grep     'tool list with --root flag works' 'echo' \
 
 # ---------- mcp-json overlay ----------
 section 'mcp-json overlay'
-MCPJ="$(mktemp -t mcpal-mcp.XXXXXX).json"
-printf '%s' '{"mcpServers":{"ovr":{"command":"npx","args":["-y","@modelcontextprotocol/server-everything"]}}}' >"$MCPJ"
+MCPJ="$TMPROOT/mcp.json"
+printf '{"mcpServers":{"ovr":{"command":"%s"}}}' "$EV" >"$MCPJ"
 it_grep     '--mcp-json overlays a server' 'echo' \
             mc --mcp-json "$MCPJ" tool list ovr
 
@@ -413,121 +493,112 @@ it_grep     'doctor reports mcpal version' '"version"'     mc --output json debu
 
 # ---------- config edge cases ----------
 section 'config edge cases'
-BAD_CFG="$(mktemp -t mcpal-bad.XXXXXX)"
+BAD_CFG="$TMPROOT/bad-config.toml"
 printf 'this is not toml = =\n' >"$BAD_CFG"
 it_exit     'malformed TOML → exit 1 not panic' 1 \
             "$BIN" --config "$BAD_CFG" server list
-rm -f "$BAD_CFG"
 
-NOEXIST_CFG="$(mktemp -u -t mcpal-nonexist.XXXXXX)"
 it          'missing config: server list works (empty)' \
-            "$BIN" --config "$NOEXIST_CFG" server list
+            "$BIN" --config "$TMPROOT/never-written.toml" server list
 
 it_exit     'config init twice fails' 1 mc config init
 
 # ---------- bearer env one-shot ----------
 section 'MCPAL_BEARER env'
-MCPAL_BEARER=ignored "$BIN" --config "$CFG" server ping "$REF" >"$OUT" 2>"$ERR"
-if [ $? -eq 0 ]; then
-    printf '  ok   MCPAL_BEARER set is a no-op for stdio\n'
-    pass=$((pass + 1))
-else
-    printf '  FAIL MCPAL_BEARER set is a no-op for stdio\n'
-    sed 's/^/      | /' "$ERR" >&2
-    fail=$((fail + 1))
-fi
+it          'MCPAL_BEARER set is a no-op for stdio' \
+            env MCPAL_BEARER=ignored "$BIN" --config "$CFG" server ping "$REF"
 
 # ---------- OAuth flow (mocked) ----------
 section 'OAuth flow'
-OAUTH_REF="mcpal-oauth-test-$$"
-MOCK_BIN="$(dirname "$BIN")/examples/oauth_mock"
-[ -x "$MOCK_BIN" ] || MOCK_BIN="$(dirname "$BIN")/../examples/oauth_mock"
-if [ ! -x "$MOCK_BIN" ]; then
-    printf '  skip OAuth (oauth_mock binary not built at %s)\n' "$MOCK_BIN"
-else
-    MOCK_LOG="$(mktemp -t mcpal-mock.XXXXXX)"
-    "$MOCK_BIN" 0 >"$MOCK_LOG" 2>&1 &
-    MOCK_PID=$!
-    # Wait for the mock to bind and print its port.
-    for _ in 1 2 3 4 5 6 7 8 9 10; do
-        PORT="$(grep -oE 'port=[0-9]+' "$MOCK_LOG" | head -1 | cut -d= -f2 || true)"
-        [ -n "$PORT" ] && break
-        sleep 0.1
-    done
-    if [ -z "${PORT:-}" ]; then
-        printf '  FAIL OAuth (mock never bound)\n'
-        fail=$((fail + 1))
-        kill "$MOCK_PID" 2>/dev/null
+if [ "$ACTIVE" = 1 ]; then
+    OAUTH_REF="mcpal-oauth-test-$$"
+    KEYRING_REFS="$KEYRING_REFS $OAUTH_REF"
+    MOCK_BIN="$(dirname "$BIN")/examples/oauth_mock"
+    [ -x "$MOCK_BIN" ] || MOCK_BIN="$(dirname "$BIN")/../examples/oauth_mock"
+    if [ ! -x "$MOCK_BIN" ]; then
+        printf '  skip OAuth (oauth_mock binary not built at %s)\n' "$MOCK_BIN"
     else
-        MOCK_URL="http://127.0.0.1:$PORT"
-        # Run login in background; capture authorize URL from stderr.
-        LOGIN_LOG="$(mktemp -t mcpal-login.XXXXXX)"
-        "$BIN" --config "$CFG" auth login --oauth "$OAUTH_REF" \
-            --url "$MOCK_URL" --no-browser >"$LOGIN_LOG" 2>&1 &
-        LOGIN_PID=$!
-        # Wait for the authorize URL line.
-        AUTH_URL=""
-        for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
-            AUTH_URL="$(grep -oE 'http://127.0.0.1:[0-9]+/authorize[^ ]*' "$LOGIN_LOG" | head -1 || true)"
-            [ -n "$AUTH_URL" ] && break
-            sleep 0.2
-        done
-        if [ -z "$AUTH_URL" ]; then
-            printf '  FAIL OAuth (mcpal never printed authorize URL)\n'
-            sed 's/^/      | /' "$LOGIN_LOG" >&2
+        MOCK_LOG="$TMPROOT/oauth-mock.log"
+        "$MOCK_BIN" 0 >"$MOCK_LOG" 2>&1 &
+        MOCK_PID=$!
+        PIDS="$PIDS $MOCK_PID"
+        if ! wait_for_grep 'port=[0-9]+' "$MOCK_LOG" 15; then
+            printf '  FAIL OAuth (mock never bound)\n'
             fail=$((fail + 1))
-            kill "$LOGIN_PID" 2>/dev/null
+            kill "$MOCK_PID" 2>/dev/null
         else
-            # Drive the consent step: curl follows the mock's redirect to mcpal's
-            # loopback callback. mcpal then exchanges the code for tokens.
-            curl -sSL "$AUTH_URL" >/dev/null 2>&1 || true
-            wait "$LOGIN_PID"
-            login_rc=$?
-            if [ "$login_rc" -eq 0 ]; then
-                printf '  ok   auth login --oauth (full flow)\n'
-                pass=$((pass + 1))
-            else
-                printf '  FAIL auth login exited %d\n' "$login_rc"
+            PORT="$(grep -oE 'port=[0-9]+' "$MOCK_LOG" | head -1 | cut -d= -f2)"
+            MOCK_URL="http://127.0.0.1:$PORT"
+            # Run login in background; capture authorize URL from stderr.
+            LOGIN_LOG="$TMPROOT/oauth-login.log"
+            "$BIN" --config "$CFG" auth login --oauth "$OAUTH_REF" \
+                --url "$MOCK_URL" --no-browser >"$LOGIN_LOG" 2>&1 &
+            LOGIN_PID=$!
+            PIDS="$PIDS $LOGIN_PID"
+            if ! wait_for_grep 'http://127\.0\.0\.1:[0-9]+/authorize' "$LOGIN_LOG" 20; then
+                printf '  FAIL OAuth (mcpal never printed authorize URL)\n'
                 sed 's/^/      | /' "$LOGIN_LOG" >&2
                 fail=$((fail + 1))
+                kill "$LOGIN_PID" 2>/dev/null
+            else
+                AUTH_URL="$(grep -oE 'http://127.0.0.1:[0-9]+/authorize[^ ]*' "$LOGIN_LOG" | head -1)"
+                # Drive the consent step: curl follows the mock's redirect to
+                # mcpal's loopback callback; mcpal exchanges the code for tokens.
+                curl -sSL "$AUTH_URL" >/dev/null 2>&1 || true
+                wait "$LOGIN_PID"
+                login_rc=$?
+                if [ "$login_rc" -eq 0 ]; then
+                    printf '  ok   auth login --oauth (full flow)\n'
+                    pass=$((pass + 1))
+                else
+                    printf '  FAIL auth login exited %d\n' "$login_rc"
+                    sed 's/^/      | /' "$LOGIN_LOG" >&2
+                    fail=$((fail + 1))
+                fi
+                it_grep 'auth status shows oauth: true' 'oauth: true' \
+                        mc auth status "$OAUTH_REF"
+                it       'auth refresh' \
+                         mc auth refresh "$OAUTH_REF" --url "$MOCK_URL"
+                it       'auth logout cleans up' mc auth logout "$OAUTH_REF"
             fi
-            it_grep 'auth status shows oauth: true' 'oauth: true' \
-                    mc auth status "$OAUTH_REF"
-            it       'auth refresh' \
-                     mc auth refresh "$OAUTH_REF" --url "$MOCK_URL"
-            it       'auth logout cleans up' mc auth logout "$OAUTH_REF"
+            kill "$MOCK_PID" 2>/dev/null
+            wait "$MOCK_PID" 2>/dev/null
         fi
-        rm -f "$LOGIN_LOG"
-        kill "$MOCK_PID" 2>/dev/null
-        wait "$MOCK_PID" 2>/dev/null
-        rm -f "$MOCK_LOG"
     fi
 fi
 
 # ---------- watch ----------
 section watch
-WATCH_OUT="$(mktemp -t mcpal-watch.XXXXXX)"
-"$BIN" --config "$CFG" watch "$REF" >"$WATCH_OUT" 2>/dev/null &
-WATCH_PID=$!
-sleep 2
-mc tool call "$REF" toggle-simulated-logging --enable true >/dev/null 2>&1 || true
-sleep 2
-kill "$WATCH_PID" 2>/dev/null
-wait "$WATCH_PID" 2>/dev/null
-if grep -qE 'kind:' "$WATCH_OUT"; then
-    printf '  ok   watch emits at least one kind: notification\n'
-    pass=$((pass + 1))
-else
-    printf '  FAIL watch emitted no notifications\n'
-    sed 's/^/      | /' "$WATCH_OUT" >&2
-    fail=$((fail + 1))
+if [ "$ACTIVE" = 1 ]; then
+    WATCH_OUT="$TMPROOT/watch.out"
+    WATCH_ERR="$TMPROOT/watch.err"
+    "$BIN" --config "$CFG" watch "$REF" >"$WATCH_OUT" 2>"$WATCH_ERR" &
+    WATCH_PID=$!
+    PIDS="$PIDS $WATCH_PID"
+    # "watching <ref>" on stderr marks a live session; then poll for the
+    # first rendered notification instead of sleeping a fixed amount.
+    if ! wait_for_grep 'watching' "$WATCH_ERR" 20; then
+        printf '  FAIL watch never connected\n'
+        sed 's/^/      | /' "$WATCH_ERR" >&2
+        fail=$((fail + 1))
+    else
+        mc tool call "$REF" toggle-simulated-logging --enable true >/dev/null 2>&1 || true
+        if wait_for_grep 'kind:' "$WATCH_OUT" 30; then
+            printf '  ok   watch emits at least one kind: notification\n'
+            pass=$((pass + 1))
+        else
+            printf '  FAIL watch emitted no notifications\n'
+            sed 's/^/      | /' "$WATCH_OUT" >&2
+            fail=$((fail + 1))
+        fi
+    fi
+    kill "$WATCH_PID" 2>/dev/null
+    wait "$WATCH_PID" 2>/dev/null
 fi
-rm -f "$WATCH_OUT"
 
 # ---------- cleanup ----------
 section cleanup
-rm -f "$ARGS_JSON" "$MCPJ"
-it          'server remove'                  mc server remove "$REF"
+it          'server remove'                  mc server remove "$REF2"
 
 # ---------- help text ----------
 section "help text contains key examples"
@@ -550,10 +621,8 @@ it_grep 'debug explain E0017 prints prose' 'registry server' \
 # ---------- collection + mcpal run ----------
 section "collection + mcpal run"
 
-# Re-provision the reference server — cleanup above removed `$REF`.
-mc server add "$REF" -- npx -y @modelcontextprotocol/server-everything >/dev/null 2>&1 || true
-
-COLL_DIR="$(mktemp -d -t mcpal-coll.XXXXXX)"
+COLL_DIR="$TMPROOT/coll"
+mkdir -p "$COLL_DIR"
 COLL="$COLL_DIR/mcpal.yml"
 cat > "$COLL" <<'YAML'
 default-profile: dev
@@ -616,8 +685,6 @@ it 'run --params-override overlays raw value' \
     run_cmd --query 'content[0].text' run echo --params-override message=overridden
 it_grep 'override took effect' 'overridden' \
     run_cmd --query 'content[0].text' run echo --params-override message=overridden
-
-rm -rf "$COLL_DIR"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 test "$fail" -eq 0
