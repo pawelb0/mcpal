@@ -1,6 +1,7 @@
 //! Classify an `anyhow::Error` into a stable exit code + `E####` block.
 //! Long-form prose lives in the `EXPLAIN` table below (mirrored in the book).
 
+use crate::collection::template::TemplateError;
 use crate::output::Error as OutputError;
 use mcpal_core::Error as CoreError;
 
@@ -18,37 +19,62 @@ fn d(code: i32, ec: &'static str, title: impl Into<String>) -> Diagnostic {
     }
 }
 
-/// Substring → (exit code, error code). First match wins. Patterns are
-/// matched against the lowercased anyhow chain.
-const ANYHOW_PATTERNS: &[(&str, i32, &str)] = &[
-    ("requires env vars", 2, "E0017"),
-    ("template variable not set", 2, "E0014"),
-    ("collection not found", 2, "E0015"),
-    ("not in collection", 2, "E0016"),
-    ("' already exists", 2, "E0013"),
-    ("interrupted by ctrl-c", 130, "E0011"),
-    ("iserror: true", 7, "E0006"),
-    ("schema validation", 2, "E0012"),
-    ("timed out", 8, "E0007"),
-    ("timeout", 8, "E0007"),
-    (
-        "not found (owned, cmd:, url, path, or discovered)",
-        3,
-        "E0001",
-    ),
-    ("cmd: needs a command", 2, "E0002"),
-    ("--auth: unknown mode", 2, "E0002"),
-    ("not found in mcpal config", 3, "E0001"),
-    ("expects k=v", 2, "E0002"),
-    ("expected --flag", 2, "E0002"),
-    ("parse json from", 2, "E0010"),
-    ("parse params as json", 2, "E0010"),
-    ("auth flags require", 2, "E0002"),
-];
+/// CLI-side errors with a fixed exit code + `E####` block. Anything raised
+/// as plain `anyhow!` falls through to E0000/exit 1.
+#[derive(Debug, thiserror::Error)]
+pub enum CliError {
+    #[error("{0}")]
+    NotFound(String),
+    #[error("{0}")]
+    Usage(String),
+    #[error("server returned tools/call result with isError: true")]
+    ToolFailed,
+    #[error("request timed out after {0}s")]
+    Timeout(u64),
+    #[error("{0}")]
+    BadJson(String),
+    #[error("interrupted by ctrl-c")]
+    Interrupted,
+    #[error("{0}")]
+    Schema(String),
+    #[error("server '{0}' already exists")]
+    AlreadyExists(String),
+    #[error("collection not found: {0}")]
+    CollectionNotFound(String),
+    #[error("profile '{0}' not in collection")]
+    UnknownProfile(String),
+    #[error("registry server requires env vars: {0} — re-run on a TTY or pass --env VAR=…")]
+    NeedsEnv(String),
+}
+
+impl CliError {
+    fn codes(&self) -> (i32, &'static str) {
+        match self {
+            Self::NotFound(_) => (3, "E0001"),
+            Self::Usage(_) => (2, "E0002"),
+            Self::ToolFailed => (7, "E0006"),
+            Self::Timeout(_) => (8, "E0007"),
+            Self::BadJson(_) => (2, "E0010"),
+            Self::Interrupted => (130, "E0011"),
+            Self::Schema(_) => (2, "E0012"),
+            Self::AlreadyExists(_) => (2, "E0013"),
+            Self::CollectionNotFound(_) => (2, "E0015"),
+            Self::UnknownProfile(_) => (2, "E0016"),
+            Self::NeedsEnv(_) => (2, "E0017"),
+        }
+    }
+}
 
 pub fn classify(err: &anyhow::Error) -> Diagnostic {
     if let Some(OutputError::Query(msg)) = err.downcast_ref::<OutputError>() {
         return d(2, "E0009", format!("query: {msg}"));
+    }
+    if let Some(cli) = err.downcast_ref::<CliError>() {
+        let (code, ec) = cli.codes();
+        return d(code, ec, err.to_string());
+    }
+    if err.downcast_ref::<TemplateError>().is_some() {
+        return d(2, "E0014", err.to_string());
     }
     if let Some(core) = err.downcast_ref::<CoreError>() {
         return match core {
@@ -65,12 +91,6 @@ pub fn classify(err: &anyhow::Error) -> Diagnostic {
             CoreError::NotFound(m) => d(3, "E0001", format!("not found: {m}")),
             CoreError::Unsupported(w) => d(6, "E0008", format!("not yet supported: {w}")),
         };
-    }
-    let lower = format!("{err:#}").to_lowercase();
-    for (pat, code, ec) in ANYHOW_PATTERNS {
-        if lower.contains(pat) {
-            return d(*code, ec, err.to_string());
-        }
     }
     d(1, "E0000", err.to_string())
 }
@@ -223,14 +243,28 @@ mod tests {
     use super::*;
     use anyhow::anyhow;
 
-    fn classify_msg(msg: &str) -> Diagnostic {
-        classify(&anyhow!("{msg}"))
+    fn classify_cli(e: CliError) -> Diagnostic {
+        classify(&anyhow::Error::new(e))
     }
 
     #[test]
-    fn explain_codes_have_an_entry_per_pattern() {
+    fn explain_codes_have_an_entry_per_variant() {
         // Every E#### the classifier can emit must have an EXPLAIN entry.
-        for (_, _, ec) in ANYHOW_PATTERNS {
+        let variants = [
+            CliError::NotFound(String::new()),
+            CliError::Usage(String::new()),
+            CliError::ToolFailed,
+            CliError::Timeout(0),
+            CliError::BadJson(String::new()),
+            CliError::Interrupted,
+            CliError::Schema(String::new()),
+            CliError::AlreadyExists(String::new()),
+            CliError::CollectionNotFound(String::new()),
+            CliError::UnknownProfile(String::new()),
+            CliError::NeedsEnv(String::new()),
+        ];
+        for v in variants {
+            let (_, ec) = v.codes();
             assert!(
                 explain(ec).is_some(),
                 "no EXPLAIN entry for classifier code {ec}"
@@ -240,34 +274,36 @@ mod tests {
 
     #[test]
     fn timeout_maps_to_e0007_exit_8() {
-        let d = classify_msg("request timed out after 5s");
+        let d = classify_cli(CliError::Timeout(5));
         assert_eq!(d.error_code, "E0007");
         assert_eq!(d.code, 8);
+        assert_eq!(d.title, "request timed out after 5s");
     }
 
     #[test]
     fn ctrl_c_maps_to_e0011_exit_130() {
-        let d = classify_msg("interrupted by ctrl-c");
+        let d = classify_cli(CliError::Interrupted);
         assert_eq!(d.error_code, "E0011");
         assert_eq!(d.code, 130);
     }
 
     #[test]
     fn missing_env_maps_to_e0017() {
-        let d = classify_msg("registry server requires env vars: API_KEY");
+        let d = classify_cli(CliError::NeedsEnv("API_KEY".into()));
         assert_eq!(d.error_code, "E0017");
         assert_eq!(d.code, 2);
     }
 
     #[test]
     fn duplicate_alias_maps_to_e0013() {
-        let d = classify_msg("server 'gh' already exists");
+        let d = classify_cli(CliError::AlreadyExists("gh".into()));
         assert_eq!(d.error_code, "E0013");
+        assert_eq!(d.title, "server 'gh' already exists");
     }
 
     #[test]
-    fn unknown_pattern_falls_through_to_e0000() {
-        let d = classify_msg("something nobody anticipated");
+    fn plain_anyhow_falls_through_to_e0000() {
+        let d = classify(&anyhow!("something nobody anticipated"));
         assert_eq!(d.error_code, "E0000");
         assert_eq!(d.code, 1);
     }
@@ -281,29 +317,37 @@ mod tests {
 
     #[test]
     fn collection_not_found_maps_to_e0015() {
-        let d = classify_msg("collection not found: no mcpal.yml from . upward");
+        let d = classify_cli(CliError::CollectionNotFound("no mcpal.yml".into()));
         assert_eq!(d.error_code, "E0015");
     }
 
     #[test]
-    fn unknown_auth_mode_maps_to_e0002() {
-        let d = classify_msg(
-            "--auth: unknown mode 'magic' (expected: oauth, none, env:VAR, bearer:TOKEN)",
-        );
+    fn usage_maps_to_e0002() {
+        let d = classify_cli(CliError::Usage("--auth: unknown mode 'magic'".into()));
         assert_eq!(d.error_code, "E0002");
         assert_eq!(d.code, 2);
     }
 
     #[test]
-    fn empty_cmd_prefix_maps_to_e0002() {
-        let d = classify_msg("cmd: needs a command after the prefix");
-        assert_eq!(d.error_code, "E0002");
-        assert_eq!(d.code, 2);
+    fn cli_error_survives_context_wrapping() {
+        let err = anyhow::Error::new(CliError::NotFound("server 'x' not found".into()))
+            .context("resolving reference");
+        let d = classify(&err);
+        assert_eq!(d.error_code, "E0001");
+        assert_eq!(d.code, 3);
     }
 
     #[test]
     fn template_unset_maps_to_e0014() {
-        let d = classify_msg("template variable not set: profile.foo");
+        use crate::collection::template::{Miss, Ns, TemplateError};
+        let err = anyhow::Error::new(TemplateError {
+            misses: vec![Miss {
+                ns: Ns::Profile,
+                key: "foo".into(),
+            }],
+        });
+        let d = classify(&err);
         assert_eq!(d.error_code, "E0014");
+        assert_eq!(d.title, "template variable not set: profile.foo");
     }
 }

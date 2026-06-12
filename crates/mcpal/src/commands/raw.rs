@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use mcpal_core::rmcp::model::{ClientRequest, CustomRequest};
 use serde_json::Value;
 
+use crate::exit::CliError;
 use crate::runtime::Ctx;
 
 /// Send an arbitrary JSON-RPC request to the server and emit the result.
@@ -42,6 +43,7 @@ fn parse_params(spec: Option<&str>) -> Result<Option<Value>> {
     } else {
         spec.to_string()
     };
-    let v: Value = serde_json::from_str(&text).context("parse params as JSON")?;
+    let v: Value = serde_json::from_str(&text)
+        .map_err(|e| CliError::BadJson(format!("parse params as JSON: {e}")))?;
     Ok(Some(v))
 }

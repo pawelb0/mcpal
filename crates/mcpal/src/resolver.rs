@@ -6,6 +6,7 @@ use anyhow::{Context, Result, bail};
 use mcpal_core::{AuthSpec, ServerSpec};
 use mcpal_discovery::DiscoveredServer;
 
+use crate::exit::CliError;
 use crate::runtime::Ctx;
 
 #[derive(Debug)]
@@ -51,7 +52,7 @@ pub(crate) fn resolve_with(
         let mut parts = rest.split_whitespace();
         let command = parts
             .next()
-            .ok_or_else(|| anyhow::anyhow!("cmd: needs a command after the prefix"))?;
+            .ok_or_else(|| CliError::Usage("cmd: needs a command after the prefix".into()))?;
         return Ok(ResolvedServer {
             display: reference.into(),
             spec: ServerSpec::Stdio {
@@ -101,7 +102,10 @@ pub(crate) fn resolve_with(
 
     let bare: Vec<_> = discovered.iter().filter(|s| s.name == reference).collect();
     match bare.as_slice() {
-        [] => bail!("server '{reference}' not found (owned, cmd:, URL, path, or discovered)"),
+        [] => Err(CliError::NotFound(format!(
+            "server '{reference}' not found (owned, cmd:, URL, path, or discovered)"
+        ))
+        .into()),
         [only] => Ok(ResolvedServer {
             display: format!("{}:{}", only.source, only.name),
             spec: only.spec.clone(),

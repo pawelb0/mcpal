@@ -8,6 +8,7 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 
 use crate::cli::ToolAction;
+use crate::exit::CliError;
 use crate::kv;
 use crate::runtime::Ctx;
 
@@ -160,14 +161,17 @@ async fn call(
         .context("tools/call")?;
     ctx.render_one(&result)?;
     if result.is_error.unwrap_or(false) {
-        anyhow::bail!("server returned tools/call result with isError: true");
+        return Err(CliError::ToolFailed.into());
     }
     Ok(())
 }
 
 fn validate_args(schema: &Map<String, Value>, arguments: &Map<String, Value>) -> Result<()> {
-    let validator = jsonschema::validator_for(&Value::Object(schema.clone()))
-        .context("schema validation: tool's inputSchema is not a valid JSON Schema")?;
+    let validator = jsonschema::validator_for(&Value::Object(schema.clone())).map_err(|e| {
+        CliError::Schema(format!(
+            "schema validation: tool's inputSchema is not a valid JSON Schema: {e}"
+        ))
+    })?;
     let issues: Vec<String> = validator
         .iter_errors(&Value::Object(arguments.clone()))
         .map(|e| {
@@ -176,7 +180,11 @@ fn validate_args(schema: &Map<String, Value>, arguments: &Map<String, Value>) ->
         })
         .collect();
     if !issues.is_empty() {
-        anyhow::bail!("schema validation failed:\n  - {}", issues.join("\n  - "));
+        return Err(CliError::Schema(format!(
+            "schema validation failed:\n  - {}",
+            issues.join("\n  - ")
+        ))
+        .into());
     }
     Ok(())
 }
@@ -227,8 +235,8 @@ fn read_spec(spec: &str, bare: BareIs) -> Result<(String, String)> {
 }
 
 fn merge(into: &mut Map<String, Value>, (text, source): &(String, String)) -> Result<()> {
-    let v: Value =
-        serde_json::from_str(text).with_context(|| format!("parse JSON from {source}"))?;
+    let v: Value = serde_json::from_str(text)
+        .map_err(|e| CliError::BadJson(format!("parse JSON from {source}: {e}")))?;
     let Value::Object(obj) = v else {
         bail!("{source} must contain a JSON object");
     };

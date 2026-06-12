@@ -12,6 +12,7 @@ use crate::cli::{
 };
 use crate::commands::discover::describe_spec;
 use crate::config::Config;
+use crate::exit::CliError;
 use crate::registry;
 use crate::resolver::resolve;
 use crate::runtime::Ctx;
@@ -212,7 +213,10 @@ fn derive(args: ServerAddArgs) -> Result<(ServerSpec, AuthIntent)> {
                 .is_some_and(|(k, _)| k.eq_ignore_ascii_case("authorization"))
         });
     if is_stdio && auth_flags_present {
-        bail!("auth flags require --http (stdio servers carry no Authorization)");
+        return Err(CliError::Usage(
+            "auth flags require --http (stdio servers carry no Authorization)".into(),
+        )
+        .into());
     }
 
     let mut spec = match (command, args.http) {
@@ -356,10 +360,7 @@ async fn install(args: ServerInstallArgs, ctx: &Ctx) -> Result<()> {
         }
         if args.no_prompt || !std::io::stdin().is_terminal() {
             let names: Vec<&str> = missing.iter().map(|(n, _)| n.as_str()).collect();
-            bail!(
-                "registry server requires env vars: {} — re-run on a TTY or pass --env VAR=…",
-                names.join(", "),
-            );
+            return Err(CliError::NeedsEnv(names.join(", ")).into());
         }
         eprintln!(
             "{} needs {} environment variable{}:",
@@ -377,7 +378,7 @@ async fn install(args: ServerInstallArgs, ctx: &Ctx) -> Result<()> {
 fn write_server(path: &std::path::Path, alias: &str, spec: ServerSpec, force: bool) -> Result<()> {
     let mut cfg = Config::load(path)?;
     if cfg.server.contains_key(alias) && !force {
-        bail!("server '{alias}' already exists");
+        return Err(CliError::AlreadyExists(alias.into()).into());
     }
     cfg.server.insert(alias.into(), spec);
     cfg.save(path)?;

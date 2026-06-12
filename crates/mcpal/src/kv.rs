@@ -1,7 +1,9 @@
 //! `key=value` argument parsing shared by tool/prompt/repl.
 
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use serde_json::{Map, Value};
+
+use crate::exit::CliError;
 
 pub fn parse_value(raw: &str) -> Value {
     serde_json::from_str(raw).unwrap_or_else(|_| Value::String(raw.into()))
@@ -21,10 +23,10 @@ where
         let flag = flag.as_ref().to_string();
         let name = flag
             .strip_prefix("--")
-            .ok_or_else(|| anyhow!("expected --flag, got: {flag}"))?;
+            .ok_or_else(|| CliError::Usage(format!("expected --flag, got: {flag}")))?;
         let value = iter
             .next()
-            .ok_or_else(|| anyhow!("--{name} requires a value"))?;
+            .ok_or_else(|| CliError::Usage(format!("--{name} requires a value")))?;
         out.insert(name.into(), parse_value(value.as_ref()));
     }
     Ok(out)

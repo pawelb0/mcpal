@@ -5,7 +5,9 @@ pub(crate) use parse::{Call, Collection};
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{Result, bail};
+use anyhow::Result;
+
+use crate::exit::CliError;
 
 /// Walk up from `start` looking for `mcpal.yml`; first hit wins.
 /// `override_` short-circuits the walk and is required to exist.
@@ -14,7 +16,7 @@ pub(crate) fn find_collection(start: &Path, override_: Option<&Path>) -> Result<
         if p.is_file() {
             return Ok(Some(p.to_path_buf()));
         }
-        bail!("collection not found: {} doesn't exist", p.display());
+        return Err(CliError::CollectionNotFound(format!("{} doesn't exist", p.display())).into());
     }
     let mut cur = start.to_path_buf();
     loop {

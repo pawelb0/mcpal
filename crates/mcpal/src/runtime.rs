@@ -4,12 +4,13 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::output::{Format, emit_one};
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use mcpal_core::{AuthSpec, Client, Handler, ServerSpec, connect};
 use mcpal_discovery::{DiscoveredServer, DiscoveryCtx, discover};
 use serde::Serialize;
 
 use crate::config::Config;
+use crate::exit::CliError;
 use crate::keyring::{self, Kind};
 use crate::oauth;
 use crate::resolver::{ResolvedServer, resolve};
@@ -105,9 +106,10 @@ pub(crate) fn parse_auth_override(mode: &str) -> Result<Option<AuthSpec>> {
         s if s.starts_with("bearer:") => Ok(Some(AuthSpec::Bearer {
             token: s["bearer:".len()..].into(),
         })),
-        other => Err(anyhow!(
+        other => Err(CliError::Usage(format!(
             "--auth: unknown mode '{other}' (expected: oauth, none, env:VAR, bearer:TOKEN)"
-        )),
+        ))
+        .into()),
     }
 }
 
@@ -121,11 +123,11 @@ async fn race_deadline<F: Future>(timeout: Option<u64>, fut: F) -> Result<F::Out
     tokio::pin!(fut, sleeper);
     tokio::select! {
         out = &mut fut => Ok(out),
-        _ = &mut sleeper => Err(anyhow!(
-            "request timed out after {}s",
+        _ = &mut sleeper => Err(CliError::Timeout(
             timeout.expect("sleeper only fires when timeout is set"),
-        )),
-        _ = tokio::signal::ctrl_c() => Err(anyhow!("interrupted by ctrl-c")),
+        )
+        .into()),
+        _ = tokio::signal::ctrl_c() => Err(CliError::Interrupted.into()),
     }
 }
 
