@@ -66,10 +66,7 @@ axum = "0.8"
 webbrowser = "1"
 
 assert_cmd = "2"
-predicates = "3"
-trycmd = "0.15"
 tempfile = "3"
-insta = { version = "1", features = ["json"] }
 serde_yaml = "0.9.34"
 regex = "1"
 semver = "1"
