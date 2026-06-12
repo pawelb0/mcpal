@@ -4,6 +4,19 @@ All notable changes documented here. Format: [Keep a Changelog](https://keepacha
 
 ## [Unreleased]
 
+## [0.4.3]
+
+### Changed
+- Exit codes derive from a typed `CliError` enum instead of substring-matching error prose. Messages and codes are unchanged; rewording an error can no longer silently change its exit code.
+- Integration harness reworked for local runs: the everything-server is pinned and npm-installed once into the temp root (full suite ~20s, was minutes), all state lives under one temp directory with crash-safe cleanup (background processes killed, keyring entries logged out), and keyring-touching aliases carry a PID suffix so concurrent or crashed runs can't poison each other.
+- `MCPAL_IT_ONLY=tools,oauth` runs integration sections standalone; `MCPAL_IT_OFFLINE=1` skips everything that needs the live server — 86 assertions in ~2s with no network.
+- Fixed waits in the harness (OAuth mock, watch) replaced by deadline polling.
+- Dropped unused dev-dependencies: `trycmd`, `insta`, `predicates`.
+
+### Fixed
+- `--key` flag missing its value now exits 2 with E0002 like every other usage error, instead of falling through to E0000/exit 1.
+- Template errors (`E0014`) reach the classifier as a typed error instead of round-tripping through a string.
+
 ## [0.4.2]
 
 ### Added
