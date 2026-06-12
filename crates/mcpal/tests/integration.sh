@@ -5,7 +5,10 @@
 # named operation per `it`. Output goes to $OUT; assertions are grep / `[ ]`.
 #
 # MCPAL_IT_ONLY=tools,oauth runs only sections whose name contains one of the
-# comma-separated (case-insensitive) substrings.
+# comma-separated (case-insensitive) substrings. MCPAL_IT_OFFLINE=1 skips the
+# npm install and every section that talks to the everything server; what's
+# left (config, server add/import, error codes, oauth against the local mock)
+# runs without network.
 #
 # Skipped (by the parent Rust shim) if `npm` is not on PATH.
 
@@ -56,6 +59,7 @@ wait_for_grep() {
 }
 
 ONLY="$(printf '%s' "${MCPAL_IT_ONLY:-}" | tr '[:upper:]' '[:lower:]')"
+OFFLINE="${MCPAL_IT_OFFLINE:-}"
 ACTIVE=1
 
 section() {
@@ -70,6 +74,16 @@ section() {
         done
     fi
     [ "$ACTIVE" = 1 ] && printf '\n# %s\n' "$1"
+}
+
+# A section that talks to the everything server; skipped under
+# MCPAL_IT_OFFLINE=1.
+section_live() {
+    section "$1"
+    if [ "$ACTIVE" = 1 ] && [ -n "$OFFLINE" ]; then
+        ACTIVE=0
+        printf '  skip (needs live server)\n'
+    fi
 }
 
 it() {
@@ -163,14 +177,16 @@ it_no_grep() {
 EV_PKG="@modelcontextprotocol/server-everything@2026.1.26"
 EV="$TMPROOT/npm/node_modules/.bin/mcp-server-everything"
 
-printf '# setup: npm install %s\n' "$EV_PKG"
-if ! npm install --prefix "$TMPROOT/npm" --prefer-offline --no-audit --no-fund \
-    --loglevel=error "$EV_PKG" >"$OUT" 2>"$ERR"; then
-    echo "FATAL: npm install $EV_PKG failed" >&2
-    sed 's/^/      | /' "$ERR" >&2
-    exit 1
+if [ -z "$OFFLINE" ]; then
+    printf '# setup: npm install %s\n' "$EV_PKG"
+    if ! npm install --prefix "$TMPROOT/npm" --prefer-offline --no-audit --no-fund \
+        --loglevel=error "$EV_PKG" >"$OUT" 2>"$ERR"; then
+        echo "FATAL: npm install $EV_PKG failed" >&2
+        sed 's/^/      | /' "$ERR" >&2
+        exit 1
+    fi
+    [ -x "$EV" ] || { echo "FATAL: $EV not executable after install" >&2; exit 1; }
 fi
-[ -x "$EV" ] || { echo "FATAL: $EV not executable after install" >&2; exit 1; }
 
 # Every section assumes $REF exists; provision it outside any section so
 # MCPAL_IT_ONLY can run sections standalone.
@@ -266,14 +282,16 @@ it_grep 'T8 spec has auth = oauth' 'type = "oauth"' \
     cat "$ADD_CFG"
 
 # ---------- one-line ephemeral refs ----------
-section 'one-line ephemeral refs (cmd:)'
+section_live 'one-line ephemeral refs (cmd:)'
 it_grep     'cmd: lists tools on the everything server' '\becho\b' \
             mc tool list "cmd:$EV"
 it_grep     'cmd: tool call returns echoed text' 'Echo: cmdmode' \
             mc --query 'content[0].text' tool call "cmd:$EV" echo --message cmdmode
+
+# ---------- --auth flag resolution ----------
+section '--auth flag resolution'
 it_grep_err 'cmd: with no command after prefix' 'needs a command' \
             mc tool list 'cmd:'
-
 it          '--auth none resolves URL without OAuth warning' \
             mc --auth none server show 'https://example.test/mcp'
 it_grep     '--auth env:VAR is preserved in spec' 'bearer_env' \
@@ -293,7 +311,7 @@ it_grep_err 'failure error chain contains stderr marker' 'kaboom-marker' \
 it 'boom server removes cleanly' mc server remove boom
 
 # ---------- server properties ----------
-section 'server properties'
+section_live 'server properties'
 it_grep     'server info has serverInfo.name' 'mcp-servers/everything' mc server info "$REF"
 it_grep     'server protocol has a version'   '^[0-9]'              mc server protocol "$REF"
 it_grep     'server capabilities lists tools' 'tools'               mc server capabilities "$REF"
@@ -307,7 +325,7 @@ it          'debug doctor (may flag issues)'  mc debug doctor
 it_grep     'debug explain E0001'             'server reference'    mc debug explain E0001
 
 # ---------- tools ----------
-section tools
+section_live tools
 it_grep     'tool list lists echo'            '\becho\b'            mc tool list "$REF"
 it_grep     'tool list --names-only echo'     '^echo$'              mc tool list "$REF" --names-only
 it_grep     'tool describe echo has schema'   'inputSchema'         mc tool describe "$REF" echo
@@ -324,32 +342,32 @@ it          'tool call --skip-validation bypasses' \
             mc --query 'content[0].text' tool call "$REF" echo --skip-validation --message ok
 
 # ---------- resources ----------
-section resources
+section_live resources
 it_grep     'resource list has uri'             'demo://'             mc resource list "$REF"
 it          'resource list --names-only one URI per line'             mc resource list "$REF" --names-only
 it          'resource template list runs'                             mc resource template list "$REF"
 
 # ---------- prompts ----------
-section prompts
+section_live prompts
 it_grep     'prompt list returns simple-prompt' 'simple-prompt'       mc prompt list "$REF"
 it          'prompt list --names-only'                                mc prompt list "$REF" --names-only
 it          'prompt get simple-prompt'                                mc prompt get "$REF" simple-prompt
 
 # ---------- logging ----------
-section logging
+section_live logging
 it          'logging set-level info' mc logging set-level "$REF" info
 
 # ---------- raw ----------
-section raw
+section_live raw
 it_grep     'raw tools/list returns tools' '\becho\b' mc raw "$REF" tools/list
 
 # ---------- diff (server vs itself) ----------
-section diff
+section_live diff
 it          'diff <ref> <ref> empty added/removed/changed' mc diff "$REF" "$REF"
 it          'diff --only tools'                            mc diff "$REF" "$REF" --only tools
 
 # ---------- output / query / timeout / errors ----------
-section pipelines
+section_live pipelines
 it_grep     '--output json tool list is JSON array' '^\[' mc --output json tool list "$REF"
 it_grep     '--query selects names'                 '^- echo$' mc --query '[].name' tool list "$REF"
 it_exit     '--timeout 1 → E0007 exit 8'            8 \
@@ -409,7 +427,7 @@ it_no_grep 'literal scrubs Authorization'     'authorization' mc server show "$L
 it 'cleanup: logout the test bearer' mc auth logout "$LIT"
 
 # ---------- tool input variants ----------
-section 'tool input variants'
+section_live 'tool input variants'
 ARGS_JSON="$TMPROOT/args.json"
 printf '{"message":"file"}' >"$ARGS_JSON"
 it_grep     'tool call --cli-input-json @path'  'Echo: file' \
@@ -424,22 +442,22 @@ it_exit     'tool call bad --params JSON → E0010 exit 2'    2 \
             mc tool call "$REF" echo --params '{bad json'
 
 # ---------- resources extended ----------
-section 'resources extended'
+section_live 'resources extended'
 it_grep     'resource read returns contents' 'contents' \
             mc resource read "$REF" demo://resource/static/document/extension.md
 
 # ---------- prompts extended ----------
-section 'prompts extended'
+section_live 'prompts extended'
 it_grep     'prompt complete returns values' 'values' \
             mc prompt complete "$REF" completable-prompt --arg fruit=a
 
 # ---------- diff alt categories ----------
-section 'diff alt categories'
+section_live 'diff alt categories'
 it          'diff --only resources' mc diff "$REF" "$REF" --only resources
 it          'diff --only prompts'   mc diff "$REF" "$REF" --only prompts
 
 # ---------- pipelines: error codes ----------
-section 'error codes'
+section_live 'error codes'
 it_exit     'bad --query → E0009 exit 2'    2 mc --query 'not[valid' tool list "$REF"
 
 # ---------- completion scripts ----------
@@ -459,12 +477,12 @@ it          'discover --source unknown returns empty' \
             mc server discover --source not-a-real-source
 
 # ---------- roots flag ----------
-section roots
+section_live roots
 it_grep     'tool list with --root flag works' 'echo' \
             mc --root /tmp tool list "$REF"
 
 # ---------- mcp-json overlay ----------
-section 'mcp-json overlay'
+section_live 'mcp-json overlay'
 MCPJ="$TMPROOT/mcp.json"
 printf '{"mcpServers":{"ovr":{"command":"%s"}}}' "$EV" >"$MCPJ"
 it_grep     '--mcp-json overlays a server' 'echo' \
@@ -478,14 +496,14 @@ it_grep     'server show fake-http → http' 'http' mc server show fake-http
 it          'server remove fake-http' mc server remove fake-http
 
 # ---------- typed arg parsing ----------
-section 'typed args'
+section_live 'typed args'
 it_grep     'integer typed correctly' '42' \
             mc --query 'content[0].text' tool call "$REF" get-sum --a 40 --b 2
 it_exit     'string where number expected → E0012 exit 2' 2 \
             mc tool call "$REF" get-sum --a 40 --b notanumber
 
 # ---------- output shapes ----------
-section 'output shapes'
+section_live 'output shapes'
 it_grep     'tool list JSON has [].name'   '"name"'        mc --output json tool list "$REF"
 it_grep     'tool list JSON has required'  '"required"'    mc --output json tool list "$REF"
 it_grep     'server list JSON has source'  '"source"'      mc --output json server list
@@ -504,7 +522,7 @@ it          'missing config: server list works (empty)' \
 it_exit     'config init twice fails' 1 mc config init
 
 # ---------- bearer env one-shot ----------
-section 'MCPAL_BEARER env'
+section_live 'MCPAL_BEARER env'
 it          'MCPAL_BEARER set is a no-op for stdio' \
             env MCPAL_BEARER=ignored "$BIN" --config "$CFG" server ping "$REF"
 
@@ -568,7 +586,7 @@ if [ "$ACTIVE" = 1 ]; then
 fi
 
 # ---------- watch ----------
-section watch
+section_live watch
 if [ "$ACTIVE" = 1 ]; then
     WATCH_OUT="$TMPROOT/watch.out"
     WATCH_ERR="$TMPROOT/watch.err"
@@ -657,11 +675,6 @@ it_grep 'run --dry-run dry_run flag present' 'dry_run' \
 it_grep 'run --profile prod swaps the value' 'hello-prod' \
     run_cmd --output json --profile prod run echo --dry-run
 
-it 'run echo end-to-end (live tool call)' \
-    run_cmd run echo
-it_grep 'run echo response contains hello-dev' 'hello-dev' \
-    run_cmd --query 'content[0].text' run echo
-
 it_exit 'unknown call name exits 3 (E0001)' 3 \
     run_cmd run nope
 
@@ -681,6 +694,12 @@ it_exit 'missing collection exits 2 (E0015)' 2 \
 it_grep_err 'missing collection shows E0015' 'E0015' \
     "$BIN" --config "$CFG" --collection "$COLL_DIR/nope.yml" run echo
 
+# ---------- collection: live calls ----------
+section_live 'collection live run'
+it 'run echo end-to-end (live tool call)' \
+    run_cmd run echo
+it_grep 'run echo response contains hello-dev' 'hello-dev' \
+    run_cmd --query 'content[0].text' run echo
 it 'run --params-override overlays raw value' \
     run_cmd --query 'content[0].text' run echo --params-override message=overridden
 it_grep 'override took effect' 'overridden' \
