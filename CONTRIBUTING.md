@@ -16,7 +16,7 @@ mcpal follows [SemVer](https://semver.org/).
 2. Bump the workspace version in `Cargo.toml` (one line under `[workspace.package]`).
 3. `cargo fmt --all && cargo clippy -p mcpal --all-targets -- -D warnings && cargo test -p mcpal --bin mcpal` — all clean.
 4. `MCPAL_INTEGRATION_TESTS=1 cargo test -p mcpal --test integration` — passes.
-5. Commit (`release vX.Y.Z`), tag (`git tag vX.Y.Z`), push (`git push && git push --tags`).
+5. Commit (`release vX.Y.Z`), tag (`git tag vX.Y.Z`), push (`git push && git push origin vX.Y.Z`). Never `--tags` — it publishes every local tag, including backup tags.
 
 cargo-dist + `.github/workflows/release.yml` build artifacts. `.github/workflows/deb.yml` ships the .deb.
 
